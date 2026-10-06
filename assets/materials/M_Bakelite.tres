@@ -1,0 +1,17 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Plastic012B/Plastic012B_2K-JPG_NormalGL.jpg" id="1_2aqmf"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Plastic012B/Plastic012B_2K-JPG_Roughness.jpg" id="2_wjeu7"]
+
+[resource]
+resource_name = "M_Bakelite"
+albedo_color = Color(0.03, 0.025, 0.022, 1)
+roughness = 0.8
+roughness_texture = ExtResource("2_wjeu7")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.3
+normal_texture = ExtResource("1_2aqmf")
+uv1_scale = Vector3(6, 6, 6)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

@@ -1,0 +1,6 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[resource]
+resource_name = "M_BtnRed"
+albedo_color = Color(0.55, 0.035, 0.02, 1)
+roughness = 0.35

@@ -1,0 +1,18 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Color.jpg" id="1_0xqsj"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_NormalGL.jpg" id="2_g8aok"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Roughness.jpg" id="3_mbrjc"]
+
+[resource]
+resource_name = "M_Cloth"
+albedo_color = Color(0.55, 0.6, 0.42, 1)
+albedo_texture = ExtResource("1_0xqsj")
+roughness_texture = ExtResource("3_mbrjc")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.8
+normal_texture = ExtResource("2_g8aok")
+uv1_scale = Vector3(6, 6, 6)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

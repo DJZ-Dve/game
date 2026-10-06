@@ -1,0 +1,43 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/worn_surface.gdshader" id="1_t8ppm"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_Color.jpg" id="2_6hsjm"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_Roughness.jpg" id="3_kkuix"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_NormalGL.jpg" id="4_30221"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fingerprints001/Fingerprints001_2K-JPG_Opacity.jpg" id="5_trlb5"]
+
+[resource]
+resource_name = "M_EquipGreen"
+render_priority = 0
+shader = ExtResource("1_t8ppm")
+shader_parameter/paint_color = Color(0.27, 0.33, 0.29, 1)
+shader_parameter/paint_roughness = 0.48
+shader_parameter/paint_metallic = 0.15
+shader_parameter/paint_variation = 0.12
+shader_parameter/grime_albedo = ExtResource("2_6hsjm")
+shader_parameter/grime_normal = ExtResource("4_30221")
+shader_parameter/grime_arm = ExtResource("3_kkuix")
+shader_parameter/arm_packed = false
+shader_parameter/tex_scale = 3.0
+shader_parameter/normal_strength = 0.18
+shader_parameter/rough_variation = 0.15
+shader_parameter/rust_amount = 0.05
+shader_parameter/cavity_dirt = 1.0
+shader_parameter/edge_wear = 0.8
+shader_parameter/wear_color = Color(0.55, 0.55, 0.53, 1)
+shader_parameter/smudge_tex = ExtResource("5_trlb5")
+shader_parameter/smudge_amount = 0.5
+shader_parameter/smudge_scale = 5.0
+shader_parameter/dust_amount = 0.4
+shader_parameter/dust_color = null
+shader_parameter/streak_amount = null
+shader_parameter/streak_scale = null
+shader_parameter/streak_color = null
+shader_parameter/macro_amount = 0.3
+shader_parameter/macro_scale = null
+shader_parameter/floor_dirt = 0.6
+shader_parameter/floor_height = null
+shader_parameter/floor_fade = null
+shader_parameter/floor_color = null
+shader_parameter/emission_color = null
+shader_parameter/emission_energy = null

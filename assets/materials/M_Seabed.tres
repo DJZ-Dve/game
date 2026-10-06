@@ -1,0 +1,29 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/seabed.gdshader" id="1_m4syy"]
+[ext_resource type="Texture2D" path="res://assets/third_party/polyhaven/textures/brown_mud_02/brown_mud_02_diff_2k.jpg" id="2_q7bn4"]
+[ext_resource type="Texture2D" path="res://assets/third_party/polyhaven/textures/brown_mud_02/brown_mud_02_nor_gl_2k.jpg" id="3_5gw5t"]
+[ext_resource type="Texture2D" path="res://assets/third_party/polyhaven/textures/dark_rock/dark_rock_diff_2k.jpg" id="4_6yns7"]
+[ext_resource type="Texture2D" path="res://assets/third_party/polyhaven/textures/dark_rock/dark_rock_nor_gl_2k.jpg" id="5_sr1ta"]
+[ext_resource type="Texture2D" path="res://assets/third_party/polyhaven/textures/coast_sand_01/coast_sand_01_diff_2k.jpg" id="6_xhjce"]
+[ext_resource type="Texture2D" path="res://assets/third_party/polyhaven/textures/coast_sand_01/coast_sand_01_arm_2k.jpg" id="7_ekblf"]
+[ext_resource type="Texture2D" path="res://assets/third_party/polyhaven/textures/coast_sand_01/coast_sand_01_nor_gl_2k.jpg" id="8_goosq"]
+
+[resource]
+resource_name = "M_Seabed"
+render_priority = 0
+shader = ExtResource("1_m4syy")
+shader_parameter/sand_albedo = ExtResource("6_xhjce")
+shader_parameter/sand_normal = ExtResource("8_goosq")
+shader_parameter/sand_arm = ExtResource("7_ekblf")
+shader_parameter/mud_albedo = ExtResource("2_q7bn4")
+shader_parameter/mud_normal = ExtResource("3_5gw5t")
+shader_parameter/rock_albedo = ExtResource("4_6yns7")
+shader_parameter/rock_normal = ExtResource("5_sr1ta")
+shader_parameter/sand_scale = null
+shader_parameter/mud_scale = null
+shader_parameter/rock_scale = null
+shader_parameter/tint = null
+shader_parameter/slope_rock_start = null
+shader_parameter/slope_rock_end = null
+shader_parameter/normal_strength = null

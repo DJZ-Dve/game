@@ -1,0 +1,18 @@
+# Godot 4
+.godot/
+/android/
+/build/
+/export/
+
+# Blender 备份文件
+*.blend1
+*.blend2
+*.blend@
+
+# 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# 截图、预览等临时文件
+/.tmp/

@@ -1,0 +1,43 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/worn_surface.gdshader" id="1_omqtx"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_Color.jpg" id="2_7k0je"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_Roughness.jpg" id="3_jlgri"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_NormalGL.jpg" id="4_ki815"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fingerprints001/Fingerprints001_2K-JPG_Opacity.jpg" id="5_yrk0f"]
+
+[resource]
+resource_name = "M_Brass"
+render_priority = 0
+shader = ExtResource("1_omqtx")
+shader_parameter/paint_color = Color(0.62, 0.45, 0.18, 1)
+shader_parameter/paint_roughness = 0.35
+shader_parameter/paint_metallic = 1.0
+shader_parameter/paint_variation = 0.12
+shader_parameter/grime_albedo = ExtResource("2_7k0je")
+shader_parameter/grime_normal = ExtResource("4_ki815")
+shader_parameter/grime_arm = ExtResource("3_jlgri")
+shader_parameter/arm_packed = false
+shader_parameter/tex_scale = 3.0
+shader_parameter/normal_strength = 0.18
+shader_parameter/rough_variation = 0.15
+shader_parameter/rust_amount = 0.08
+shader_parameter/cavity_dirt = 1.0
+shader_parameter/edge_wear = 0.0
+shader_parameter/wear_color = Color(0.55, 0.55, 0.53, 1)
+shader_parameter/smudge_tex = ExtResource("5_yrk0f")
+shader_parameter/smudge_amount = 0.6
+shader_parameter/smudge_scale = 5.0
+shader_parameter/dust_amount = 0.3
+shader_parameter/dust_color = null
+shader_parameter/streak_amount = null
+shader_parameter/streak_scale = null
+shader_parameter/streak_color = null
+shader_parameter/macro_amount = 0.3
+shader_parameter/macro_scale = null
+shader_parameter/floor_dirt = 0.6
+shader_parameter/floor_height = null
+shader_parameter/floor_fade = null
+shader_parameter/floor_color = null
+shader_parameter/emission_color = null
+shader_parameter/emission_energy = null

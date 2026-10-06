@@ -1,0 +1,15 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/crt_sonar.gdshader" id="1_ygyxb"]
+
+[resource]
+resource_name = "M_CRT"
+render_priority = 0
+shader = ExtResource("1_ygyxb")
+shader_parameter/phosphor = null
+shader_parameter/brightness = null
+shader_parameter/sweep_speed = null
+shader_parameter/screen_size = Vector2(0.2, 0.15)
+shader_parameter/screen_center = null
+shader_parameter/noise_amount = null
+shader_parameter/echoes = null

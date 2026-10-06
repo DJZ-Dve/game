@@ -1,0 +1,14 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Smear004/Smear004_2K-JPG_Roughness.jpg" id="1_pxspw"]
+
+[resource]
+resource_name = "M_Glass"
+transparency = 1
+albedo_color = Color(0.6, 0.75, 0.72, 0.07)
+metallic_specular = 0.7
+roughness = 0.35
+roughness_texture = ExtResource("1_pxspw")
+roughness_texture_channel = 4
+uv1_scale = Vector3(4, 4, 4)
+uv1_triplanar = true

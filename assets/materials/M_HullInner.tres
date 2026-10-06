@@ -1,0 +1,45 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/worn_surface.gdshader" id="1_r2wmy"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_Color.jpg" id="2_ky5t7"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_Roughness.jpg" id="3_isuve"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_NormalGL.jpg" id="4_xdd6x"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fingerprints001/Fingerprints001_2K-JPG_Opacity.jpg" id="5_3y4kr"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Leaking004/Leaking004_2K-JPG_Opacity.jpg" id="6_r3qj7"]
+
+[resource]
+resource_name = "M_HullInner"
+render_priority = 0
+shader = ExtResource("1_r2wmy")
+shader_parameter/paint_color = Color(0.36, 0.4, 0.36, 1)
+shader_parameter/paint_roughness = 0.42
+shader_parameter/paint_metallic = 0.25
+shader_parameter/paint_variation = 0.25
+shader_parameter/grime_albedo = ExtResource("2_ky5t7")
+shader_parameter/grime_normal = ExtResource("4_xdd6x")
+shader_parameter/grime_arm = ExtResource("3_isuve")
+shader_parameter/arm_packed = false
+shader_parameter/tex_scale = 1.2
+shader_parameter/normal_strength = 0.3
+shader_parameter/rough_variation = 0.15
+shader_parameter/rust_amount = 0.2
+shader_parameter/cavity_dirt = 1.0
+shader_parameter/edge_wear = 1.0
+shader_parameter/wear_color = Color(0.55, 0.55, 0.53, 1)
+shader_parameter/smudge_tex = ExtResource("5_3y4kr")
+shader_parameter/smudge_amount = 0.15
+shader_parameter/smudge_scale = 5.0
+shader_parameter/dust_amount = 0.35
+shader_parameter/dust_color = null
+shader_parameter/streak_tex = ExtResource("6_r3qj7")
+shader_parameter/streak_amount = 0.85
+shader_parameter/streak_scale = 1.2
+shader_parameter/streak_color = null
+shader_parameter/macro_amount = 0.5
+shader_parameter/macro_scale = null
+shader_parameter/floor_dirt = 0.9
+shader_parameter/floor_height = null
+shader_parameter/floor_fade = null
+shader_parameter/floor_color = null
+shader_parameter/emission_color = null
+shader_parameter/emission_energy = null

@@ -1,0 +1,41 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/worn_surface.gdshader" id="1_7vko5"]
+[ext_resource type="Texture2D" path="res://assets/third_party/polyhaven/textures/rusty_painted_metal/rusty_painted_metal_diff_2k.jpg" id="2_8q61s"]
+[ext_resource type="Texture2D" path="res://assets/third_party/polyhaven/textures/rusty_painted_metal/rusty_painted_metal_arm_2k.jpg" id="3_xpqy5"]
+[ext_resource type="Texture2D" path="res://assets/third_party/polyhaven/textures/rusty_metal_02/rusty_metal_02_nor_gl_2k.jpg" id="4_e7o03"]
+
+[resource]
+resource_name = "M_HullRed"
+render_priority = 0
+shader = ExtResource("1_7vko5")
+shader_parameter/paint_color = Color(0.62, 0.1, 0.055, 1)
+shader_parameter/paint_roughness = 0.5
+shader_parameter/paint_metallic = 0.1
+shader_parameter/paint_variation = 0.2
+shader_parameter/grime_albedo = ExtResource("2_8q61s")
+shader_parameter/grime_normal = ExtResource("4_e7o03")
+shader_parameter/grime_arm = ExtResource("3_xpqy5")
+shader_parameter/arm_packed = null
+shader_parameter/tex_scale = 0.6
+shader_parameter/normal_strength = 0.45
+shader_parameter/rough_variation = null
+shader_parameter/rust_amount = 0.42
+shader_parameter/cavity_dirt = null
+shader_parameter/edge_wear = 0.9
+shader_parameter/wear_color = null
+shader_parameter/smudge_amount = null
+shader_parameter/smudge_scale = null
+shader_parameter/dust_amount = null
+shader_parameter/dust_color = null
+shader_parameter/streak_amount = null
+shader_parameter/streak_scale = null
+shader_parameter/streak_color = null
+shader_parameter/macro_amount = null
+shader_parameter/macro_scale = null
+shader_parameter/floor_dirt = null
+shader_parameter/floor_height = null
+shader_parameter/floor_fade = null
+shader_parameter/floor_color = null
+shader_parameter/emission_color = null
+shader_parameter/emission_energy = null

@@ -1,0 +1,18 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Leather033A/Leather033A_2K-JPG_Color.jpg" id="1_8d8m1"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Leather033A/Leather033A_2K-JPG_NormalGL.jpg" id="2_tg7hx"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Leather033A/Leather033A_2K-JPG_Roughness.jpg" id="3_gstww"]
+
+[resource]
+resource_name = "M_Vinyl"
+albedo_color = Color(0.32, 0.25, 0.22, 1)
+albedo_texture = ExtResource("1_8d8m1")
+roughness = 0.9
+roughness_texture = ExtResource("3_gstww")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_texture = ExtResource("2_tg7hx")
+uv1_scale = Vector3(4, 4, 4)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

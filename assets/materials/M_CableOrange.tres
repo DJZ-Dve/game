@@ -1,0 +1,17 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Rubber004/Rubber004_2K-JPG_NormalGL.jpg" id="1_bshal"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Rubber004/Rubber004_2K-JPG_Roughness.jpg" id="2_nvjfb"]
+
+[resource]
+resource_name = "M_CableOrange"
+albedo_color = Color(0.65, 0.22, 0.04, 1)
+roughness = 0.75
+roughness_texture = ExtResource("2_nvjfb")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.35
+normal_texture = ExtResource("1_bshal")
+uv1_scale = Vector3(12, 12, 12)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

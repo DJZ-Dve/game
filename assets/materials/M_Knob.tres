@@ -1,0 +1,17 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Plastic012B/Plastic012B_2K-JPG_NormalGL.jpg" id="1_4pyqa"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Plastic012B/Plastic012B_2K-JPG_Roughness.jpg" id="2_82ult"]
+
+[resource]
+resource_name = "M_Knob"
+albedo_color = Color(0.02, 0.02, 0.02, 1)
+roughness = 0.7
+roughness_texture = ExtResource("2_82ult")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.4
+normal_texture = ExtResource("1_4pyqa")
+uv1_scale = Vector3(8, 8, 8)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

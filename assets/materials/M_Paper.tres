@@ -1,0 +1,17 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_NormalGL.jpg" id="1_ii80t"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Roughness.jpg" id="2_hp5ul"]
+
+[resource]
+resource_name = "M_Paper"
+albedo_color = Color(0.82, 0.64, 0.24, 1)
+roughness = 0.95
+roughness_texture = ExtResource("2_hp5ul")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.2
+normal_texture = ExtResource("1_ii80t")
+uv1_scale = Vector3(10, 10, 10)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0
