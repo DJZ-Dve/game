@@ -1,0 +1,17 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_NormalGL.jpg" id="1_o6u8n"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Roughness.jpg" id="2_ayhxp"]
+
+[resource]
+resource_name = "M_Cardboard"
+albedo_color = Color(0.52, 0.38, 0.22, 1)
+roughness = 0.95
+roughness_texture = ExtResource("2_ayhxp")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.25
+normal_texture = ExtResource("1_o6u8n")
+uv1_scale = Vector3(4, 4, 4)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

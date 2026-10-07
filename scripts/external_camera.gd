@@ -2,9 +2,9 @@ extends Camera3D
 ## 舱外环绕视角（调试/欣赏艇身用）：按住左键拖动环绕，滚轮缩放。
 
 @export var target_path: NodePath = ".."
-@export var distance := 14.0
+@export var distance := 17.0
 @export var min_distance := 6.0
-@export var max_distance := 30.0
+@export var max_distance := 36.0
 @export var yaw_deg := 145.0
 @export var pitch_deg := -12.0
 
@@ -52,7 +52,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(_delta: float) -> void:
 	_fill.visible = current
-	var center := _target.global_position + Vector3(0, 0.3, 2.0).rotated(Vector3.UP, _target.global_rotation.y)
+	# 环绕中心在艇身中部（围壳和尾舵之间）
+	var center := _target.global_position + Vector3(0, 0.6, 3.6).rotated(Vector3.UP, _target.global_rotation.y)
 	var rot := Basis.from_euler(Vector3(deg_to_rad(pitch_deg), deg_to_rad(yaw_deg) + _target.global_rotation.y, 0))
 	global_transform = Transform3D(rot, center + rot * Vector3(0, 0, distance))
 	# 光照按距离平方衰减：补光亮度跟着相机距离走，保证艇身始终看得清

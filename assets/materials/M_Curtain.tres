@@ -1,0 +1,18 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Color.jpg" id="1_b56q4"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_NormalGL.jpg" id="2_2rebd"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Roughness.jpg" id="3_madti"]
+
+[resource]
+resource_name = "M_Curtain"
+albedo_color = Color(0.42, 0.44, 0.33, 1)
+albedo_texture = ExtResource("1_b56q4")
+roughness_texture = ExtResource("3_madti")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.8
+normal_texture = ExtResource("2_2rebd")
+uv1_scale = Vector3(8, 8, 8)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

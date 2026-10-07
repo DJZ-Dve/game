@@ -1,0 +1,17 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Color.jpg" id="1_doaga"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_NormalGL.jpg" id="2_ga2ii"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Roughness.jpg" id="3_0xjqs"]
+
+[resource]
+resource_name = "M_Jacket"
+albedo_color = Color(0.16, 0.22, 0.34, 1)
+albedo_texture = ExtResource("1_doaga")
+roughness_texture = ExtResource("3_0xjqs")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_texture = ExtResource("2_ga2ii")
+uv1_scale = Vector3(7, 7, 7)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

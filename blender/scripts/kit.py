@@ -30,7 +30,8 @@ class Parts:
 
     # 这些材质的零件是软的/圆的，不做加权法线
     SOFT = {"Foam", "Vinyl", "Cloth", "CableBlack", "CableGray", "CableOrange", "CableYellow", "CableBlue",
-            "CableWhite", "Zip", "ZipBlack", "Paper", "Talisman", "Tape", "MaskTape", "ClothRed", "Ash"}
+            "CableWhite", "Zip", "ZipBlack", "Paper", "Talisman", "Tape", "MaskTape", "ClothRed", "Ash",
+            "Lagging", "Towel", "Jacket", "Net", "Orange", "Blanket", "Curtain"}
 
     def __init__(self, coll, M, prefix="Int"):
         self.coll, self.M, self.prefix = coll, M, prefix

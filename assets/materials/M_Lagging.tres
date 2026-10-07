@@ -1,0 +1,49 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/worn_surface.gdshader" id="1_mqbkv"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Color.jpg" id="2_lvla8"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Roughness.jpg" id="3_wc8sk"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_NormalGL.jpg" id="4_k6t3k"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fingerprints001/Fingerprints001_2K-JPG_Opacity.jpg" id="5_654s0"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Leaking004/Leaking004_2K-JPG_Opacity.jpg" id="6_lr4xc"]
+
+[resource]
+resource_name = "M_Lagging"
+render_priority = 0
+shader = ExtResource("1_mqbkv")
+shader_parameter/paint_color = Color(0.48, 0.45, 0.37, 1)
+shader_parameter/paint_roughness = 0.92
+shader_parameter/paint_metallic = 0.0
+shader_parameter/paint_variation = 0.5
+shader_parameter/grime_albedo = ExtResource("2_lvla8")
+shader_parameter/grime_normal = ExtResource("4_k6t3k")
+shader_parameter/grime_arm = ExtResource("3_wc8sk")
+shader_parameter/arm_packed = false
+shader_parameter/tex_scale = 5.0
+shader_parameter/normal_strength = 0.9
+shader_parameter/rough_variation = 0.25
+shader_parameter/rust_amount = 0.0
+shader_parameter/cavity_dirt = 0.6
+shader_parameter/edge_wear = 0.0
+shader_parameter/wear_color = Color(0.55, 0.55, 0.53, 1)
+shader_parameter/smudge_tex = ExtResource("5_654s0")
+shader_parameter/smudge_amount = 0.0
+shader_parameter/smudge_scale = 5.0
+shader_parameter/dust_amount = 0.55
+shader_parameter/dust_color = null
+shader_parameter/streak_tex = ExtResource("6_lr4xc")
+shader_parameter/streak_amount = 0.7
+shader_parameter/streak_scale = 2.0
+shader_parameter/streak_color = null
+shader_parameter/macro_amount = 0.8
+shader_parameter/macro_scale = null
+shader_parameter/floor_dirt = 0.0
+shader_parameter/floor_height = null
+shader_parameter/floor_fade = null
+shader_parameter/floor_color = null
+shader_parameter/condensation = null
+shader_parameter/droplet_scale = null
+shader_parameter/cond_height = null
+shader_parameter/wear_metallic = 0.85
+shader_parameter/emission_color = null
+shader_parameter/emission_energy = null

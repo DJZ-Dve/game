@@ -46,6 +46,15 @@ uniform float floor_height = -0.9;
 uniform float floor_fade = 0.65;
 uniform vec4 floor_color : source_color = vec4(0.2, 0.18, 0.15, 1.0);
 
+// 冷凝水珠：深海水温只有两三度，耐压壳内壁和冷水管上结满水珠（越往上、越是朝下的面越密，朝上的面没有）。
+// 程序生成（两层大小不同的 voronoi 水珠），不需要贴图。
+uniform float condensation : hint_range(0.0, 1.0) = 0.0;
+uniform float droplet_scale = 125.0;  // 每米多少格（大水珠那一层）
+uniform float cond_height = 0.2;     // 物体空间高度：从这里往上水珠变密
+
+// 棱边磨出来的底材是不是金属（漆木家具磨出来的是木头，不是金属）
+uniform float wear_metallic : hint_range(0.0, 1.0) = 0.85;
+
 uniform vec4 emission_color : source_color = vec4(0.0, 0.0, 0.0, 1.0);
 uniform float emission_energy = 0.0;
 
@@ -66,6 +75,43 @@ vec3 tri_weights(vec3 n) {
 
 vec4 tri_sample(sampler2D t, vec3 p, vec3 w) {
 	return texture(t, p.zy) * w.x + texture(t, p.xz) * w.y + texture(t, p.xy) * w.z;
+}
+
+vec2 hash22(vec2 p) {
+	vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+	q += dot(q, q.yzx + 33.33);
+	return fract((q.xx + q.yz) * q.zy);
+}
+
+// 一层水珠。返回 (表面斜率 xy, 覆盖 z)。竖直面上的水珠往下坠（下半截更圆更大）。
+vec3 droplet_layer(vec2 uv, float density) {
+	vec2 cell = floor(uv);
+	vec2 f = fract(uv);
+	vec3 best = vec3(0.0);
+	for (int j = -1; j <= 1; j++) {
+		for (int i = -1; i <= 1; i++) {
+			vec2 g = vec2(float(i), float(j));
+			vec2 h = hash22(cell + g);
+			if (fract(h.x * 7.13 + h.y * 3.71) > density) {
+				continue;
+			}
+			vec2 q = f - (g + 0.2 + h * 0.6);  // 从水珠中心指向当前像素
+			float rad = mix(0.14, 0.4, fract(h.y * 13.7 + h.x));
+			q.y *= q.y < 0.0 ? 0.8 : 1.3;
+			float d = length(q) / rad;
+			float m = 1.0 - smoothstep(0.8, 1.0, d);
+			if (m > best.z) {
+				best = vec3(q / rad * 0.9, m);
+			}
+		}
+	}
+	return best;
+}
+
+vec3 droplets2(vec2 uv, float density) {
+	vec3 a = droplet_layer(uv, density);
+	vec3 b = droplet_layer(uv * 2.3 + 17.1, min(density * 1.2, 1.0));
+	return a.z >= b.z ? a : b;
 }
 
 vec3 tri_normal(vec3 p, vec3 n, vec3 w) {
@@ -119,7 +165,7 @@ void fragment() {
 	// 阈值偏高：只有真正的棱边（倒角面、曲率大的地方）才掉漆，大平面上不会出现成片的斑
 	float e = smoothstep(0.55, 0.9, edge * edge_wear + (noise - 0.5) * 0.5);
 	col = mix(col, wear_color.rgb, e * (1.0 - rust));
-	metal = mix(metal, 0.85, e * (1.0 - rust));
+	metal = mix(metal, wear_metallic, e * (1.0 - rust));
 	rough = mix(rough, 0.35, e * (1.0 - rust));
 
 	// 凹槽积垢
@@ -161,12 +207,50 @@ void fragment() {
 		metal = mix(metal, 0.0, d);
 	}
 
+	vec3 nn = tri_normal(p, n, w);
+
+	if (condensation > 0.0) {
+		float hgt = smoothstep(cond_height - 0.6, cond_height + 0.7, obj_pos.y);
+		float up = smoothstep(0.25, 0.7, n.y);
+		// 水珠一片一片地结，不是均匀铺满
+		float dens = condensation * (0.1 + 0.4 * hgt) * (1.0 - up) * clamp(noise * 1.6 - 0.2, 0.0, 1.0);
+		// 整面潮湿：越密的地方越亮
+		rough = mix(rough, rough * 0.55, dens * 0.6);
+		vec3 dp = obj_pos * droplet_scale;
+		vec3 slope = vec3(0.0);
+		float cover = 0.0;
+		// 侧面（x、z 投影）水珠拉长，朝下的面（y 投影）是圆的
+		if (w.x > 0.02) {
+			vec3 d = droplets2(vec2(dp.z, dp.y * 0.75), dens);
+			slope += (vec3(0.0, 0.0, 1.0) * d.x + vec3(0.0, 1.0, 0.0) * d.y) * d.z * w.x;
+			cover += d.z * w.x;
+		}
+		if (w.y > 0.02) {
+			vec3 d = droplets2(dp.xz, dens);
+			slope += (vec3(1.0, 0.0, 0.0) * d.x + vec3(0.0, 0.0, 1.0) * d.y) * d.z * w.y;
+			cover += d.z * w.y;
+		}
+		if (w.z > 0.02) {
+			vec3 d = droplets2(vec2(dp.x, dp.y * 0.75), dens);
+			slope += (vec3(1.0, 0.0, 0.0) * d.x + vec3(0.0, 1.0, 0.0) * d.y) * d.z * w.z;
+			cover += d.z * w.z;
+		}
+		// 远处水珠小于一个像素时淡掉，免得闪
+		float px = length(fwidth(dp));
+		float fade = 1.0 - smoothstep(0.25, 0.6, px);
+		cover *= fade;
+		slope *= fade;
+		nn = normalize(nn + slope);
+		col *= 1.0 - cover * 0.12;
+		rough = mix(rough, 0.03, cover);
+		metal = mix(metal, 0.0, cover);
+	}
+
 	ALBEDO = col;
 	ROUGHNESS = rough;
 	METALLIC = metal;
 	AO = mix(1.0, arm.r, 0.6) * (1.0 - cav * 0.4);
 	AO_LIGHT_AFFECT = 0.4;
-	vec3 nn = tri_normal(p, n, w);
 	NORMAL = normalize((VIEW_MATRIX * MODEL_MATRIX * vec4(nn, 0.0)).xyz);
 	EMISSION = emission_color.rgb * emission_energy;
 }

@@ -1,0 +1,18 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Color.jpg" id="1_wo7aj"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_NormalGL.jpg" id="2_fn4of"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Roughness.jpg" id="3_0t2d5"]
+
+[resource]
+resource_name = "M_Towel"
+albedo_color = Color(0.78, 0.74, 0.62, 1)
+albedo_texture = ExtResource("1_wo7aj")
+roughness_texture = ExtResource("3_0t2d5")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 1.4
+normal_texture = ExtResource("2_fn4of")
+uv1_scale = Vector3(9, 9, 9)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

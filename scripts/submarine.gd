@@ -35,14 +35,29 @@ var _floodlights: Array[SpotLight3D] = []
 var _lens: MeshInstance3D
 var _lens_material: StandardMaterial3D
 var _sway := Vector3.ZERO
+# 艉部的动件：螺旋桨、方向舵、升降舵（外壳模型里单独的网格，挂到各自的转轴上）
+var _prop: Node3D
+var _rudder: Node3D
+var _planes: Node3D
+var _prop_speed := 0.0
+var _lift_smooth := 0.0
 
 @onready var body: Node3D = $Body
 @onready var cockpit_camera: Camera3D = %CockpitCamera
 @onready var external_camera: Camera3D = %ExternalCamera
 
 
+## 舱外的网格放在第 2 个可见层：舱内的反射探针只作用于第 1 层（见 submarine.tscn 的 reflection_mask），
+## 否则紧贴着耐压舱的艇身外表面会映出舱里亮着的灯，整条艇泛银白
+const EXTERIOR_LAYER := 2
+
+
 func _ready() -> void:
 	_build_floodlights()
+	_setup_stern()
+	for g in $Body/Exterior.find_children("*", "GeometryInstance3D", true, false):
+		if not String(g.name).begins_with("Viewport_Glass"):  # 舷窗玻璃主要是从舱里看
+			(g as GeometryInstance3D).layers = EXTERIOR_LAYER
 	cockpit_camera.configure(body)
 	cockpit_camera.make_current()
 	piloting = cockpit_camera.is_seated()
@@ -52,6 +67,8 @@ func _ready() -> void:
 		set_external_view(DebugArgs.get_arg("view") == "external")
 	if DebugArgs.get_arg("lights", "on") == "off":
 		set_lights(false)
+	if DebugArgs.has("sub-yaw"):
+		rotate_y(deg_to_rad(float(DebugArgs.get_arg("sub-yaw"))))
 
 
 func depth() -> float:
@@ -80,6 +97,8 @@ func _build_floodlights() -> void:
 		l.shadow_blur = 1.5
 		l.light_volumetric_fog_energy = 1.6
 		l.light_size = 0.12
+		# 不参与舱内 VoxelGI（灯在艇外，算进去会从壳体漏光进来）
+		l.light_bake_mode = Light3D.BAKE_DISABLED
 		anchor.add_child(l)
 		_floodlights.append(l)
 	_lens = find_child("Lens_Floodlights", true, false) as MeshInstance3D
@@ -88,6 +107,45 @@ func _build_floodlights() -> void:
 		if m is StandardMaterial3D:
 			_lens_material = m.duplicate()
 			_lens.set_surface_override_material(0, _lens_material)
+
+
+func _setup_stern() -> void:
+	var axis := find_child("Prop_Axis", true, false) as Node3D
+	var prop := find_child("Prop_Main", true, false) as Node3D
+	if axis and prop:
+		_prop = _pivot("PropPivot", axis, [prop])
+	var stern := find_child("Pivot_Stern", true, false) as Node3D
+	if stern:
+		_rudder = _pivot("RudderPivot", stern, [find_child("Fin_RudderU", true, false),
+			find_child("Fin_RudderD", true, false)])
+		_planes = _pivot("PlanesPivot", stern, [find_child("Fin_PlaneL", true, false),
+			find_child("Fin_PlaneR", true, false)])
+
+
+## 在挂点处建一个转轴节点，把 parts 挂上去（保持原位）
+func _pivot(nm: String, anchor: Node3D, parts: Array) -> Node3D:
+	var p := Node3D.new()
+	p.name = nm
+	anchor.get_parent().add_child(p)
+	p.transform = anchor.transform
+	for n in parts:
+		if n:
+			(n as Node3D).reparent(p, true)
+	return p
+
+
+## 螺旋桨跟着推进转；方向舵跟着转向、升降舵跟着上浮下潜偏转
+func _update_stern(delta: float) -> void:
+	if _prop:
+		var want := thrust_input * 7.0 + velocity.dot(-global_basis.z) * 0.8
+		_prop_speed = move_toward(_prop_speed, want, delta * 3.0)
+		_prop.rotate_object_local(Vector3.BACK, _prop_speed * delta)
+	if _rudder:
+		var r := -clampf(yaw_speed / deg_to_rad(turn_max_deg), -1.0, 1.0) * deg_to_rad(28.0)
+		_rudder.rotation.y = lerpf(_rudder.rotation.y, r, 1.0 - exp(-delta * 3.0))
+	if _planes:
+		_lift_smooth = lerpf(_lift_smooth, lift_input, 1.0 - exp(-delta * 2.0))
+		_planes.rotation.x = _lift_smooth * deg_to_rad(20.0)
 
 
 func set_lights(on: bool) -> void:
@@ -100,6 +158,10 @@ func set_lights(on: bool) -> void:
 
 func set_external_view(on: bool) -> void:
 	external_view = on
+	# 舱内的 VoxelGI 会渗到紧贴着耐压舱的艇身外表面上（黑漆被照成灰白），在舱外看时关掉；
+	# 在舱里时艇身外表面又看不见，正好互不干扰
+	for gi in body.find_children("CabinGI*", "VoxelGI", false, false):
+		(gi as VoxelGI).visible = not on
 	if on:
 		external_camera.make_current()
 	else:
@@ -140,6 +202,7 @@ func _physics_process(delta: float) -> void:
 			bumped.emit(impact)
 
 	_update_sway(delta)
+	_update_stern(delta)
 
 
 ## 艇身随推进、转向轻微俯仰和侧倾，再叠一点水流造成的晃动。

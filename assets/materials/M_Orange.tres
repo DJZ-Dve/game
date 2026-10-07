@@ -1,0 +1,14 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Leather033A/Leather033A_2K-JPG_NormalGL.jpg" id="1_ers7o"]
+
+[resource]
+resource_name = "M_Orange"
+albedo_color = Color(0.9, 0.36, 0.04, 1)
+roughness = 0.45
+normal_enabled = true
+normal_scale = 0.6
+normal_texture = ExtResource("1_ers7o")
+uv1_scale = Vector3(45, 45, 45)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

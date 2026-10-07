@@ -21,3 +21,6 @@
 *.ttf filter=lfs diff=lfs merge=lfs -text
 *.otf filter=lfs diff=lfs merge=lfs -text
 *.zip filter=lfs diff=lfs merge=lfs -text
+
+# Godot 二进制资源（烘焙的 GI 等）
+*.res filter=lfs diff=lfs merge=lfs -text

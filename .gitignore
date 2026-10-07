@@ -16,3 +16,6 @@ Desktop.ini
 
 # 截图、预览等临时文件
 /.tmp/
+
+# Python 字节码（Blender 运行脚本时生成，各平台不同）
+__pycache__/

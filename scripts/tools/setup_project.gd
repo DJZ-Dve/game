@@ -10,6 +10,7 @@ const MAT_DIR := "res://assets/materials/"
 const WORN := preload("res://assets/shaders/worn_surface.gdshader")
 const SEABED := preload("res://assets/shaders/seabed.gdshader")
 const CRT := preload("res://assets/shaders/crt_sonar.gdshader")
+const NET := preload("res://assets/shaders/net_bag.gdshader")
 
 
 func _init() -> void:
@@ -74,7 +75,7 @@ func _paint(name: String, paint: Color, o := {}) -> ShaderMaterial:
 	m.set_shader_parameter("paint_roughness", o.get("rough", 0.5))
 	m.set_shader_parameter("paint_metallic", o.get("metal", 0.15))
 	m.set_shader_parameter("paint_variation", o.get("variation", 0.12))
-	m.set_shader_parameter("rough_variation", o.get("rough_var", 0.15))
+	m.set_shader_parameter("rough_variation", o.get("rough_var", 0.25))
 	m.set_shader_parameter("rust_amount", o.get("rust", 0.05))
 	m.set_shader_parameter("edge_wear", o.get("edge", 0.8))
 	m.set_shader_parameter("cavity_dirt", o.get("cavity", 1.0))
@@ -98,6 +99,12 @@ func _paint(name: String, paint: Color, o := {}) -> ShaderMaterial:
 	if o.has("emission"):
 		m.set_shader_parameter("emission_color", o.emission)
 		m.set_shader_parameter("emission_energy", o.get("emission_energy", 1.0))
+	if o.has("cond"):
+		m.set_shader_parameter("condensation", o.cond)
+		m.set_shader_parameter("cond_height", o.get("cond_h", 0.2))
+	m.set_shader_parameter("wear_metallic", o.get("wear_metal", 0.85))
+	if o.has("dust_color"):
+		m.set_shader_parameter("dust_color", o.dust_color)
 	return m
 
 
@@ -165,12 +172,15 @@ func _build_materials() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(MAT_DIR))
 	var mats: Array[Material] = []
 	# 外壳
-	mats.append(_worn("M_HullRed", Color(0.62, 0.1, 0.055), 0.5, 0.1, 0.42, 0.9, "rusty_painted_metal", 0.6, 0.2))
-	mats.append(_worn("M_HullWhite", Color(0.6, 0.58, 0.53), 0.55, 0.1, 0.38, 0.8, "rusty_painted_metal", 0.8))
-	mats.append(_worn("M_SpherePaint", Color(0.12, 0.13, 0.13), 0.45, 0.4, 0.22, 0.9))
+	# 艇身：水线以上黑漆（老化发灰、锈水往下淌），以下红色防污漆；甲板是防滑涂层
+	mats.append(_worn("M_HullBlack", Color(0.04, 0.042, 0.045), 0.6, 0.1, 0.28, 0.25, "rusty_painted_metal", 0.5,
+		0.25))
+	mats.append(_worn("M_Antifoul", Color(0.3, 0.075, 0.05), 0.75, 0.05, 0.28, 0.25, "rusty_painted_metal", 0.6, 0.3))
+	mats.append(_worn("M_DeckNonSkid", Color(0.07, 0.07, 0.07), 0.9, 0.1, 0.35, 0.4, "rusty_metal_02", 1.5, 0.3))
 	mats.append(_worn("M_FrameSteel", Color(0.07, 0.07, 0.075), 0.5, 0.6, 0.45, 0.8, "rusty_metal_02"))
 	mats.append(_worn("M_BareMetal", Color(0.5, 0.5, 0.52), 0.35, 0.9, 0.12, 0.2, "rusty_metal_02", 2.0, 0.2))
-	mats.append(_worn("M_Iron", Color(0.22, 0.13, 0.08), 0.85, 0.5, 0.9, 0.3, "rusty_metal_02", 0.9))
+	# 螺旋桨：铝青铜，发暗、长了一层铜绿
+	mats.append(_worn("M_Bronze", Color(0.5, 0.35, 0.18), 0.42, 0.95, 0.3, 0.2, "rusty_metal_02", 1.5, 0.3))
 	mats.append(_worn("M_PaintText", Color(0.82, 0.8, 0.7), 0.6, 0.0, 0.35, 0.6))
 	mats.append(_std("M_Rubber", Color(0.025, 0.025, 0.025), 0.85))
 	mats.append(_std("M_ClothRed", Color(0.42, 0.015, 0.015), 0.95))
@@ -216,7 +226,7 @@ func _interior_materials(mats: Array[Material]) -> void:
 	# ---- 耐压壳内壁、肋骨、隔壁（同一种舱漆：灰绿，冷凝水流痕，越往下越脏）
 	mats.append(_paint("M_HullInner", Color(0.36, 0.4, 0.36), {"rough": 0.42, "metal": 0.25, "rust": 0.2,
 		"edge": 1.0, "scale": 1.2, "smudge": 0.15, "dust": 0.35, "streak": 0.85, "variation": 0.25,
-		"macro": 0.5, "floor": 0.9, "nstrength": 0.3}))
+		"macro": 0.5, "floor": 0.9, "nstrength": 0.3, "cond": 0.75}))
 	mats.append(_paint("M_Rail", Color(0.52, 0.53, 0.52), {"rough": 0.4, "metal": 0.75, "rust": 0.18,
 		"edge": 0.3, "detail": "Metal016", "smudge": 0.2}))
 	# ---- 工作台台体（深蓝灰，倒角上磨出钢底，桌沿和把手附近满是手印）
@@ -231,13 +241,18 @@ func _interior_materials(mats: Array[Material]) -> void:
 	var bilge := _std("M_Bilge", Color(0.015, 0.02, 0.016), 0.04)
 	bilge.metallic_specular = 0.8
 	mats.append(bilge)
-	# ---- 管路（按介质刷色）
-	mats.append(_paint("M_PipeRed", Color(0.42, 0.05, 0.035), {"rough": 0.45, "edge": 0.9, "rust": 0.25,
-		"dust": 0.5, "floor": 0.0}))
-	mats.append(_paint("M_PipeBlue", Color(0.12, 0.2, 0.32), {"rough": 0.45, "edge": 0.9, "rust": 0.2,
-		"dust": 0.5, "floor": 0.0}))
-	mats.append(_paint("M_PipeGray", Color(0.3, 0.31, 0.3), {"rough": 0.5, "edge": 0.9, "rust": 0.25,
-		"dust": 0.6, "floor": 0.0, "streak": 0.5}))
+	# ---- 管路（按介质刷色；冷却水管最凉，结露最多）
+	mats.append(_paint("M_PipeRed", Color(0.42, 0.05, 0.035), {"rough": 0.55, "edge": 0.9, "rust": 0.25,
+		"dust": 0.5, "floor": 0.0, "cond": 0.35, "cond_h": -0.5}))
+	mats.append(_paint("M_PipeBlue", Color(0.12, 0.2, 0.32), {"rough": 0.55, "edge": 0.9, "rust": 0.2,
+		"dust": 0.5, "floor": 0.0, "cond": 1.0, "cond_h": -1.5}))
+	mats.append(_paint("M_PipeGray", Color(0.3, 0.31, 0.3), {"rough": 0.6, "edge": 0.9, "rust": 0.25,
+		"dust": 0.6, "floor": 0.0, "streak": 0.5, "cond": 0.4, "cond_h": -0.5}))
+	# 通风管外面包的帆布保温层：发黄、积灰、有水渍
+	mats.append(_paint("M_Lagging", Color(0.48, 0.45, 0.37), {"rough": 0.92, "metal": 0.0, "edge": 0.0,
+		"rust": 0.0, "detail": "Fabric045", "albedo": "Fabric045", "nstrength": 0.9, "scale": 5.0,
+		"variation": 0.5, "dust": 0.55, "smudge": 0.0, "streak": 0.7, "streak_scale": 2.0, "macro": 0.8,
+		"floor": 0.0, "cavity": 0.6}))
 	mats.append(_std("M_LampGlass", Color(1.0, 0.92, 0.8), 0.3, 0.0, Color(1.0, 0.86, 0.66), 4.0))
 	# ---- 设备箱和面板（几种不同年代、不同厂家的漆色）
 	mats.append(_paint("M_EquipGreen", Color(0.27, 0.33, 0.29), {"rough": 0.48, "dust": 0.4}))
@@ -250,12 +265,15 @@ func _interior_materials(mats: Array[Material]) -> void:
 	mats.append(_paint("M_Steel", Color(0.55, 0.55, 0.55), {"rough": 0.36, "metal": 0.95, "rust": 0.15,
 		"edge": 0.0, "detail": "Metal016", "smudge": 0.5, "dust": 0.1}))
 	mats.append(_paint("M_Copper", Color(0.62, 0.32, 0.2), {"rough": 0.35, "metal": 1.0, "rust": 0.1,
-		"edge": 0.0, "detail": "Metal016", "smudge": 0.4}))
+		"edge": 0.0, "detail": "Metal016", "smudge": 0.4, "cond": 0.6, "cond_h": -0.5}))
 	mats.append(_tex_std("M_Bakelite", Color(0.03, 0.025, 0.022), "Plastic012B",
 		{"rough": 0.8, "scale": 6.0, "nstrength": 0.3}))
 	mats.append(_tex_std("M_Knob", Color(0.02, 0.02, 0.02), "Plastic012B", {"rough": 0.7, "scale": 8.0,
 		"nstrength": 0.4}))
-	mats.append(_std("M_Chrome", Color(0.85, 0.85, 0.85), 0.14, 1.0))
+	# 镀铬件：发乌、有指纹和细划痕，高光不会一整片炸白
+	mats.append(_paint("M_Chrome", Color(0.78, 0.78, 0.77), {"rough": 0.2, "metal": 1.0, "rust": 0.04,
+		"edge": 0.0, "detail": "Metal016", "smudge": 0.7, "smudge_scale": 9.0, "rough_var": 0.35, "dust": 0.15,
+		"variation": 0.15, "nstrength": 0.12, "scale": 6.0, "floor": 0.0}))
 	mats.append(_tex_std("M_Alu", Color(0.78, 0.78, 0.77), "Metal016", {"rough": 0.75, "metal": 1.0,
 		"scale": 3.0, "nstrength": 0.25}))
 	mats.append(_std("M_Dark", Color(0.008, 0.008, 0.008), 0.95))
@@ -297,26 +315,31 @@ func _interior_materials(mats: Array[Material]) -> void:
 	mats.append(_std("M_ZipWhite", Color(0.82, 0.8, 0.74), 0.45))
 	mats.append(_std("M_ZipBlack", Color(0.03, 0.03, 0.03), 0.45))
 	# ---- 软的东西、纸
-	mats.append(_tex_std("M_Vinyl", Color(0.32, 0.25, 0.22), "Leather033A", {"albedo_tex": true,
-		"scale": 4.0, "rough": 0.9}))
+	# 人造革：皮纹 + 坐久了磨亮的光泽
+	mats.append(_tex_std("M_Vinyl", Color(0.42, 0.33, 0.29), "Leather033A", {"albedo_tex": true,
+		"scale": 4.0, "rough": 0.62, "nstrength": 1.2}))
 	mats.append(_tex_std("M_Cloth", Color(0.55, 0.6, 0.42), "Fabric045", {"albedo_tex": true,
 		"scale": 6.0, "nstrength": 0.8}))
 	mats.append(_tex_std("M_MaskTape", Color(0.8, 0.74, 0.58), "Fabric045", {"rough": 0.9, "scale": 14.0,
 		"nstrength": 0.25}))
 	mats.append(_std("M_Marker", Color(0.03, 0.03, 0.06), 0.5))
 	mats.append(_std("M_NoteYellow", Color(0.93, 0.8, 0.32), 0.8))
-	mats.append(_tex_std("M_Deck", Color(0.55, 0.55, 0.53), "DiamondPlate008A", {"albedo_tex": true,
-		"metal_tex": true, "metal": 1.0, "scale": 1.6}))
+	# 花纹钢地板刷了一层灰绿甲板漆（凸起的花纹上磨得发亮）。纯金属的话贴花（脚印、斑马线）的颜色显不出来
+	mats.append(_paint("M_Deck", Color(0.3, 0.32, 0.29), {"rough": 0.55, "metal": 0.2, "detail": "DiamondPlate008A",
+		"albedo": "DiamondPlate008A", "nstrength": 1.0, "scale": 1.6, "edge": 0.0, "rust": 0.15, "variation": 0.45,
+		"rough_var": 0.5, "dust": 0.12, "smudge": 0.0, "macro": 0.6, "floor": 0.0}))
 	mats.append(_paint("M_O2Blue", Color(0.3, 0.52, 0.68), {"rough": 0.45, "rust": 0.1, "edge": 0.9,
 		"dust": 0.35}))
 	mats.append(_paint("M_Brass", Color(0.62, 0.45, 0.18), {"rough": 0.35, "metal": 1.0, "rust": 0.08,
 		"edge": 0.0, "detail": "Metal016", "smudge": 0.6}))
-	# ---- 神龛
-	var lacquer := _std("M_RedLacquer", Color(0.3, 0.022, 0.014), 0.3)
-	lacquer.clearcoat_enabled = true
-	lacquer.clearcoat = 0.6
-	mats.append(lacquer)
-	mats.append(_std("M_Gold", Color(0.8, 0.58, 0.22), 0.3, 1.0))
+	# ---- 神龛（漆面棱边磨出底下的木胎，常年烟熏，落着香灰）
+	mats.append(_paint("M_RedLacquer", Color(0.3, 0.022, 0.014), {"rough": 0.28, "metal": 0.0, "rust": 0.0,
+		"edge": 1.2, "wear": Color(0.16, 0.08, 0.04), "wear_metal": 0.0, "detail": "Plastic012B",
+		"smudge": 0.5, "dust": 0.45, "dust_color": Color(0.33, 0.31, 0.29), "macro": 0.6, "floor": 0.0,
+		"nstrength": 0.15}))
+	mats.append(_paint("M_Gold", Color(0.8, 0.58, 0.22), {"rough": 0.32, "metal": 1.0, "rust": 0.0,
+		"edge": 0.9, "wear": Color(0.28, 0.04, 0.02), "wear_metal": 0.0, "detail": "Metal016", "smudge": 0.4,
+		"dust": 0.5, "dust_color": Color(0.33, 0.31, 0.29), "macro": 0.7, "rough_var": 0.4, "floor": 0.0}))
 	mats.append(_std("M_StatueGilt", Color(0.55, 0.38, 0.13), 0.5, 0.8))
 	mats.append(_tex_std("M_Paper", Color(0.82, 0.64, 0.24), "Fabric045", {"rough": 0.95, "scale": 10.0,
 		"nstrength": 0.2}))
@@ -329,3 +352,35 @@ func _interior_materials(mats: Array[Material]) -> void:
 	jade.subsurf_scatter_enabled = true
 	jade.subsurf_scatter_strength = 0.6
 	mats.append(jade)
+	# ---- 生活痕迹
+	mats.append(_tex_std("M_Towel", Color(0.78, 0.74, 0.62), "Fabric045", {"albedo_tex": true, "scale": 9.0,
+		"nstrength": 1.4, "rough": 1.0}))
+	mats.append(_tex_std("M_Jacket", Color(0.16, 0.22, 0.34), "Fabric045", {"albedo_tex": true, "scale": 7.0,
+		"nstrength": 1.0, "rough": 1.0}))
+	var net := ShaderMaterial.new()
+	net.resource_name = "M_Net"
+	net.shader = NET
+	mats.append(net)
+	mats.append(_tex_std("M_Orange", Color(0.9, 0.36, 0.04), "Leather033A", {"scale": 45.0, "nstrength": 0.6,
+		"rough": 0.45, "rough_tex": false}))
+	var bottle := _std("M_Bottle", Color(0.5, 0.62, 0.66), 0.18)
+	bottle.metallic_specular = 0.7
+	mats.append(bottle)
+	mats.append(_paint("M_Can", Color(0.62, 0.62, 0.6), {"rough": 0.3, "metal": 0.9, "rust": 0.3,
+		"edge": 0.0, "detail": "Metal016", "dust": 0.35, "smudge": 0.3, "floor": 0.0}))
+	mats.append(_paint("M_CanLabel", Color(0.5, 0.1, 0.04), {"rough": 0.55, "metal": 0.0, "rust": 0.05,
+		"edge": 0.5, "wear": Color(0.6, 0.6, 0.58), "detail": "Plastic012B", "dust": 0.3, "floor": 0.0}))
+	mats.append(_tex_std("M_Cardboard", Color(0.52, 0.38, 0.22), "Fabric045", {"scale": 4.0, "nstrength": 0.25,
+		"rough": 0.95}))
+	# ---- 生活舱：军毯、布帘、镜子
+	mats.append(_tex_std("M_Blanket", Color(0.36, 0.34, 0.29), "Fabric045", {"albedo_tex": true, "scale": 5.0,
+		"nstrength": 1.3, "rough": 1.0}))
+	mats.append(_tex_std("M_Curtain", Color(0.42, 0.44, 0.33), "Fabric045", {"albedo_tex": true, "scale": 8.0,
+		"nstrength": 0.8, "rough": 1.0}))
+	# 镜子：水银发乌、有擦拭的污痕
+	var mirror := _std("M_Mirror", Color(0.62, 0.63, 0.6), 0.25, 1.0)
+	mirror.roughness_texture = _acg("Smear004", "Roughness")
+	mirror.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GRAYSCALE
+	mirror.uv1_triplanar = true
+	mirror.uv1_scale = Vector3(3, 3, 3)
+	mats.append(mirror)

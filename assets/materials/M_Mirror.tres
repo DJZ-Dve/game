@@ -1,0 +1,13 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Smear004/Smear004_2K-JPG_Roughness.jpg" id="1_w2vph"]
+
+[resource]
+resource_name = "M_Mirror"
+albedo_color = Color(0.62, 0.63, 0.6, 1)
+metallic = 1.0
+roughness = 0.25
+roughness_texture = ExtResource("1_w2vph")
+roughness_texture_channel = 4
+uv1_scale = Vector3(3, 3, 3)
+uv1_triplanar = true

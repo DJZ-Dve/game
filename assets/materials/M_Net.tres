@@ -1,0 +1,13 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/net_bag.gdshader" id="1_yvvvs"]
+
+[resource]
+resource_name = "M_Net"
+render_priority = 0
+shader = ExtResource("1_yvvvs")
+shader_parameter/color = null
+shader_parameter/center = null
+shader_parameter/strands = null
+shader_parameter/pitch = null
+shader_parameter/thread = null

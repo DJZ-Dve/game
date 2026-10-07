@@ -1,7 +1,47 @@
-[gd_resource type="StandardMaterial3D" format=3]
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/worn_surface.gdshader" id="1_1px1f"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_Color.jpg" id="2_u5l62"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_Roughness.jpg" id="3_l8gw4"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_NormalGL.jpg" id="4_dpa5t"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fingerprints001/Fingerprints001_2K-JPG_Opacity.jpg" id="5_iibim"]
 
 [resource]
 resource_name = "M_Gold"
-albedo_color = Color(0.8, 0.58, 0.22, 1)
-metallic = 1.0
-roughness = 0.3
+render_priority = 0
+shader = ExtResource("1_1px1f")
+shader_parameter/paint_color = Color(0.8, 0.58, 0.22, 1)
+shader_parameter/paint_roughness = 0.32
+shader_parameter/paint_metallic = 1.0
+shader_parameter/paint_variation = 0.12
+shader_parameter/grime_albedo = ExtResource("2_u5l62")
+shader_parameter/grime_normal = ExtResource("4_dpa5t")
+shader_parameter/grime_arm = ExtResource("3_l8gw4")
+shader_parameter/arm_packed = false
+shader_parameter/tex_scale = 3.0
+shader_parameter/normal_strength = 0.18
+shader_parameter/rough_variation = 0.4
+shader_parameter/rust_amount = 0.0
+shader_parameter/cavity_dirt = 1.0
+shader_parameter/edge_wear = 0.9
+shader_parameter/wear_color = Color(0.28, 0.04, 0.02, 1)
+shader_parameter/smudge_tex = ExtResource("5_iibim")
+shader_parameter/smudge_amount = 0.4
+shader_parameter/smudge_scale = 5.0
+shader_parameter/dust_amount = 0.5
+shader_parameter/dust_color = Color(0.33, 0.31, 0.29, 1)
+shader_parameter/streak_amount = null
+shader_parameter/streak_scale = null
+shader_parameter/streak_color = null
+shader_parameter/macro_amount = 0.7
+shader_parameter/macro_scale = null
+shader_parameter/floor_dirt = 0.0
+shader_parameter/floor_height = null
+shader_parameter/floor_fade = null
+shader_parameter/floor_color = null
+shader_parameter/condensation = null
+shader_parameter/droplet_scale = null
+shader_parameter/cond_height = null
+shader_parameter/wear_metallic = 0.0
+shader_parameter/emission_color = null
+shader_parameter/emission_energy = null

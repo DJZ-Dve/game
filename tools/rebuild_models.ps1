@@ -22,4 +22,9 @@ if (Test-Path $cache) {
 }
 & $godot --headless --path $root --import 2>&1 |
     Where-Object { $_ -match "ERROR|SCRIPT ERROR" } | ForEach-Object { Write-Host $_ }
+# 舱内模型变了，VoxelGI 要重新烘焙（需要渲染，会闪一下游戏窗口）
+if (-not $Only -or $Only -eq "submarine") {
+    & $godot --path $root --resolution 640x360 -- --bake-gi 2>&1 |
+        Where-Object { $_ -match "ERROR|SCRIPT ERROR|saved|baked" } | ForEach-Object { Write-Host $_ }
+}
 Write-Host "rebuild done"
