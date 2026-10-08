@@ -186,6 +186,9 @@ def materials(M):
     # 生活舱
     add("Blanket", "M_Blanket", (0.32, 0.3, 0.27), 0.0, 0.95)
     add("Curtain", "M_Curtain", (0.36, 0.38, 0.3), 0.0, 0.9)
+    add("Mattress", "M_Mattress", (0.55, 0.58, 0.62), 0.0, 0.9)
+    add("Pillow", "M_Pillow", (0.72, 0.7, 0.62), 0.0, 0.9)
+    add("Sheet", "M_Sheet", (0.75, 0.76, 0.73), 0.0, 0.9)
     add("Mirror", "M_Mirror", (0.8, 0.8, 0.78), 1.0, 0.08)
     return M
 

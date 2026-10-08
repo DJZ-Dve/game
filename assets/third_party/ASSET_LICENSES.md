@@ -62,3 +62,7 @@
 | Ma Shan Zheng（字形） | blender/fonts/MaShanZheng-Regular.ttf，已转成模型网格 | https://fonts.google.com/specimen/Ma+Shan+Zheng | Ma Shan Zheng | SIL OFL 1.1 | 黄符上的朱砂字 |
 | Stardos Stencil（字形） | blender/fonts/StardosStencil-Bold.ttf | https://fonts.google.com/specimen/Stardos+Stencil | Vernon Adams | SIL OFL 1.1 | 生成喷漆模板字「C-03」的文字底图（scripts/tools/gen_decal_text.gd）；现有的 c03.png 还是早先在 Windows 上用 Stencil 画的，下次重新生成时换成这个字体 |
 | DSEG7 Classic | assets/fonts/DSEG7Classic-*.ttf | https://github.com/keshikan/DSEG | keshikan | SIL OFL 1.1 | 数码管读数（运行时 Label3D） |
+| Fabric034 | ambientcg/Fabric034 | https://ambientcg.com/a/Fabric034 | ambientCG | CC0 | 军毯（毛毡），染成橄榄绿 |
+| Fabric001 | ambientcg/Fabric001 | https://ambientcg.com/a/Fabric001 | ambientCG | CC0 | 枕套（旧白棉布） |
+| Fabric071 | ambientcg/Fabric071 | https://ambientcg.com/a/Fabric071 | ambientCG | CC0 | 床垫条纹布 |
+| Fabric036 | ambientcg/Fabric036 | https://ambientcg.com/a/Fabric036 | ambientCG | CC0 | 铺位布帘（细帆布），染成灰绿 |

@@ -11,6 +11,7 @@ const WORN := preload("res://assets/shaders/worn_surface.gdshader")
 const SEABED := preload("res://assets/shaders/seabed.gdshader")
 const CRT := preload("res://assets/shaders/crt_sonar.gdshader")
 const NET := preload("res://assets/shaders/net_bag.gdshader")
+const FABRIC := preload("res://assets/shaders/fabric.gdshader")
 
 
 func _init() -> void:
@@ -131,6 +132,20 @@ func _tex_std(name: String, color: Color, id: String, o := {}) -> StandardMateri
 	var s: float = o.get("scale", 2.0)
 	m.uv1_scale = Vector3(s, s, s)
 	m.uv1_triplanar_sharpness = 4.0
+	return m
+
+
+## 铺位上的布料（模型带 UV，单位米）：面料贴图染成 tint，见 fabric.gdshader
+func _fabric(name: String, tint: Color, id: String, o := {}) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = FABRIC
+	m.resource_name = name
+	m.set_shader_parameter("tint", tint)
+	m.set_shader_parameter("albedo_tex", _acg(id, "Color"))
+	m.set_shader_parameter("normal_tex", _acg(id, "NormalGL"))
+	m.set_shader_parameter("rough_tex", _acg(id, "Roughness"))
+	for k: String in o:
+		m.set_shader_parameter(k, o[k])
 	return m
 
 
@@ -373,10 +388,26 @@ func _interior_materials(mats: Array[Material]) -> void:
 	mats.append(_tex_std("M_Cardboard", Color(0.52, 0.38, 0.22), "Fabric045", {"scale": 4.0, "nstrength": 0.25,
 		"rough": 0.95}))
 	# ---- 生活舱：军毯、布帘、镜子
-	mats.append(_tex_std("M_Blanket", Color(0.36, 0.34, 0.29), "Fabric045", {"albedo_tex": true, "scale": 5.0,
-		"nstrength": 1.3, "rough": 1.0}))
-	mats.append(_tex_std("M_Curtain", Color(0.42, 0.44, 0.33), "Fabric045", {"albedo_tex": true, "scale": 8.0,
-		"nstrength": 0.8, "rough": 1.0}))
+	# 军毯：粗毛毡，橄榄绿，绒面有一层光泽
+	mats.append(_fabric("M_Blanket", Color(0.2, 0.22, 0.13), "Fabric034", {"tex_scale": 2.0, "tex_mean": 0.36,
+		"tex_contrast": 1.3, "normal_strength": 1.1, "sheen": 0.4, "sheen_tint": 0.7, "stain_amount": 0.25,
+		"stain_color": Color(0.7, 0.62, 0.45), "binding_width": 0.014, "binding_color": Color(0.62, 0.62, 0.58)}))
+	# 枕套：洗旧了的白棉布，中间一大块汗渍发黄
+	mats.append(_fabric("M_Pillow", Color(0.66, 0.63, 0.55), "Fabric001", {"tex_scale": 1.6, "tex_mean": 0.55,
+		"tex_contrast": 3.0, "normal_strength": 0.5, "sheen": 0.25, "stain_amount": 0.55, "stain_scale": 4.0,
+		"stain_color": Color(0.82, 0.66, 0.4)}))
+	# 床单：发灰的白棉布，睡出来的黄印子
+	mats.append(_fabric("M_Sheet", Color(0.6, 0.61, 0.58), "Fabric001", {"tex_scale": 1.3, "tex_mean": 0.55,
+		"tex_contrast": 2.5, "normal_strength": 0.35, "sheen": 0.2, "stain_amount": 0.4, "stain_scale": 2.5,
+		"stain_color": Color(0.85, 0.72, 0.5)}))
+	# 床垫：蓝白条纹的床垫布，发黄、到处是水渍
+	mats.append(_fabric("M_Mattress", Color(0.8, 0.76, 0.64), "Fabric071", {"tex_scale": 3.5, "albedo_mix": 0.35,
+		"tex_mean": 0.33, "tex_contrast": 0.8, "normal_strength": 1.0, "sheen": 0.2, "stain_amount": 0.6, "stain_scale": 2.5,
+		"stain_color": Color(0.72, 0.56, 0.34), "cavity_dirt": 0.8}))
+	# 布帘：灰绿细帆布，后面亮着床头灯时透出一点暖光
+	mats.append(_fabric("M_Curtain", Color(0.26, 0.29, 0.22), "Fabric036", {"tex_scale": 2.0, "tex_mean": 0.49,
+		"tex_contrast": 1.2, "normal_strength": 0.9, "sheen": 0.3, "stain_amount": 0.2,
+		"backlight": Color(0.32, 0.26, 0.16)}))
 	# 镜子：水银发乌、有擦拭的污痕
 	var mirror := _std("M_Mirror", Color(0.62, 0.63, 0.6), 0.25, 1.0)
 	mirror.roughness_texture = _acg("Smear004", "Roughness")

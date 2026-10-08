@@ -1,0 +1,32 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/fabric.gdshader" id="1_u88wn"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric001/Fabric001_2K-JPG_Color.jpg" id="2_hj6as"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric001/Fabric001_2K-JPG_NormalGL.jpg" id="3_ci0j2"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric001/Fabric001_2K-JPG_Roughness.jpg" id="4_0wryn"]
+
+[resource]
+resource_name = "M_Pillow"
+render_priority = 0
+shader = ExtResource("1_u88wn")
+shader_parameter/tint = Color(0.66, 0.63, 0.55, 1)
+shader_parameter/albedo_tex = ExtResource("2_hj6as")
+shader_parameter/normal_tex = ExtResource("3_ci0j2")
+shader_parameter/rough_tex = ExtResource("4_0wryn")
+shader_parameter/tex_scale = 1.6
+shader_parameter/albedo_mix = null
+shader_parameter/tex_mean = 0.55
+shader_parameter/tex_contrast = 3.0
+shader_parameter/normal_strength = 0.5
+shader_parameter/roughness = null
+shader_parameter/sheen = 0.25
+shader_parameter/sheen_tint = null
+shader_parameter/cavity_dirt = null
+shader_parameter/variation = null
+shader_parameter/stain_amount = 0.55
+shader_parameter/stain_scale = 4.0
+shader_parameter/stain_color = Color(0.82, 0.66, 0.4, 1)
+shader_parameter/binding_width = null
+shader_parameter/binding_color = null
+shader_parameter/thread_color = null
+shader_parameter/backlight = null

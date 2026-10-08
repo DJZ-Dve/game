@@ -17,8 +17,9 @@ from lib import (frame, T, R, S, cylinder, box, uvsphere, lathe, torus, catmull,
 from kit import (rbox, screw, socket_screw, handle, vent, knob, lamp, label_plate, tape_label, toggle, FONT_BRUSH,
                  FONT_SERIF, FONT_HAND)
 import cockpit as C
+from bedding import Bunk
 from cockpit import (R_IN, DECK, Y_AFT, Y_STERN, AFT_FRAMES, HATCH, PIPES, abox, sbox, anchor_frame, ring_sweep,
-                     ceiling_lamp, cloth, decal)
+                     ceiling_lamp, decal)
 
 Y_FWD = Y_AFT - 0.012           # 中间隔壁的后表面
 GALLEY = (-2.78, -3.9)          # 小厨房 / 衣柜的前后范围（y1 > y0 的顺序：前、后）
@@ -231,16 +232,8 @@ def galley(K, anchors):
     C.Cab.add([Mr @ V((0.12, 0.05, 0.05)), Mr @ V((0.22, 0.1, 0.02)), V((1.28, -3.85, zt + 0.15)),
                V((1.29, -3.9, zt + 0.25))], 0.004, "CableWhite")
     # 搪瓷缸子（白底红口），一个在台面上，三个挂在吊柜下面
-    def mug(M, words=True):
-        lathe(K["Silk"], [(0.0, 0.0), (0.038, 0.0), (0.04, 0.004), (0.04, 0.085), (0.036, 0.085), (0.036, 0.008),
-                          (0.0, 0.008)], 24, M)
-        torus(K["BtnRed"], 0.039, 0.003, 24, 6, M @ T(0, 0, 0.085))
-        sweep(K["Silk"], catmull([M @ V((0.039, 0, 0.068)), M @ V((0.065, 0, 0.06)), M @ V((0.066, 0, 0.03)),
-                                  M @ V((0.039, 0, 0.022))], 5), circle_profile(0.005, 8))
-        if words:
-            K.text("先进", M @ T(-0.0402, 0, 0.045) @ R(-90, 'Y') @ R(-90, 'Z'), 0.014, key="InkRed", font=FONT_SERIF)
-    mug(T(0.82, -3.58, zt) @ R(200, 'Z'))
-    mug(T(0.84, -2.86, zt) @ R(150, 'Z'), words=False)
+    enamel_mug(K, T(0.82, -3.58, zt) @ R(200, 'Z'))
+    enamel_mug(K, T(0.84, -2.86, zt) @ R(150, 'Z'), words=False)
     # 吊柜（两道肋骨之间）+ 柜下的灯管 + 挂杯钩
     cy0, cy1 = -3.45, -2.96
     abox(K["EquipGray"], 0.84, 1.2, cy0, cy1, 0.3, 0.58, r=0.008, seg=2)
@@ -262,7 +255,7 @@ def galley(K, anchors):
         hook = [V((0.86, yy, 0.295)), V((0.86, yy, 0.265)), V((0.875, yy, 0.255)), V((0.885, yy, 0.27))]
         sweep(K["Steel"], catmull(hook, 4), circle_profile(0.0018, 6))
         # 把手挂在钩子上，杯身斜着垂在下面
-        mug(T(0.885, yy, 0.262) @ R(-70, 'Y') @ T(-0.066, 0, -0.045), words=(k == 1))
+        enamel_mug(K, T(0.885, yy, 0.262) @ R(-70, 'Y') @ T(-0.066, 0, -0.045), words=(k == 1))
     # 筷子筒
     Mc = T(1.2, -3.66, zt)
     lathe(K["Bakelite"], [(0.0, 0.0), (0.035, 0.0), (0.035, 0.13), (0.031, 0.13), (0.031, 0.006), (0.0, 0.006)], 20, Mc)
@@ -328,12 +321,12 @@ def bunks(K, anchors, s):
     yf, ya = BUNK
     xin, xw = BUNK_IN, LINING_X
     tag = "R" if s > 0 else "L"
-    # 床尾 / 床头挡板（带立柱，立柱上挂布帘杆）
+    # 床尾 / 床头挡板（方管框里嵌一块压了筋的薄板）+ 过道一侧的立柱（立柱上挂布帘杆）
     for yy in (yf, ya):
-        sbox(K["EquipBeige"], s, xin, xw, yy - 0.0125, yy + 0.0125, DECK, 0.43, r=0.004)
-        sbox(K["Steel"], s, xin - 0.01, xin + 0.03, yy - 0.02, yy + 0.02, DECK, 0.86, r=0.004)
-    # 靠壳体的衬板
-    sbox(K["EquipBeige"], s, xw, xw + 0.012, ya, yf, LOWER_Z - 0.04, 0.45)
+        end_panel(K, s, yy)
+        post(K, s, yy)
+    # 靠壳体的衬板：三块拼起来，拼缝上压铝条
+    lining(K, s, ya, yf)
     # 下铺：抽屉底座 + 床板 + 床垫
     sbox(K["Dark"], s, xin + 0.08, 1.0, ya + 0.012, yf - 0.012, DECK, DECK + 0.07)
     sbox(K["EquipBeige"], s, xin + 0.04, 1.0, ya + 0.012, yf - 0.012, DECK + 0.07, LOWER_Z - 0.03, r=0.004)
@@ -345,15 +338,26 @@ def bunks(K, anchors, s):
         sbox(K["EquipBeige"], s, xin + 0.02, xin + 0.04, a, b, zc - h / 2, zc + h / 2, r=0.004)
         P = frame(V((s * (xin + 0.02), (a + b) / 2, zc)), V((-s, 0, 0)))
         handle(K, P, 0, 0.03, 0.12, axis='X', key="Steel", standoff=0.016)
+        card_holder(K, P @ T(0, 0.1, 0.0), ("被服", "杂物")[k] if s < 0 else ("鞋袜", "")[k], seed=k + (s > 0) * 2)
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                rivet(K["EquipBeige"], P, sx * ((b - a) / 2 - 0.02), sy * (h / 2 - 0.02))
     sbox(K["EquipBeige"], s, xin, xw, ya + 0.012, yf - 0.012, LOWER_Z - 0.03, LOWER_Z, r=0.003)
+    rail_edge(K, s, ya, yf, LOWER_Z)
     # 上铺：床板 + 挡板
     sbox(K["EquipBeige"], s, xin, xw, ya + 0.012, yf - 0.012, UPPER_Z - 0.035, UPPER_Z, r=0.003)
-    sbox(K["EquipBeige"], s, xin, xin + 0.03, ya + 0.012, yf - 0.012, UPPER_Z, UPPER_Z + 0.16, r=0.006)
+    rail_edge(K, s, ya, yf, UPPER_Z)
+    guard(K, s, ya, yf)
+    # 铺位编号、名牌：上铺的挂在护栏上，下铺的挂在上铺床板边上（帘子杆上面）
+    names = {"L0": "李海生", "L1": "陈卫东", "R0": "", "R1": "王建国"}
+    nums = {"L0": "03", "L1": "04", "R0": "01", "R1": "02"}
+    for k, (z, dz) in enumerate(((UPPER_Z - 0.025, 0.0), (UPPER_Z + 0.09, 0.015))):
+        P = frame(V((s * (xin - 0.004 + dz), yf - 0.3, z)), V((-s, 0, 0)))
+        label_plate(K, P, 0, 0, nums[f"{tag}{k}"], 0.013, plate="Alu", ink="Ink")
+        card_holder(K, P @ T(0.11, 0, 0), names[f"{tag}{k}"], seed=5 + k + (s > 0) * 2, w=0.1)
     # 上铺的脚蹬（焊在床尾挡板上）
     for z in (-0.12, 0.3):
         sbox(K["Steel"], s, xin + 0.05, xin + 0.2, ya + 0.0125, ya + 0.035, z - 0.012, z + 0.012, r=0.004)
-    for z0 in (LOWER_Z, UPPER_Z):
-        sbox(K["Cloth"], s, xin + 0.035, xw - 0.015, ya + 0.03, yf - 0.03, z0, z0 + MATTRESS, r=0.03, seg=3)
     # 布帘杆
     for z in (0.8, UPPER_Z - 0.05):
         sweep(K["Steel"], [V((s * (xin + 0.01), ya, z)), V((s * (xin + 0.01), yf, z))], circle_profile(0.007, 10))
@@ -373,106 +377,55 @@ def bunks(K, anchors, s):
             anchors.append(empty(f"CabinLight_Bunk_{tag}{k}", K.coll, Fs @ T(0, 0, 0.05)))
         C.Cab.add([F @ V((0, -0.025, 0.01)), F @ V((0, -0.06, 0.0)), V((s * (xw - 0.005), yl - 0.1, zl - 0.15)),
                    V((s * (xw - 0.005), yl - 0.2, LOWER_Z - 0.04))], 0.003, "CableWhite")
-    # 被褥、枕头、帘子
+    # 床垫、被褥、枕头、帘子（布料模拟，见 bedding.py）。先摆底下的，摆好的东西是后面几件的碰撞体
+    lower = Bunk(K, s, LOWER_Z, xin, xw, ya, yf, DECK, False, tag + "0")
+    upper = Bunk(K, s, UPPER_Z, xin, xw, ya, yf, DECK, True, tag + "1")
+    for b in (lower, upper):
+        b.mattress(MATTRESS, seed=2 + b.upper + (s > 0) * 2)
     if s < 0:
-        blanket(K, s, LOWER_Z + MATTRESS, seed=3, lump=True)
-        pillow(K, s, LOWER_Z + MATTRESS, 2)
-        curtain(K, s, UPPER_Z - 0.05, LOWER_Z + MATTRESS + 0.02, ya + 0.02, yf - 0.02, folds=15, seed=4)
-        blanket(K, s, UPPER_Z + MATTRESS, seed=8)
-        pillow(K, s, UPPER_Z + MATTRESS, 5, dy=-0.02, tilt=10)
-        curtain(K, s, 0.8, UPPER_Z + 0.18, yf - 0.26, yf - 0.02, folds=8, seed=5)
+        # 下铺：帘子拉着，被子底下蜷着一个人，连头都蒙住了
+        lower.sheet(seed=2)
+        lower.body()
+        lower.pillow(seed=2)
+        lower.blanket(seed=3, over=0.15, y1=yf - 0.04)
+        bunk_curtain(K, lower, UPPER_Z - 0.05, LOWER_Z + MATTRESS + 0.02, ya + 0.02, yf - 0.02, folds=15, seed=4)
+        upper.sheet(seed=5)
+        upper.pillow(seed=5, dy=-0.02, tilt=10)
+        upper.blanket(seed=8, over=0.0, fold=(0.4, -20), crumple=0.04, shrink=-0.04)
+        bunk_curtain(K, upper, 0.8, UPPER_Z + 0.18, yf - 0.26, yf - 0.02, folds=8, seed=5)
+        # 下铺衬板上的搁板：搪瓷缸、眼镜（人蒙在被子里，眼镜摘下来放在这儿）
+        bunk_shelf(K, anchors, s, -5.25, -4.85, -0.06, [("mug", -4.95, 30), ("Anchor_BunkSpectacles", -5.14, 0)])
         # 帘子底下一双胶靴
         for k, (dx, dy, yaw) in enumerate(((0.0, 0.0, 4), (0.05, 0.16, -10))):
             boot(K, T(s * (0.5 - dx), -4.62 + dy, DECK) @ R(yaw + 180, 'Z'))
     else:
-        folded_blanket(K, s, LOWER_Z + MATTRESS, ya + 0.3)
-        pillow(K, s, LOWER_Z + MATTRESS, 7)
-        curtain(K, s, UPPER_Z - 0.05, LOWER_Z + MATTRESS + 0.02, ya + 0.02, ya + 0.4, folds=10, seed=6)
-        blanket(K, s, UPPER_Z + MATTRESS, seed=11)
-        pillow(K, s, UPPER_Z + MATTRESS, 9, dy=0.02)
-        curtain(K, s, 0.8, UPPER_Z + 0.18, ya + 0.02, ya + 0.3, folds=8, seed=7)
+        lower.folded_blanket(ya + 0.3, seed=6)
+        bunk_shelf(K, anchors, s, -5.2, -4.8, -0.06, [("mug_plain", -5.08, 200), ("can", -4.9, 0)])
+        lower.pillow(seed=7)
+        bunk_curtain(K, lower, UPPER_Z - 0.05, LOWER_Z + MATTRESS + 0.02, ya + 0.02, ya + 0.4, folds=10, seed=6)
+        upper.sheet(seed=9)
+        upper.pillow(seed=9, dy=0.02)
+        # 上铺的被子蹬到了床尾，堆成一团
+        upper.blanket(seed=11, over=0.0, y0=ya + 0.05, y1=ya + 0.75, crumple=0.03, bunch=0.4)
+        bunk_curtain(K, upper, 0.8, UPPER_Z + 0.18, ya + 0.02, ya + 0.3, folds=8, seed=7)
         anchors.append(empty("Anchor_PocketWatch", K.coll,
-                             anchor_frame(V((s * 0.88, yf - 0.5, LOWER_Z + MATTRESS)), V((0.3, 1, 0)))))
+                             anchor_frame(V((s * 0.88, yf - 0.5, lower.surface_z(s * 0.88, yf - 0.5, 0.02))),
+                                          V((0.3, 1, 0)))))
         anchors.append(empty("Anchor_BunkBook", K.coll,
-                             anchor_frame(V((s * 0.85, -4.9, UPPER_Z + MATTRESS + 0.03)), V((1, 0.4, 0)))))
+                             anchor_frame(V((s * 0.85, -4.9, upper.surface_z(s * 0.85, -4.9) + 0.005)), V((1, 0.4, 0)))))
         # 上铺挡板上搭着一条毛巾；衬板上贴着照片
-        C.towel(K, (s * (BUNK_IN + 0.015), UPPER_Z + 0.165), -5.2, -4.85, 0.26, 0.05, seed=13)
+        upper.towel(-5.2, -4.86, seed=13)
         for k, (yy, zz, ang, cap) in enumerate(((-4.32, 0.37, -4, "九二年 青岛"), (-4.5, 0.385, 6, ""),
                                                 (-4.44, 0.32, -2, "囡囡 五岁"))):
             photo(K, frame(V((s * (xw - 0.001), yy, zz)), V((-s, 0, 0))), ang, cap, seed=k)
 
 
-def blanket(K, s, ztop, seed=1, lump=False):
-    """皱巴巴摊在床垫上的毯子：靠过道一侧垂下一截，靠床头那一头掀开一角。"""
-    rng = random.Random(seed)
-    yf, ya = BUNK
-    ph = [rng.uniform(0, 6.28) for _ in range(6)]
-    y0, y1 = ya + 0.06, yf - 0.42
-    rows = []
-    nv = 14
-    for j in range(nv):
-        v = j / (nv - 1)
-        row = []
-        for i in range(25):
-            u = i / 24
-            y = y0 + (y1 - y0) * u
-            if v < 0.2:   # 垂下去的那截
-                t = (0.2 - v) / 0.2
-                x = BUNK_IN + 0.03 - 0.01 * t
-                z = ztop + 0.02 - t * 0.16 * (1 + 0.15 * math.sin(u * 13 + ph[0]))
-            else:
-                w = (v - 0.2) / 0.8
-                x = BUNK_IN + 0.04 + (LINING_X - 0.04 - BUNK_IN - 0.04) * w
-                z = ztop + 0.025 + 0.018 * (math.sin(u * 17 + ph[1] + w * 3) + 0.6 * math.sin(u * 7 + w * 9 + ph[2]))
-                z += 0.012 * math.sin(w * 11 + u * 4 + ph[3])
-                if lump:  # 毯子底下鼓起一长条，像是有人蜷在里面
-                    k = math.exp(-((w - 0.55) / 0.28) ** 2) * math.exp(-((u - 0.55) / 0.33) ** 4)
-                    z += 0.17 * k
-            row.append(V((s * x, y, z)))
-        rows.append(row)
-    cloth(K["Blanket"], rows, 0.012)
-
-
-def folded_blanket(K, s, ztop, y):
-    x = s * (BUNK_IN + LINING_X) / 2
-    for k in range(4):
-        rbox(K["Blanket"], 0.42 - k * 0.004, 0.3, 0.022, T(x, y, ztop + 0.011 + k * 0.021) @ R(1.5 * (k - 1.5), 'Z'),
-             r=0.01, seg=2)
-
-
-def pillow(K, s, ztop, seed, dy=0.0, tilt=0.0):
-    rng = random.Random(seed)
-    yf, _ = BUNK
-    x = s * (BUNK_IN + LINING_X) / 2 + rng.uniform(-0.03, 0.03)
-    M = T(x, yf - 0.2 + dy, ztop + 0.05) @ R(tilt + rng.uniform(-6, 6), 'Z') @ R(rng.uniform(-4, 4), 'X')
-    rbox(K["Towel"], 0.42, 0.24, 0.1, M, r=0.045, seg=4)
-
-
-def curtain(K, s, ztop, zbot, ya, yb, folds=10, seed=1):
-    """布帘：挂在杆上的一排环，往下是一道道褶子；拉开的帘子堆在一头，褶子挤得很深。"""
-    rng = random.Random(seed)
-    span = yb - ya
-    amp = min(0.045, 0.01 + 0.012 * folds * 0.07 / span)  # 布越挤，褶子越深
-    ph = [rng.uniform(0, 6.28) for _ in range(4)]
-    rows = []
-    nv = 12
-    nu = folds * 6 + 1
-    for j in range(nv):
-        v = j / (nv - 1)
-        row = []
-        for i in range(nu):
-            u = i / (nu - 1)
-            y = ya + span * u
-            f = math.sin(u * folds * 2 * math.pi + ph[0])
-            a = amp * (1 + 0.5 * v) * (1 + 0.15 * math.sin(u * 5 + ph[1]))
-            z = ztop - 0.02 - (ztop - 0.02 - zbot) * v * (1 + 0.02 * math.sin(u * 23 + ph[2]))
-            x = BUNK_IN - 0.005 + a * f + 0.01 * v * math.sin(u * 3 + ph[3])
-            row.append(V((s * x, y, z)))
-        rows.append(row)
-    cloth(K["Curtain"], rows, 0.003)
+def bunk_curtain(K, bunk, ztop, zbot, ya, yb, folds=10, seed=1):
+    """布帘（布料模拟）+ 杆上的一排挂环。"""
+    bunk.curtain(ztop, zbot, ya, yb, folds, seed)
     for k in range(folds + 1):
-        y = ya + span * k / folds
-        torus(K["Steel"], 0.011, 0.002, 12, 4, T(s * (BUNK_IN + 0.01), y, ztop) @ R(90, 'X'))
+        y = ya + (yb - ya) * k / folds
+        torus(K["Steel"], 0.011, 0.002, 12, 4, T(bunk.x(BUNK_IN + 0.01), y, ztop) @ R(90, 'X'))
 
 
 def boot(K, M):
@@ -481,6 +434,168 @@ def boot(K, M):
     rbox(K["Rubber"], 0.09, 0.2, 0.07, M @ T(0, 0.07, 0.06) @ R(-8, 'X'), r=0.035, seg=3)
     lathe(K["Rubber"], [(0.0, 0.02), (0.05, 0.02), (0.052, 0.12), (0.055, 0.3), (0.05, 0.3), (0.047, 0.12),
                         (0.0, 0.11)], 20, M @ T(0, -0.05, 0) @ S(1, 1.2, 1))
+
+
+def rivet(bm, P, x, y, r=0.0034):
+    """圆头铆钉（面板坐标系 P 里，Z 朝外）。"""
+    lathe(bm, [(r, 0.0), (r * 0.95, r * 0.3), (r * 0.7, r * 0.6), (r * 0.35, r * 0.75), (0.0, r * 0.78)], 10,
+          P @ T(x, y, 0))
+
+
+def card_holder(K, P, text, seed=0, w=0.07):
+    """铝皮插卡框，插着一张手写卡片（text 为空就是一张白卡）。P 的 XY 平面是贴的那个面。"""
+    rng = random.Random(seed)
+    h = w * 0.45
+    rbox(K["Alu"], w + 0.008, h + 0.006, 0.0012, P @ T(0, 0, 0.0006), r=0.0006, seg=1)
+    M = P @ T(rng.uniform(-0.002, 0.002), rng.uniform(-0.001, 0.001), 0.0013) @ R(rng.uniform(-1.5, 1.5), 'Z')
+    rbox(K["MeterFace"], w, h, 0.0004, M, r=0.0, seg=1)
+    for sx in (-1, 1):  # 框的两条竖边压住卡片
+        rbox(K["Alu"], 0.004, h + 0.004, 0.0008, P @ T(sx * (w / 2 + 0.001), 0, 0.0018), r=0.0003, seg=1)
+        rivet(K["Steel"], P @ T(sx * (w / 2 + 0.001), 0, 0.0022), 0, 0, 0.0012)
+    if text:
+        K.text(text, M @ T(0, -h * 0.05, 0.00025), h * 0.5, key="Marker", font=FONT_HAND)
+
+
+def end_panel(K, s, y):
+    """铺位两头的挡板：靠壳一侧一根竖方管、上下两根横方管，中间一块凹进去的薄钢板，
+    板上横着压了几道加强筋；方管和板子之间一圈螺钉（两面都有）。"""
+    xa, xb = BUNK_IN + 0.03, LINING_X
+    t = 0.03
+    z0, z1 = DECK, 0.43
+    sbox(K["EquipBeige"], s, xa - 0.02, xb, y - 0.015, y + 0.015, z1 - t, z1, r=0.005)
+    sbox(K["EquipBeige"], s, xa - 0.02, xb, y - 0.015, y + 0.015, z0, z0 + 0.05, r=0.005)
+    sbox(K["EquipBeige"], s, xb - t, xb, y - 0.015, y + 0.015, z0, z1, r=0.005)
+    sbox(K["EquipBeige"], s, xa - 0.02, xb - t, y - 0.004, y + 0.004, z0 + 0.04, z1 - t + 0.01, r=0.0015)
+    for zb in (-0.74, -0.29, -0.06, 0.34):
+        sweep(K["EquipBeige"], [V((s * (xa + 0.03), y, zb)), V((s * (xb - t - 0.03), y, zb))],
+              circle_profile(0.0075, 10))
+        for xx in (xa + 0.03, xb - t - 0.03):
+            uvsphere(K["EquipBeige"], 0.0075, 10, 6, T(s * xx, y, zb))
+    rng = random.Random(int(abs(y) * 100))
+    for side in (-1, 1):
+        P = frame(V((0, y + side * 0.004, 0)), V((0, side, 0)))
+        for k in range(6):
+            x = xa + (xb - t - xa) * (k + 0.5) / 6
+            for z in (z1 - t - 0.012, z0 + 0.062):
+                screw(K, T(s * x, 0, z) @ P, 0, 0, 0.0032, key="Steel", rng=rng)
+        for z in (-0.6, -0.15, 0.2):
+            screw(K, T(s * (xb - t - 0.012), 0, z) @ P, 0, 0, 0.0032, key="Steel", rng=rng)
+
+
+def post(K, s, y):
+    """过道一侧的立柱：方钢管，底下一块地脚板两颗螺栓，顶上一块盖板。"""
+    x0, x1 = BUNK_IN - 0.01, BUNK_IN + 0.03
+    sbox(K["Steel"], s, x0, x1, y - 0.02, y + 0.02, DECK, 0.86, r=0.004)
+    sbox(K["Steel"], s, x0 - 0.018, x1 + 0.018, y - 0.035, y + 0.035, DECK, DECK + 0.007, r=0.002, seg=1)
+    sbox(K["Steel"], s, x0 - 0.003, x1 + 0.003, y - 0.023, y + 0.023, 0.86, 0.866, r=0.002, seg=1)
+    for k in (-1, 1):
+        cylinder(K["Steel"], 0.0065, 0.006, 6, T(s * (x0 - 0.009 if k < 0 else x1 + 0.009), y, DECK + 0.007)
+                 @ R(15, 'Z'))
+    # 立柱和挡板之间的焊缝（一串小疙瘩）
+    rng = random.Random(int(abs(y) * 77))
+    for k in range(40):
+        z = DECK + 0.06 + (0.4 - DECK - 0.06) * k / 39
+        uvsphere(K["Steel"], 0.0032 + rng.uniform(-0.0006, 0.0006), 8, 4,
+                 T(s * (x1 + 0.0005), y + rng.uniform(-0.0015, 0.0015), z) @ S(0.7, 1, 1.3))
+
+
+def rail_edge(K, s, ya, yf, z):
+    """床板靠过道一边包的角钢：竖边高出床板一点挡住床垫，一排圆头铆钉。"""
+    xin = BUNK_IN
+    sbox(K["EquipBeige"], s, xin - 0.004, xin + 0.001, ya + 0.02, yf - 0.02, z - 0.05, z + 0.012, r=0.0015)
+    P = frame(V((s * (xin - 0.004), 0, 0)), V((-s, 0, 0)))
+    n = int((yf - ya - 0.1) / 0.15)
+    for k in range(n + 1):
+        y = ya + 0.05 + (yf - ya - 0.1) * k / n
+        rivet(K["EquipBeige"], T(0, y, z - 0.03) @ P, 0, 0)
+
+
+def guard(K, s, ya, yf):
+    """上铺护栏：一块钢板，上沿卷成圆管，过道一面压一道筋，背面三根竖加强条；下沿一排铆钉。"""
+    xin = BUNK_IN
+    z0, z1 = UPPER_Z, UPPER_Z + 0.16
+    y0, y1 = ya + 0.012, yf - 0.012
+    sbox(K["EquipBeige"], s, xin + 0.011, xin + 0.019, y0, y1, z0, z1 - 0.02, r=0.0015)
+    sweep(K["EquipBeige"], [V((s * (xin + 0.015), y0, z1 - 0.014)), V((s * (xin + 0.015), y1, z1 - 0.014))],
+          circle_profile(0.014, 16))
+    for yy in (y0, y1):
+        cylinder(K["EquipBeige"], 0.0142, 0.004, 16, T(s * (xin + 0.015), yy, z1 - 0.014) @ R(90, 'X')
+                 @ T(0, 0, -0.002))
+    zb = z0 + 0.04
+    sweep(K["EquipBeige"], [V((s * (xin + 0.011), y0 + 0.05, zb)), V((s * (xin + 0.011), y1 - 0.05, zb))],
+          circle_profile(0.0055, 10))
+    for yy in (y0 + 0.4, (y0 + y1) / 2, y1 - 0.4):
+        sbox(K["EquipBeige"], s, xin + 0.019, xin + 0.026, yy - 0.012, yy + 0.012, z0, z1 - 0.028, r=0.0015)
+    P = frame(V((s * (xin + 0.011), 0, 0)), V((-s, 0, 0)))
+    n = int((y1 - y0 - 0.1) / 0.15)
+    for k in range(n + 1):
+        y = y0 + 0.05 + (y1 - y0 - 0.1) * k / n
+        rivet(K["EquipBeige"], T(0, y, z0 + 0.016) @ P, 0, 0)
+
+
+def lining(K, s, ya, yf):
+    """靠壳的衬板：三块板拼起来（板缝 3 毫米），拼缝上压一条铝压条，四角和压条上打螺钉。"""
+    xw = LINING_X
+    z0, z1 = LOWER_Z - 0.04, 0.45
+    cuts = [ya, ya + (yf - ya) / 3, ya + 2 * (yf - ya) / 3, yf]
+    rng = random.Random(3 + (s > 0))
+    P = frame(V((s * xw, 0, 0)), V((-s, 0, 0)))
+    for i in range(3):
+        a, b = cuts[i] + (0.0015 if i else 0.0), cuts[i + 1] - (0.0015 if i < 2 else 0.0)
+        sbox(K["EquipBeige"], s, xw, xw + 0.012, a, b, z0, z1, r=0.0015, seg=1)
+        for yy in (a + 0.025, b - 0.025):
+            for zz in (z0 + 0.025, z1 - 0.025):
+                screw(K, T(0, yy, zz) @ P, 0, 0, 0.003, key="Steel", rng=rng)
+    for yc in cuts[1:3]:
+        sbox(K["Alu"], s, xw - 0.003, xw, yc - 0.014, yc + 0.014, z0 + 0.005, z1 - 0.005, r=0.001, seg=1)
+        for k in range(6):
+            zz = z0 + 0.04 + (z1 - z0 - 0.08) * k / 5
+            screw(K, T(0, yc, zz) @ frame(V((s * (xw - 0.003), 0, 0)), V((-s, 0, 0))), 0, 0, 0.0026,
+                  key="Steel", rng=rng)
+
+
+def bunk_shelf(K, anchors, s, y0, y1, z, items):
+    """下铺衬板上的小搁板（钢板折出前挡边，两个三角托架），上面摆着几样东西。"""
+    xw = LINING_X
+    d = 0.11
+    sbox(K["EquipGray"], s, xw - d, xw, y0, y1, z - 0.004, z, r=0.0015, seg=1)
+    sbox(K["EquipGray"], s, xw - d, xw - d + 0.004, y0, y1, z, z + 0.025, r=0.0015, seg=1)
+    for yy in (y0 + 0.03, y1 - 0.03):
+        bm = K["EquipGray"]
+        tri = [V((s * xw, yy, z - 0.004)), V((s * (xw - d + 0.01), yy, z - 0.004)), V((s * xw, yy, z - 0.09))]
+        for dy in (-0.002, 0.002):
+            vs = [bm.verts.new(p + V((0, dy, 0))) for p in tri]
+            bm.faces.new(vs)
+        for i in range(3):
+            a, b = tri[i], tri[(i + 1) % 3]
+            vs = [bm.verts.new(p + V((0, dy, 0))) for p, dy in ((a, -0.002), (b, -0.002), (b, 0.002), (a, 0.002))]
+            bm.faces.new(vs)
+    for kind, y, ang in items:
+        M = T(s * (xw - 0.055), y, z) @ R(ang, 'Z')
+        if kind == "mug":
+            enamel_mug(K, M)
+        elif kind == "mug_plain":
+            enamel_mug(K, M, words=False)
+        elif kind == "can":
+            lathe(K["Can"], [(0.0, 0.0), (0.032, 0.0), (0.033, 0.004), (0.033, 0.09), (0.03, 0.093),
+                             (0.03, 0.006), (0.0, 0.006)], 24, M)
+            lathe(K["CanLabel"], [(0.0335, 0.012), (0.0335, 0.08)], 24, M)
+            for k, (dx, dy, ln) in enumerate(((0.008, 0.005, 0.15), (-0.01, 0.004, 0.14), (0.0, -0.01, 0.16))):
+                sweep(K["Knob" if k else "BtnRed"], [M @ V((dx, dy, 0.006)), M @ V((dx * 3, dy * 3, ln))],
+                      circle_profile(0.0035, 6))
+        else:  # 挂点
+            anchors.append(empty(kind, K.coll, anchor_frame(V((s * (xw - 0.055), y, z)), V((-s, 0.3, 0)))))
+
+
+def enamel_mug(K, M, words=True):
+    """搪瓷缸子（白底红口）。"""
+    lathe(K["Silk"], [(0.0, 0.0), (0.038, 0.0), (0.04, 0.004), (0.04, 0.085), (0.036, 0.085), (0.036, 0.008),
+                      (0.0, 0.008)], 24, M)
+    torus(K["BtnRed"], 0.039, 0.003, 24, 6, M @ T(0, 0, 0.085))
+    sweep(K["Silk"], catmull([M @ V((0.039, 0, 0.068)), M @ V((0.065, 0, 0.06)), M @ V((0.066, 0, 0.03)),
+                              M @ V((0.039, 0, 0.022))], 5), circle_profile(0.005, 8))
+    if words:
+        K.text("先进", M @ T(-0.0402, 0, 0.045) @ R(-90, 'Y') @ R(-90, 'Z'), 0.014, key="InkRed", font=FONT_SERIF)
 
 
 def photo(K, F, ang, caption, seed=0):

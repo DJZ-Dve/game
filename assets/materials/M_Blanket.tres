@@ -1,18 +1,32 @@
-[gd_resource type="StandardMaterial3D" format=3]
+[gd_resource type="ShaderMaterial" format=3]
 
-[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Color.jpg" id="1_afwxm"]
-[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_NormalGL.jpg" id="2_m4m1s"]
-[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Roughness.jpg" id="3_l4e56"]
+[ext_resource type="Shader" path="res://assets/shaders/fabric.gdshader" id="1_m4m1s"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric034/Fabric034_2K-JPG_Color.jpg" id="2_l4e56"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric034/Fabric034_2K-JPG_NormalGL.jpg" id="3_snm1a"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric034/Fabric034_2K-JPG_Roughness.jpg" id="4_1bb1r"]
 
 [resource]
 resource_name = "M_Blanket"
-albedo_color = Color(0.36, 0.34, 0.29, 1)
-albedo_texture = ExtResource("1_afwxm")
-roughness_texture = ExtResource("3_l4e56")
-roughness_texture_channel = 4
-normal_enabled = true
-normal_scale = 1.3
-normal_texture = ExtResource("2_m4m1s")
-uv1_scale = Vector3(5, 5, 5)
-uv1_triplanar = true
-uv1_triplanar_sharpness = 4.0
+render_priority = 0
+shader = ExtResource("1_m4m1s")
+shader_parameter/tint = Color(0.2, 0.22, 0.13, 1)
+shader_parameter/albedo_tex = ExtResource("2_l4e56")
+shader_parameter/normal_tex = ExtResource("3_snm1a")
+shader_parameter/rough_tex = ExtResource("4_1bb1r")
+shader_parameter/tex_scale = 2.0
+shader_parameter/albedo_mix = null
+shader_parameter/tex_mean = 0.36
+shader_parameter/tex_contrast = 1.3
+shader_parameter/normal_strength = 1.1
+shader_parameter/roughness = null
+shader_parameter/sheen = 0.4
+shader_parameter/sheen_tint = 0.7
+shader_parameter/cavity_dirt = null
+shader_parameter/variation = null
+shader_parameter/stain_amount = 0.25
+shader_parameter/stain_scale = null
+shader_parameter/stain_color = Color(0.7, 0.62, 0.45, 1)
+shader_parameter/binding_width = 0.014
+shader_parameter/binding_color = Color(0.62, 0.62, 0.58, 1)
+shader_parameter/thread_color = null
+shader_parameter/backlight = null

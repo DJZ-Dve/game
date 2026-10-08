@@ -19,3 +19,6 @@ Desktop.ini
 
 # Python 字节码（Blender 运行脚本时生成，各平台不同）
 __pycache__/
+
+# 布料模拟缓存（blender/scripts/bedding.py，参数不变就不重算）
+/blender/cache/

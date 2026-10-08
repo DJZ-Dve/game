@@ -66,6 +66,7 @@ const PROPS := {
 	"Anchor_Notepads": {"asset": "office_notepads", "keep": ["office_notepads_yellow_pad"]},
 	"Anchor_PocketWatch": {"asset": "pocket_watch"},
 	"Anchor_BunkBook": {"asset": "binder_notebook", "keep": ["binder_notebook_closed"]},
+	"Anchor_BunkSpectacles": {"asset": "round_spectacles"},
 	"Anchor_Wrench": {"asset": "adjustable_wrench"},
 	"Anchor_Compass": {"asset": "seadogs_compass"},
 }

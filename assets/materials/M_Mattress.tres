@@ -1,0 +1,32 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/fabric.gdshader" id="1_e1073"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric071/Fabric071_2K-JPG_Color.jpg" id="2_g1d58"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric071/Fabric071_2K-JPG_NormalGL.jpg" id="3_m7doh"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric071/Fabric071_2K-JPG_Roughness.jpg" id="4_4f1uu"]
+
+[resource]
+resource_name = "M_Mattress"
+render_priority = 0
+shader = ExtResource("1_e1073")
+shader_parameter/tint = Color(0.8, 0.76, 0.64, 1)
+shader_parameter/albedo_tex = ExtResource("2_g1d58")
+shader_parameter/normal_tex = ExtResource("3_m7doh")
+shader_parameter/rough_tex = ExtResource("4_4f1uu")
+shader_parameter/tex_scale = 3.5
+shader_parameter/albedo_mix = 0.35
+shader_parameter/tex_mean = 0.33
+shader_parameter/tex_contrast = 0.8
+shader_parameter/normal_strength = 1.0
+shader_parameter/roughness = null
+shader_parameter/sheen = 0.2
+shader_parameter/sheen_tint = null
+shader_parameter/cavity_dirt = 0.8
+shader_parameter/variation = null
+shader_parameter/stain_amount = 0.6
+shader_parameter/stain_scale = 2.5
+shader_parameter/stain_color = Color(0.72, 0.56, 0.34, 1)
+shader_parameter/binding_width = null
+shader_parameter/binding_color = null
+shader_parameter/thread_color = null
+shader_parameter/backlight = null
