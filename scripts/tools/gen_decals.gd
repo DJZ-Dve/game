@@ -1,6 +1,6 @@
 extends SceneTree
 ## 生成舱内贴花贴图（无界面运行）：
-##   pwsh tools/gen_decal_text.ps1          # 先画文字底图（用到系统字体）
+##   Godot --path . --script res://scripts/tools/gen_decal_text.gd   # 先画文字底图
 ##   Godot --headless --path . --script res://scripts/tools/gen_decals.gd
 ## 输出 assets/textures/decals/<名字>.png（颜色 + 透明度），部分还有 <名字>_orm.png（AO/粗糙度/金属度，
 ## 只用来改粗糙度：湿脚印、水洼、手油这类「看颜色看不出来、看反光才看得出来」的东西）。

@@ -28,7 +28,7 @@
 | dark_rock | polyhaven/textures/dark_rock | https://polyhaven.com/a/dark_rock | Poly Haven | CC0 | 海床陡坡岩石 |
 | rusty_painted_metal | polyhaven/textures/rusty_painted_metal | https://polyhaven.com/a/rusty_painted_metal | Poly Haven | CC0 | 艇身锈迹颜色 |
 | rusty_metal_02 | polyhaven/textures/rusty_metal_02 | https://polyhaven.com/a/rusty_metal_02 | Poly Haven | CC0 | 金属锈蚀、法线 |
-| Noto Sans SC / Noto Serif SC（字形） | blender/fonts/NotoSansSC-VF.ttf、NotoSerifSC-VF.ttf，已转成模型网格（仪表、艇名） | https://github.com/notofonts/noto-cjk | Adobe / Google | SIL OFL 1.1 | 文字转网格嵌入模型；Sans 2.004、Serif 2.003，取自 Variable/TTF/Subset |
+| Noto Sans SC / Noto Serif SC（字形） | blender/fonts/NotoSansSC-VF.ttf、NotoSerifSC-VF.ttf，已转成模型网格（仪表、艇名） | https://github.com/notofonts/noto-cjk | Adobe / Google | SIL OFL 1.1 | 文字转网格嵌入模型；Sans 的 Black 字重另用来画贴花文字底图；Sans 2.004、Serif 2.003，取自 Variable/TTF/Subset |
 | power_box_01 | polyhaven/models/power_box_01 | https://polyhaven.com/a/power_box_01 | Poly Haven | CC0 | 舱内配电箱，门打开 |
 | industrial_caged_sconce | polyhaven/models/industrial_caged_sconce | https://polyhaven.com/a/industrial_caged_sconce | Poly Haven | CC0 | 只用 a 款，舱顶灯 |
 | medical_box | polyhaven/models/medical_box | https://polyhaven.com/a/medical_box | Poly Haven | CC0 | 舱内急救箱 |
@@ -60,4 +60,5 @@
 | Tape001 | ambientcg/Tape001 | https://ambientcg.com/a/Tape001 | ambientCG | CC0 | 暂未使用 |
 | Long Cang（字形） | blender/fonts/LongCang-Regular.ttf，已转成模型网格 | https://fonts.google.com/specimen/Long+Cang | Chen Xiaomin | SIL OFL 1.1 | 手写便利贴、胶带标签 |
 | Ma Shan Zheng（字形） | blender/fonts/MaShanZheng-Regular.ttf，已转成模型网格 | https://fonts.google.com/specimen/Ma+Shan+Zheng | Ma Shan Zheng | SIL OFL 1.1 | 黄符上的朱砂字 |
+| Stardos Stencil（字形） | blender/fonts/StardosStencil-Bold.ttf | https://fonts.google.com/specimen/Stardos+Stencil | Vernon Adams | SIL OFL 1.1 | 生成喷漆模板字「C-03」的文字底图（scripts/tools/gen_decal_text.gd）；现有的 c03.png 还是早先在 Windows 上用 Stencil 画的，下次重新生成时换成这个字体 |
 | DSEG7 Classic | assets/fonts/DSEG7Classic-*.ttf | https://github.com/keshikan/DSEG | keshikan | SIL OFL 1.1 | 数码管读数（运行时 Label3D） |
