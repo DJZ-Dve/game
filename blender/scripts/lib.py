@@ -3,6 +3,7 @@
 坐标约定（Blender）：+Y 朝前，+Z 朝上，+X 朝右。导出 glTF 后在 Godot 里就是 -Z 朝前。
 """
 import math
+import zlib
 import bpy
 import bmesh
 import numpy as np
@@ -366,7 +367,7 @@ def text_mesh(text, name, coll, mat, M, size=0.02, extrude=0.0008, font_path=Non
 
 
 # ----------------------------------------------------------------------------- 导出前处理
-def _curvature(me, strength=4.0, blur=6, threshold=0.03):
+def _curvature(me, key, strength=4.0, blur=6, threshold=0.03):
     n = len(me.vertices)
     if n == 0 or len(me.edges) == 0:
         return None
@@ -397,7 +398,8 @@ def _curvature(me, strength=4.0, blur=6, threshold=0.03):
     # 去掉细分网格上的微小起伏（否则大曲面上会出现一圈圈条纹）
     edge = np.clip((-c - threshold) * strength, 0, 1)
     cav = np.clip((c - threshold) * strength, 0, 1)
-    rnd = np.full(n, np.random.random(), dtype=np.float32)
+    # 每个物体一个随机值，按物体名算（不用 np.random，每次生成结果都一样）
+    rnd = np.full(n, zlib.crc32(key.encode()) / 2.0 ** 32, dtype=np.float32)
     return np.stack([edge, cav, rnd, np.ones(n, dtype=np.float32)], axis=1)
 
 
@@ -411,7 +413,7 @@ def bake_for_export(objs, curvature=True):
             continue
         me = bpy.data.meshes.new_from_object(ob.evaluated_get(dg), preserve_all_data_layers=True, depsgraph=dg)
         if curvature:
-            cols = _curvature(me)
+            cols = _curvature(me, ob.name)
             if cols is not None:
                 # 统一按面角（CORNER）存，合并不同对象时才不会因为域不同出问题
                 attr = me.color_attributes.new("Wear", 'BYTE_COLOR', 'CORNER')
