@@ -387,7 +387,7 @@ func _setup_net(sub: Node) -> void:
 
 ## 舱内的 VoxelGI（控制舱、生活舱各一个）：烘焙的只是体素化的几何体，灯光反弹是实时算的
 ## （闪烁的灯、开关灯都会跟着变）。艇的外部探照灯不参与（见 submarine.gd）。烘焙时水密门是关着的。
-## 平时直接读烘焙文件；改了舱内模型要重新烘焙：Godot --path . -- --bake-gi（rebuild_models.ps1 会自动做）。
+## 平时直接读烘焙文件；改了舱内模型要重新烘焙：Godot --path . -- --bake-gi（rebuild_models.sh 会自动做）。
 ## 没有烘焙文件时退回到开场现烘（要卡几秒）。
 const GI_VOLUMES := {
 	"CabinGI": "res://assets/gi/cabin_gi.res",

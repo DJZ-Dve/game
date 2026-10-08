@@ -45,16 +45,26 @@
 - `assets/models/` 导出的 glb；`assets/materials/` 材质（由 `scripts/tools/setup_project.gd` 生成）；`assets/shaders/` 着色器
 - `assets/textures/decals/` 舱内贴花（水渍圈、脚印、锈水、喷漆字……），由 `scripts/tools/gen_decals.gd` 生成；
   贴在哪、多大写在 `cockpit.py` 的 `decals()` 里（导出成 `Decal_*` 挂点）
-- `assets/gi/cabin_gi.res`、`cabin_gi_aft.res` 控制舱、生活舱 VoxelGI 的烘焙数据（改了舱内模型要重新烘焙，`rebuild_models.ps1` 会自动做；舱外视角时舱内 GI 会关掉，免得渗到艇身外表面上）
+- `assets/gi/cabin_gi.res`、`cabin_gi_aft.res` 控制舱、生活舱 VoxelGI 的烘焙数据（改了舱内模型要重新烘焙，`rebuild_models.sh` 会自动做；舱外视角时舱内 GI 会关掉，免得渗到艇身外表面上）
 - `assets/third_party/` 外部素材，授权见 `ASSET_LICENSES.md`；Sketchfab 下载的压缩包放 `sketchfab/_inbox/`
 - `scripts/` 游戏脚本；`scripts/import/post_import.gd` 是所有 glTF 导入后的处理（换材质、去 LOD）
 
-## 常用命令（PowerShell）
+## 开发环境（macOS）
+- Godot **4.7.2**（版本要一致，否则导入设置、场景文件会被改写）、Blender 5.2、Git LFS：
+  `brew install --cask godot blender`、`brew install git-lfs && git lfs install`
+- tools/ 下都是 zsh 脚本，只用到系统自带的 curl、jq、unzip。Godot / Blender 默认在 `/Applications`，
+  装在别处时用环境变量 `GODOT`、`BLENDER` 指定可执行文件（`.app/Contents/MacOS/` 里那个）
+- 生成模型、贴花文字用的字体都在 `blender/fonts/`（SIL OFL），不依赖系统字体
+
+## 常用命令
 ```
-pwsh tools/rebuild_models.ps1                 # 重新生成潜艇+海床并导入（潜艇会顺带重新烘焙舱内 VoxelGI）
-pwsh tools/rebuild_models.ps1 -Only submarine
-pwsh tools/gen_decal_text.ps1; Godot --headless --path . --script res://scripts/tools/gen_decals.gd   # 重新生成贴花贴图
-Godot --path . -- --bake-gi                   # 只重新烘焙舱内 VoxelGI
-Godot --headless --path . --script res://scripts/tools/setup_project.gd   # 重写输入映射、重新生成材质
-pwsh tools/capture.ps1 shot.png --view=external --orbit=40               # 截图
+tools/rebuild_models.sh                       # 重新生成潜艇+海床并导入（潜艇会顺带重新烘焙舱内 VoxelGI）
+tools/rebuild_models.sh submarine
+godot --path . --script res://scripts/tools/gen_decal_text.gd             # 重新画贴花的文字底图（会闪一下窗口）
+godot --headless --path . --script res://scripts/tools/gen_decals.gd      # 重新生成贴花贴图
+godot --path . -- --bake-gi                   # 只重新烘焙舱内 VoxelGI
+godot --headless --path . --script res://scripts/tools/setup_project.gd   # 重写输入映射、重新生成材质
+tools/capture.sh shot.png --view=external --orbit=40                      # 截图
+tools/glb_info.sh assets/models/submarine_cockpit.glb [网格名]            # 查看 glb 里的网格、顶点数
+tools/fetch_polyhaven.sh --models a,b --textures c,d                      # 下载 Poly Haven 素材（ambientCG 用 fetch_ambientcg.sh --ids）
 ```
