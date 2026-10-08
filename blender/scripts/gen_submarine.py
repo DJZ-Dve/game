@@ -21,12 +21,10 @@ from mathutils import Vector as V  # noqa: E402
 from lib import *  # noqa: E402,F401,F403
 import lib  # noqa: E402
 import cockpit  # noqa: E402
-from kit import rbox  # noqa: E402
+from kit import rbox, FONT_SERIF  # noqa: E402
 from cockpit import R_IN, Y_BOW, Y_STERN, HATCH, vp_axis, anchor_frame  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-FONT_SANS = r"C:\Windows\Fonts\NotoSansSC-VF.ttf"
-FONT_SERIF = r"C:\Windows\Fonts\NotoSerifSC-VF.ttf"
 
 R_OUT = R_IN + 0.06       # 耐压壳外径（壳厚 6 厘米）= 艇身半径
 Y_TIP = 3.3               # 艏尖

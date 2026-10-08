@@ -28,7 +28,7 @@
 | dark_rock | polyhaven/textures/dark_rock | https://polyhaven.com/a/dark_rock | Poly Haven | CC0 | 海床陡坡岩石 |
 | rusty_painted_metal | polyhaven/textures/rusty_painted_metal | https://polyhaven.com/a/rusty_painted_metal | Poly Haven | CC0 | 艇身锈迹颜色 |
 | rusty_metal_02 | polyhaven/textures/rusty_metal_02 | https://polyhaven.com/a/rusty_metal_02 | Poly Haven | CC0 | 金属锈蚀、法线 |
-| Noto Sans SC / Noto Serif SC（字形） | 已转成模型网格（仪表、艇名） | https://fonts.google.com/noto | Google | SIL OFL 1.1 | 文字转网格嵌入模型 |
+| Noto Sans SC / Noto Serif SC（字形） | blender/fonts/NotoSansSC-VF.ttf、NotoSerifSC-VF.ttf，已转成模型网格（仪表、艇名） | https://github.com/notofonts/noto-cjk | Adobe / Google | SIL OFL 1.1 | 文字转网格嵌入模型；Sans 2.004、Serif 2.003，取自 Variable/TTF/Subset |
 | power_box_01 | polyhaven/models/power_box_01 | https://polyhaven.com/a/power_box_01 | Poly Haven | CC0 | 舱内配电箱，门打开 |
 | industrial_caged_sconce | polyhaven/models/industrial_caged_sconce | https://polyhaven.com/a/industrial_caged_sconce | Poly Haven | CC0 | 只用 a 款，舱顶灯 |
 | medical_box | polyhaven/models/medical_box | https://polyhaven.com/a/medical_box | Poly Haven | CC0 | 舱内急救箱 |

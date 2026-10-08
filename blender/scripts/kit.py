@@ -17,8 +17,8 @@ from lib import (T, R, S, frame, sph, cylinder, box, uvsphere, lathe, torus, cat
                  sweep, to_object, text_mesh, empty)
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-FONT_SANS = r"C:\Windows\Fonts\NotoSansSC-VF.ttf"
-FONT_SERIF = r"C:\Windows\Fonts\NotoSerifSC-VF.ttf"
+FONT_SANS = os.path.join(ROOT, "blender", "fonts", "NotoSansSC-VF.ttf")
+FONT_SERIF = os.path.join(ROOT, "blender", "fonts", "NotoSerifSC-VF.ttf")
 FONT_HAND = os.path.join(ROOT, "blender", "fonts", "LongCang-Regular.ttf")  # 只在建模时用，不进游戏
 FONT_BRUSH = os.path.join(ROOT, "blender", "fonts", "MaShanZheng-Regular.ttf")
 

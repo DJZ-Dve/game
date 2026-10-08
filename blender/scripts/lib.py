@@ -330,7 +330,7 @@ _fonts = {}
 
 
 def text_mesh(text, name, coll, mat, M, size=0.02, extrude=0.0008, font_path=None, align='CENTER', resolution=3):
-    """文字转网格（字体文件需允许嵌入；默认用系统里的思源/Noto 字体，SIL OFL 授权）。"""
+    """文字转网格（字体文件需允许嵌入；字体放在 blender/fonts/，都是 SIL OFL 授权）。"""
     if font_path not in _fonts:
         _fonts[font_path] = bpy.data.fonts.load(font_path) if font_path else None
     cu = bpy.data.curves.new(name + "_txt", 'FONT')
