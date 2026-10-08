@@ -20,7 +20,7 @@ from lib import (material, frame, T, R, S, cylinder, box, uvsphere, lathe, torus
 from kit import (Parts, Cables, rbox, star_profile, extrude_profile, screw, socket_screw, toggle,
                  flip_cover, knob, pointer_knob, button, lamp, vent, handle, fuse, connector, label_plate, silk,
                  tape_label, sticky_note, meter_rect, gauge_round, seg_display, annunciator, rotameter,
-                 valve_wheel, unit, FONT_BRUSH, FONT_SERIF)
+                 valve_wheel, unit, FONT_BRUSH, FONT_SERIF, FONT_HAND)
 
 # ---------------------------------------------------------------------------- 主尺寸（改这里要同步 Godot 的 crew.gd）
 R_IN = 1.35                     # 耐压壳内壁半径
@@ -183,6 +183,8 @@ def materials(M):
     add("CanLabel", "M_CanLabel", (0.55, 0.12, 0.05), 0.0, 0.5)
     add("Cardboard", "M_Cardboard", (0.5, 0.36, 0.2), 0.0, 0.9)
     add("PaintText", "M_PaintText", (0.82, 0.8, 0.7), 0.0, 0.6)
+    add("Tea", "M_Tea", (0.12, 0.05, 0.015), 0.0, 0.05)
+    add("TeaStain", "M_TeaStain", (0.4, 0.24, 0.1), 0.0, 0.7)
     # 生活舱
     add("Blanket", "M_Blanket", (0.32, 0.3, 0.27), 0.0, 0.95)
     add("Curtain", "M_Curtain", (0.36, 0.38, 0.3), 0.0, 0.9)
@@ -796,6 +798,26 @@ def bulkhead(K, anchors):
     path = [V((dx + math.cos(t) * (da + 0.045), y + 0.005, dz + math.sin(t) * (db + 0.045)))
             for t in [2 * math.pi * k / 96 for k in range(96)]]
     sweep(K["HullInner"], path, rect_profile(0.09, 0.13, 0.012), closed=True, up_hint=V((0, 1, 0)))
+    # 门框端面一圈螺栓（控制舱一面在门扇外沿以外，生活舱一面整圈都露着）
+    for face_y, sgn, rr in ((y + 0.07, 1, 0.082), (y - 0.06, -1, 0.06)):
+        for k in range(36):
+            t = 2 * math.pi * (k + 0.5) / 36
+            px, pz = dx + math.cos(t) * (da + rr), dz + math.sin(t) * (db + rr)
+            if sgn > 0:
+                if any(abs(math.remainder(t - math.radians(dg), 2 * math.pi)) < 0.12 for dg in DOOR_DOGS):
+                    continue
+                if px < dx - 0.25 and min(abs(pz - dz - 0.35), abs(pz - dz + 0.35)) < 0.13:
+                    continue  # 铰链座
+            M = frame(V((px, face_y, pz)), V((0, sgn, 0))) @ R(k * 23, 'Z')
+            cylinder(K["Steel"], 0.0075, 0.007, 6, M)
+            cylinder(K["Steel"], 0.0035, 0.011, 8, M)
+    # 门两边的扶手（低头钻门时抓的），两面都有
+    for yy, sgn in ((y, 1), (y - t_plate, -1)):
+        for x in (-0.6, 0.6):
+            P = frame(V((x, yy, 0.18)), V((0, sgn, 0)))
+            handle(K, P, 0, 0, 0.36, axis='Y', key="Steel", standoff=0.055)
+            for zz in (-0.18, 0.18):  # 底座焊在隔壁上：一块方垫板
+                rbox(K["Steel"], 0.04, 0.04, 0.006, P @ T(0, zz, 0.003), r=0.002, seg=1)
     # 压紧块（门扇上的把手压在这上面）
     for deg in DOOR_DOGS:
         t = math.radians(deg)
@@ -839,6 +861,43 @@ def bulkhead(K, anchors):
     for yy, n in ((door_y + 0.0502, V((0, 1, 0))), (door_y - 0.0002, V((0, -1, 0)))):
         text_mesh("随手关门", D.uid("Door_Leaf_Txt"), K.coll, K.M["InkRed"], frame(V((dx, yy, dz - 0.45)), n),
                   size=0.04, extrude=0.0, font_path=FONT_SERIF, resolution=2)
+        # 门号：喷漆模板字（模板字的断笔用一道细缝表示不出来，就用粗衬线字）
+        text_mesh("2", D.uid("Door_Leaf_Txt"), K.coll, K.M["PaintText"], frame(V((dx, yy, dz + 0.5)), n),
+                  size=0.12, extrude=0.0, font_path=FONT_SERIF, resolution=2)
+    # 门扇四周一圈加强板（压在门板上的扁钢圈）+ 一圈螺栓，两面都有
+    ra, rb = da + 0.065 - 0.028, db + 0.065 - 0.028
+    ring = [V((dx + math.cos(t) * ra, 0, dz + math.sin(t) * rb)) for t in [2 * math.pi * k / 96 for k in range(96)]]
+    for face_y, sgn in ((door_y + 0.05, 1), (door_y, -1)):
+        sweep(D["EquipGray"], [p + V((0, face_y + sgn * 0.003, 0)) for p in ring], rect_profile(0.03, 0.006, 0.001),
+              closed=True, up_hint=V((0, 1, 0)))
+        for k in range(30):
+            t = 2 * math.pi * (k + 0.5) / 30
+            # 压紧把手的转轴在这一圈上，让开
+            if sgn > 0 and any(abs(math.remainder(t - math.radians(dg), 2 * math.pi)) < 0.09 for dg in DOOR_DOGS):
+                continue
+            p = V((dx + math.cos(t) * ra, face_y + sgn * 0.006, dz + math.sin(t) * rb))
+            cylinder(D["Steel"], 0.0068, 0.005, 6, frame(p, V((0, sgn, 0))) @ R(k * 17, 'Z'))
+    # 控制舱一面：右上角一块黄铜检验铭牌（四颗铆钉）
+    Pb = frame(V((dx + 0.17, door_y + 0.0505, dz + 0.35)), V((0, 1, 0)))
+    rbox(D["Brass"], 0.105, 0.062, 0.0015, Pb @ T(0, 0, 0.00075), r=0.001, seg=1)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            lathe(D["Brass"], [(0.0022, 0.0), (0.0018, 0.0012), (0.0, 0.0016)], 10,
+                  Pb @ T(sx * 0.045, sy * 0.024, 0.0015))
+    text_mesh("水密门  2 号\n试验压力 0.6 MPa\n1987 年 6 月  合格", D.uid("Door_Leaf_Txt"), K.coll, K.M["Ink"],
+              Pb @ T(0, 0, 0.0017), size=0.03, extrude=0.0, font_path=FONT_SERIF, resolution=1)
+    # 右边那个压紧把手上拴着一张检修牌：铁丝圈、一截细绳、马粪纸卡片，手写字
+    Mp = T(dx + da + 0.03, door_y + 0.05, dz) @ R(-90, 'X')
+    hook = Mp @ V((0.065, 0.0, 0.035))
+    torus(D["Steel"], 0.016, 0.0011, 16, 4, frame(hook, V((1, 0, 0))))
+    knot = hook + V((0.0, 0.004, -0.03))
+    tag_top = hook + V((0.004, 0.012, -0.075))
+    sweep(D["Cardboard"], catmull([hook + V((0, 0, -0.016)), knot, tag_top], 4), circle_profile(0.0008, 4))
+    Mt = frame(tag_top + V((0, 0.001, -0.05)), V((0.12, 1, 0.06)).normalized()) @ R(-5, 'Z')
+    rbox(D["MaskTape"], 0.064, 0.1, 0.0008, Mt, r=0.0, seg=1)
+    torus(D["Steel"], 0.0035, 0.0009, 12, 4, Mt @ T(0, 0.041, 0.0004))
+    text_mesh("检修\n密封圈渗水\n待换\n—林", D.uid("Door_Leaf_Txt"), K.coll, K.M["Marker"],
+              Mt @ T(0, -0.006, 0.0006), size=0.064, extrude=0.0, font_path=FONT_HAND, resolution=1)
     # 手轮：阀杆穿过门扇，两面各一个，一起转
     valve_wheel(W, T(dx, door_y + 0.05, dz) @ R(-90, 'X'), 0.13, "BtnRed", 4)
     valve_wheel(W, T(dx, door_y, dz) @ R(90, 'X'), 0.11, "BtnRed", 4)
@@ -1261,6 +1320,96 @@ def helm(K, anchors):
     return Fc, Fo
 
 
+def helm_desk(K, anchors, Fc):
+    """驾驶台桌面上的日常：值班的人刚才还坐在这儿。
+    茶缸（还冒着热气）、罐头盒改的烟灰缸、烟、火柴、写了一半的潜航记录和一截铅笔；
+    主板上坏了的纵倾表拿胶布打了个叉；一根后来加装的线从面板底下拉出来，搭过桌沿垂到地上。"""
+    import quarters
+    top = DESK_Z - 0.039
+    rng = random.Random(17)
+    # 茶缸：字朝着驾驶椅，把手朝右后方
+    Mm = T(0.15, 1.9, top) @ R(60, 'Z')
+    quarters.enamel_mug(K, Mm, words="为人民服务", tea=0.45, seed=21)
+    anchors.append(empty("Anchor_Steam", K.coll, T(0.15, 1.9, top + 0.075)))
+    # 烟灰缸：压扁的罐头盒，卷边，里面一层烟灰，几个烟头
+    Ma = T(-0.17, 1.9, top)
+    lathe(K["Can"], [(0.0, 0.0), (0.043, 0.0), (0.045, 0.003), (0.046, 0.022), (0.048, 0.024), (0.0445, 0.0245),
+                     (0.0435, 0.004), (0.0, 0.004)], 32, Ma)
+    lathe(K["CanLabel"], [(0.0462, 0.006), (0.0462, 0.019)], 32, Ma)
+    cylinder(K["Ash"], 0.042, 0.006, 24, Ma @ T(0, 0, 0.004))
+    for k, (x, y, yaw, tilt, L) in enumerate(((0.012, -0.01, 30, 4, 0.024), (-0.015, 0.012, 140, 6, 0.018),
+                                              (0.0, 0.025, 250, 3, 0.021))):
+        M = Ma @ T(x, y, 0.012) @ R(yaw, 'Z') @ R(90 - tilt, 'Y')
+        cylinder(K["CableOrange"], 0.0042, 0.012, 10, M)
+        cylinder(K["Silk"], 0.0041, L - 0.012, 10, M @ T(0, 0, 0.012))
+        cylinder(K["Ash"], 0.0039, 0.0015, 10, M @ T(0, 0, L))
+    # 一支搭在缸沿上，烧了一半（烟灰还没掉）
+    M = Ma @ T(0.03, -0.03, 0.026) @ R(-40, 'Z') @ R(80, 'Y')
+    cylinder(K["CableOrange"], 0.0042, 0.02, 10, M @ T(0, 0, -0.02))
+    cylinder(K["Silk"], 0.0041, 0.03, 10, M)
+    cylinder(K["Ash"], 0.0043, 0.012, 10, M @ T(0, 0, 0.03), r2=0.0036)
+    # 软包烟（拆开了，冒出一支）和火柴盒
+    Mp = T(-0.05, 2.05, top) @ R(-18, 'Z')
+    rbox(K["Silk"], 0.056, 0.088, 0.021, Mp @ T(0, 0, 0.0105), r=0.004, seg=2)
+    rbox(K["BtnRed"], 0.0566, 0.034, 0.0214, Mp @ T(0, -0.022, 0.0105), r=0.004, seg=2)
+    rbox(K["Alu"], 0.03, 0.006, 0.015, Mp @ T(-0.008, 0.043, 0.0105), r=0.002, seg=1)
+    cylinder(K["Silk"], 0.004, 0.022, 10, Mp @ T(0.01, 0.04, 0.012) @ R(-90, 'X'))
+    cylinder(K["CableOrange"], 0.0041, 0.006, 10, Mp @ T(0.01, 0.062, 0.012) @ R(-90, 'X'))
+    Mx = T(-0.2, 2.07, top) @ R(12, 'Z')
+    rbox(K["Cardboard"], 0.036, 0.053, 0.015, Mx @ T(0, 0, 0.0075), r=0.001, seg=1)
+    rbox(K["BtnYellow"], 0.03, 0.044, 0.0006, Mx @ T(0, 0, 0.0152), r=0.0, seg=1)
+    K.text("火柴", Mx @ T(0, 0, 0.0156) @ R(90, 'Z'), 0.008, key="InkRed", font=FONT_SERIF)
+    for sx in (-1, 1):
+        box(K["Dark"], 0.0012, 0.05, 0.012, Mx @ T(sx * 0.0182, 0, 0.0075))
+    for k, (x, y, yaw) in enumerate(((-0.235, 1.83, 70), (-0.225, 1.845, 95))):
+        M = T(x, y, top + 0.0012) @ R(yaw, 'Z') @ R(90, 'Y')
+        cylinder(K["Cardboard"], 0.0012, 0.04, 6, M)
+        uvsphere(K["Dark"], 0.0022, 8, 4, M @ T(0, 0, 0.04) @ S(1, 1, 1.4))
+    # 潜航记录：A5 表格纸，印好的表头和格线，手写的几行；纸角卷起来一点
+    Ml = T(0.0, 1.95, top) @ R(-7, 'Z')
+    w, h = 0.148, 0.21
+    rbox(K["MeterFace"], w, h, 0.0004, Ml @ T(0, 0, 0.0002), r=0.0, seg=1)
+    rbox(K["MeterFace"], 0.03, 0.03, 0.0004, Ml @ T(w / 2 - 0.012, -h / 2 + 0.012, 0.004) @ R(45, 'Z')
+         @ R(-22, 'X'), r=0.0, seg=1)
+    K.text("潜 航 记 录", Ml @ T(0, h / 2 - 0.016, 0.0005), 0.009, key="Ink", font=FONT_SERIF)
+    cols = (-0.05, -0.012, 0.03)
+    for k, lb in enumerate(("时间", "深度 m", "航向")):
+        K.text(lb, Ml @ T(cols[k] - 0.002, h / 2 - 0.034, 0.0005), 0.0055, key="Ink")
+    for j in range(9):
+        box(K["Ink"], w - 0.02, 0.0005, 0.0002, Ml @ T(0, h / 2 - 0.042 - j * 0.017, 0.0005))
+    for xx in (-0.032, 0.008, 0.052):
+        box(K["Ink"], 0.0005, 0.017 * 8, 0.0002, Ml @ T(xx, h / 2 - 0.042 - 0.017 * 4, 0.0005))
+    rows = (("02:40", "1820", "265"), ("03:10", "1840", "270"), ("03:40", "1846", "270"), ("04:05", "1845", "？"))
+    for j, row in enumerate(rows):
+        for k, txt in enumerate(row):
+            M = Ml @ T(cols[k] + rng.uniform(-0.002, 0.002), h / 2 - 0.05 - j * 0.017, 0.0005) @ R(rng.uniform(-3, 3), 'Z')
+            K.text(txt, M, 0.0075, key="Marker", font=FONT_HAND)
+    K.text("04:05 舱底有敲击声 三下", Ml @ T(0.0, h / 2 - 0.05 - 4 * 0.017, 0.0005) @ R(-1.5, 'Z'), 0.0072,
+           key="Marker", font=FONT_HAND)
+    # 铅笔头：六棱黄杆、削出来的木头尖、铅芯，另一头铁箍和橡皮
+    Mq = Ml @ T(0.035, -0.04, 0.0038) @ R(28, 'Z') @ R(90, 'Y')
+    cylinder(K["BtnYellow"], 0.0037, 0.07, 6, Mq @ T(0, 0, -0.035))
+    cylinder(K["Cardboard"], 0.0034, 0.011, 12, Mq @ T(0, 0, 0.035), r2=0.0009)
+    cylinder(K["Dark"], 0.0009, 0.0025, 8, Mq @ T(0, 0, 0.046), r2=0.0001)
+    cylinder(K["Alu"], 0.0039, 0.008, 12, Mq @ T(0, 0, -0.043))
+    cylinder(K["BtnRed"], 0.0035, 0.005, 12, Mq @ T(0, 0, -0.048))
+    # 纵倾表坏了：玻璃上两条胶布打个叉，旁边手写「坏」
+    for ang in (38, -38):
+        rbox(K["MaskTape"], 0.09, 0.016, 0.0005, Fc @ T(0.27, -0.01, 0.0163) @ R(ang, 'Z'), r=0.0, seg=1)
+    K.text("坏", Fc @ T(0.27, -0.01, 0.0172) @ R(4, 'Z'), 0.012, key="Marker", font=FONT_HAND)
+    # 后来加装的一根线：从主板底下拉出来，贴着桌面，翻过桌沿垂到地上；中间一个接头缠着黑胶布
+    pts = [V((0.4, 2.14, -0.125)), V((0.41, 2.09, top + 0.004)), V((0.402, 1.97, top + 0.005)),
+           V((0.41, 1.84, top + 0.005)), V((0.418, 1.805, top - 0.01)), V((0.425, 1.785, top - 0.08)),
+           V((0.43, 1.77, -0.45)), V((0.45, 1.74, DECK + 0.03)), V((0.5, 1.68, DECK + 0.005)),
+           V((0.62, 1.62, DECK + 0.005))]
+    Cab.add(pts, 0.0048, "CableGray", samples=8)
+    js = V((0.403, 1.98, top + 0.006))
+    Mj = frame(js, V((0.01, -1, 0)))
+    cylinder(K["ZipBlack"], 0.0078, 0.034, 12, Mj @ T(0, 0, -0.017))
+    for z in (-0.017, 0.017):
+        cylinder(K["ZipBlack"], 0.0072, 0.006, 12, Mj @ T(0, 0, z - 0.003), r2=0.0055)
+
+
 def seat(K):
     """驾驶椅：落地底座 + 立柱 + 座垫 + 靠背（人造革）。"""
     x, y = SEAT.x, SEAT.y
@@ -1611,6 +1760,13 @@ def decals(anchors, coll):
         u = F.to_3x3() @ V((0, 1, 0))
         for sx, k in picks:
             d("Rust", F @ V((sx * (w / 2 - 0.018), ys[k] - 0.075, 0)), n, u, 0.045, 0.14, 0.04)
+    # ---- 驾驶台主板：下排开关、声呐旋钮这些天天拨的地方，漆面被手油摸得发黑发亮
+    n_c = V((0, -math.cos(math.radians(15)), math.sin(math.radians(15))))
+    u_c = V((0, math.sin(math.radians(15)), math.cos(math.radians(15))))
+    Fc = frame(V((0, 2.22, 0.18)), n_c, u_c)
+    for x in (-0.24, -0.08, 0.08, 0.24):
+        d("Grease", Fc @ V((x, -0.262, 0)), n_c, u_c, 0.16, 0.1, 0.04)
+    d("Grease", Fc @ V((0.0, -0.03, 0)), n_c, u_c, 0.2, 0.08, 0.04)
     # ---- 舷窗：窗下的冷凝水顺着压环往下淌，滴到肘托上
     for s in (-1, 1):
         o, dd = vp_axis(s)
@@ -1724,6 +1880,7 @@ def build_cockpit(coll, M, anchors):
     quarters.build(K, anchors)
     overhead(K, anchors)
     Fc, Fo = helm(K, anchors)
+    helm_desk(K, anchors, Fc)
     seat(K)
     charm(K, Fo @ V((-0.3, -0.155, 0.0)))
     cabin_fan(K, V((0.9, 1.62, 0.84)), EYE_SEATED + V((0, 0.2, -0.1)))

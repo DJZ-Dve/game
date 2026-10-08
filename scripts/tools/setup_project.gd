@@ -97,12 +97,14 @@ func _paint(name: String, paint: Color, o := {}) -> ShaderMaterial:
 		m.set_shader_parameter("streak_tex", _acg("Leaking004", "Opacity"))
 		m.set_shader_parameter("streak_amount", o.streak)
 		m.set_shader_parameter("streak_scale", o.get("streak_scale", 1.2))
+		m.set_shader_parameter("streak_cover", o.get("streak_cover", 1.0))
 	if o.has("emission"):
 		m.set_shader_parameter("emission_color", o.emission)
 		m.set_shader_parameter("emission_energy", o.get("emission_energy", 1.0))
 	if o.has("cond"):
 		m.set_shader_parameter("condensation", o.cond)
 		m.set_shader_parameter("cond_height", o.get("cond_h", 0.2))
+		m.set_shader_parameter("cond_patch_cover", o.get("cond_cover", 0.4))
 	m.set_shader_parameter("wear_metallic", o.get("wear_metal", 0.85))
 	if o.has("dust_color"):
 		m.set_shader_parameter("dust_color", o.dust_color)
@@ -241,7 +243,7 @@ func _interior_materials(mats: Array[Material]) -> void:
 	# ---- 耐压壳内壁、肋骨、隔壁（同一种舱漆：灰绿，冷凝水流痕，越往下越脏）
 	mats.append(_paint("M_HullInner", Color(0.36, 0.4, 0.36), {"rough": 0.42, "metal": 0.25, "rust": 0.2,
 		"edge": 1.0, "scale": 1.2, "smudge": 0.15, "dust": 0.35, "streak": 0.85, "variation": 0.25,
-		"macro": 0.5, "floor": 0.9, "nstrength": 0.3, "cond": 0.75}))
+		"macro": 0.5, "floor": 0.9, "nstrength": 0.3, "cond": 0.75, "cond_cover": 0.42, "streak_cover": 0.45}))
 	mats.append(_paint("M_Rail", Color(0.52, 0.53, 0.52), {"rough": 0.4, "metal": 0.75, "rust": 0.18,
 		"edge": 0.3, "detail": "Metal016", "smudge": 0.2}))
 	# ---- 工作台台体（深蓝灰，倒角上磨出钢底，桌沿和把手附近满是手印）
@@ -385,6 +387,11 @@ func _interior_materials(mats: Array[Material]) -> void:
 		"edge": 0.0, "detail": "Metal016", "dust": 0.35, "smudge": 0.3, "floor": 0.0}))
 	mats.append(_paint("M_CanLabel", Color(0.5, 0.1, 0.04), {"rough": 0.55, "metal": 0.0, "rust": 0.05,
 		"edge": 0.5, "wear": Color(0.6, 0.6, 0.58), "detail": "Plastic012B", "dust": 0.3, "floor": 0.0}))
+	# 茶缸子里的茶（几乎是镜面的深褐色液面）和内壁的茶垢
+	var tea := _std("M_Tea", Color(0.07, 0.03, 0.01), 0.04)
+	tea.metallic_specular = 0.6
+	mats.append(tea)
+	mats.append(_std("M_TeaStain", Color(0.36, 0.2, 0.08), 0.75))
 	mats.append(_tex_std("M_Cardboard", Color(0.52, 0.38, 0.22), "Fabric045", {"scale": 4.0, "nstrength": 0.25,
 		"rough": 0.95}))
 	# ---- 生活舱：军毯、布帘、镜子

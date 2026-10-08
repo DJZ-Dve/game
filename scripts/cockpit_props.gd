@@ -148,6 +148,8 @@ func _ready() -> void:
 	_add_porthole_lights(sub)
 	_add_decals(sub)
 	_add_drip(sub)
+	_add_steam(sub)
+	_add_dust()
 	_setup_net(sub)
 	_setup_charm(sub)
 	_bake_gi.call_deferred(sub)
@@ -204,6 +206,10 @@ func _add_lights(sub: Node) -> void:
 		l.light_energy = c.energy
 		l.shadow_enabled = c.shadow
 		l.shadow_blur = 1.5
+		# 舱里二十几盏投影灯挤在一张阴影图集里，每盏分到的分辨率不高：偏移小了，曲面上全是规则的网点（阴影痤疮），
+		# 被照亮的面大半被自己的阴影吃掉。图集的分格见 project.godot 的 atlas_quadrant_*_subdiv
+		l.shadow_bias = 0.3
+		l.shadow_normal_bias = 2.0
 		l.light_volumetric_fog_energy = c.get("fog", 0.0)
 		l.light_size = 0.03
 		if c.get("strip", false):
@@ -224,6 +230,8 @@ func _add_lights(sub: Node) -> void:
 		l.omni_range = 1.2
 		l.omni_attenuation = 1.4
 		l.shadow_enabled = true
+		l.shadow_bias = 0.3
+		l.shadow_normal_bias = 2.0
 		l.position = Vector3(0, 0.05, 0)
 		l.light_volumetric_fog_energy = 0.0
 		lamp_anchor.add_child(l)
@@ -373,6 +381,134 @@ func _add_drip(sub: Node) -> void:
 	floor_box.size = Vector3(2.4, 0.2, 6.0)
 	floor_box.position = Vector3(0, -0.9 - 0.1, 0)
 	add_child(floor_box)  # Props 就在 Body 的原点上
+
+
+## 圆形软边的小贴图（浮尘、热气共用），粒子用广告牌画
+func _soft_dot() -> GradientTexture2D:
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1))
+	g.set_color(1, Color(1, 1, 1, 0))
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.5, 0.5)
+	t.fill_to = Vector2(1.0, 0.5)
+	t.width = 64
+	t.height = 64
+	return t
+
+
+## 受光的粒子材质：只有被灯照到的地方才看得见（暗处的浮尘、热气本来就看不见）
+func _lit_particle_material(alpha_tex: Texture2D, color: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_texture = alpha_tex
+	m.albedo_color = color
+	m.vertex_color_use_as_albedo = true
+	m.roughness = 1.0
+	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return m
+
+
+## 舱里的浮尘：控制舱、生活舱各一团，慢慢飘。只在顶灯、台灯的光里看得见，暗处就没有
+func _add_dust() -> void:
+	var dot := _soft_dot()
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(0.0035, 0.0035)
+	mesh.material = _lit_particle_material(dot, Color(0.95, 0.9, 0.82, 0.55))
+	# 舱内局部坐标（Godot）：-Z 朝艏。控制舱 z∈[-1.9, 2.6]，生活舱 z∈[2.6, 6.4]，地板 y=-0.9
+	for part in [[Vector3(0, 0.2, 0.35), Vector3(0.95, 0.95, 2.25)], [Vector3(0, 0.2, 4.5), Vector3(0.95, 0.95, 1.9)]]:
+		var p := GPUParticles3D.new()
+		p.name = "Dust"
+		p.amount = 500
+		p.lifetime = 14.0
+		p.preprocess = 14.0
+		p.randomness = 0.5
+		p.local_coords = true
+		p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		p.position = part[0]
+		p.visibility_aabb = AABB(-part[1] - Vector3.ONE * 0.2, part[1] * 2.0 + Vector3.ONE * 0.4)
+		var pm := ParticleProcessMaterial.new()
+		pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+		pm.emission_box_extents = part[1]
+		pm.gravity = Vector3(0, -0.003, 0)
+		pm.initial_velocity_min = 0.0
+		pm.initial_velocity_max = 0.01
+		pm.spread = 180.0
+		pm.turbulence_enabled = true
+		pm.turbulence_noise_scale = 1.5
+		pm.turbulence_noise_speed_random = 0.3
+		pm.turbulence_influence_min = 0.01
+		pm.turbulence_influence_max = 0.03
+		pm.scale_min = 0.5
+		pm.scale_max = 1.5
+		# 淡入淡出，免得粒子凭空出现、消失
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(1, 1, 1, 0))
+		ramp.set_color(1, Color(1, 1, 1, 0))
+		ramp.add_point(0.15, Color(1, 1, 1, 1))
+		ramp.add_point(0.85, Color(1, 1, 1, 1))
+		var rt := GradientTexture1D.new()
+		rt.gradient = ramp
+		pm.color_ramp = rt
+		p.process_material = pm
+		p.draw_pass_1 = mesh
+		add_child(p)
+
+
+## 驾驶台上那缸热茶冒的热气：一缕一缕往上飘，散开，被台灯照着才看得见
+func _add_steam(sub: Node) -> void:
+	var a := sub.find_child("Anchor_Steam", true, false) as Node3D
+	if a == null:
+		return
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(0.03, 0.03)
+	mesh.material = _lit_particle_material(_soft_dot(), Color(0.9, 0.9, 0.88, 0.07))
+	var p := GPUParticles3D.new()
+	p.name = "Steam"
+	p.amount = 40
+	p.lifetime = 2.6
+	p.preprocess = 3.0
+	p.randomness = 0.4
+	p.local_coords = true
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	p.visibility_aabb = AABB(Vector3(-0.25, -0.05, -0.25), Vector3(0.5, 0.6, 0.5))
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.022
+	pm.direction = Vector3.UP
+	pm.spread = 12.0
+	pm.initial_velocity_min = 0.03
+	pm.initial_velocity_max = 0.06
+	pm.gravity = Vector3(0, 0.025, 0)
+	pm.damping_min = 0.01
+	pm.damping_max = 0.03
+	pm.turbulence_enabled = true
+	pm.turbulence_noise_scale = 0.6
+	pm.turbulence_noise_strength = 1.2
+	pm.turbulence_influence_min = 0.04
+	pm.turbulence_influence_max = 0.09
+	pm.angle_min = -180.0
+	pm.angle_max = 180.0
+	var grow := Curve.new()
+	grow.add_point(Vector2(0.0, 0.35))
+	grow.add_point(Vector2(1.0, 2.6))
+	var gt := CurveTexture.new()
+	gt.curve = grow
+	pm.scale_curve = gt
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(1, 1, 1, 0))
+	ramp.set_color(1, Color(1, 1, 1, 0))
+	ramp.add_point(0.2, Color(1, 1, 1, 1))
+	ramp.add_point(0.6, Color(1, 1, 1, 0.5))
+	var rt := GradientTexture1D.new()
+	rt.gradient = ramp
+	pm.color_ramp = rt
+	p.process_material = pm
+	p.draw_pass_1 = mesh
+	a.add_child(p)
 
 
 ## 网兜的镂空图案要知道网兜中心在哪

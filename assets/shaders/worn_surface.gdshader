@@ -36,6 +36,8 @@ uniform sampler2D streak_tex : hint_default_black, filter_linear_mipmap, repeat_
 uniform float streak_amount : hint_range(0.0, 1.0) = 0.0;
 uniform float streak_scale = 1.0;
 uniform vec4 streak_color : source_color = vec4(0.3, 0.22, 0.14, 1.0);
+// 流痕只出现在一部分竖条区域里（上面有焊缝、法兰、螺栓漏水的地方），不是满墙一个样。1 = 不分区
+uniform float streak_cover : hint_range(0.0, 1.0) = 1.0;
 
 // 大尺度的脏污起伏（几十厘米一块的明暗、粗糙度变化），打破大平面上「新刷的漆」那种均匀感
 uniform float macro_amount : hint_range(0.0, 1.0) = 0.0;
@@ -51,6 +53,10 @@ uniform vec4 floor_color : source_color = vec4(0.2, 0.18, 0.15, 1.0);
 uniform float condensation : hint_range(0.0, 1.0) = 0.0;
 uniform float droplet_scale = 125.0;  // 每米多少格（大水珠那一层）
 uniform float cond_height = 0.2;     // 物体空间高度：从这里往上水珠变密
+// 水珠成片：大尺度（一两米一块）的湿区和干区，再加上焊缝、肋骨根部这些凹处集中挂水
+uniform float cond_patch_scale = 0.55;
+uniform float cond_patch_cover : hint_range(0.0, 1.0) = 0.35;  // 大约多少面积是湿区
+uniform float cond_cavity = 1.0;
 
 // 棱边磨出来的底材是不是金属（漆木家具磨出来的是木头，不是金属）
 uniform float wear_metallic : hint_range(0.0, 1.0) = 0.85;
@@ -81,6 +87,23 @@ vec2 hash22(vec2 p) {
 	vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
 	q += dot(q, q.yzx + 33.33);
 	return fract((q.xx + q.yz) * q.zy);
+}
+
+float hash31(vec3 p) {
+	p = fract(p * 0.1031);
+	p += dot(p, p.zyx + 31.32);
+	return fract((p.x + p.y) * p.z);
+}
+
+// 三维值噪声（0~1），大致均匀分布，用来分湿区、干区
+float value_noise(vec3 p) {
+	vec3 i = floor(p);
+	vec3 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(mix(hash31(i), hash31(i + vec3(1, 0, 0)), f.x),
+				mix(hash31(i + vec3(0, 1, 0)), hash31(i + vec3(1, 1, 0)), f.x), f.y),
+			mix(mix(hash31(i + vec3(0, 0, 1)), hash31(i + vec3(1, 0, 1)), f.x),
+				mix(hash31(i + vec3(0, 1, 1)), hash31(i + vec3(1, 1, 1)), f.x), f.y), f.z);
 }
 
 // 一层水珠。返回 (表面斜率 xy, 覆盖 z)。竖直面上的水珠往下坠（下半截更圆更大）。
@@ -194,6 +217,12 @@ void fragment() {
 		float side = 1.0 - w.y;
 		float st = (texture(streak_tex, sp.zy).r * w.x + texture(streak_tex, sp.xy).r * w.z) / max(w.x + w.z, 1e-4);
 		st = smoothstep(0.2, 0.9, st) * streak_amount * side;
+		if (streak_cover < 1.0) {
+			// 竖着拉长的噪声：流痕区是一条条竖带，上面的源头决定下面湿不湿
+			vec3 zp = obj_pos * vec3(1.6, 0.35, 1.6);
+			float zn = value_noise(zp + 3.1) * 0.75 + value_noise(zp * 3.1 + 8.7) * 0.25;
+			st *= smoothstep(1.0 - streak_cover - 0.1, 1.0 - streak_cover + 0.15, zn);
+		}
 		col = mix(col, col * streak_color.rgb * 1.6, st);
 		rough = mix(rough, 0.25, st * 0.7);
 	}
@@ -212,8 +241,12 @@ void fragment() {
 	if (condensation > 0.0) {
 		float hgt = smoothstep(cond_height - 0.6, cond_height + 0.7, obj_pos.y);
 		float up = smoothstep(0.25, 0.7, n.y);
-		// 水珠一片一片地结，不是均匀铺满
-		float dens = condensation * (0.1 + 0.4 * hgt) * (1.0 - up) * clamp(noise * 1.6 - 0.2, 0.0, 1.0);
+		// 水珠一片一片地结，不是均匀铺满：大块的湿区 + 凹处（焊缝、肋骨根部、法兰底下）
+		vec3 pp = obj_pos * cond_patch_scale;
+		float pn = value_noise(pp + 7.3) * 0.7 + value_noise(pp * 2.7 + 1.9) * 0.3;
+		float patch = smoothstep(1.0 - cond_patch_cover - 0.08, 1.0 - cond_patch_cover + 0.12, pn);
+		float where = clamp(patch + cav * cond_cavity * 1.5, 0.0, 1.0);
+		float dens = condensation * (0.12 + 0.45 * hgt) * (1.0 - up) * where * clamp(noise * 1.6 - 0.1, 0.0, 1.0);
 		// 整面潮湿：越密的地方越亮
 		rough = mix(rough, rough * 0.55, dens * 0.6);
 		vec3 dp = obj_pos * droplet_scale;

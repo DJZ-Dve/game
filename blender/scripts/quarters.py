@@ -10,11 +10,11 @@
 import math
 import random
 
-from mathutils import Vector as V
+from mathutils import Vector as V, Matrix
 
 from lib import (frame, T, R, S, cylinder, box, uvsphere, lathe, torus, catmull, circle_profile, rect_profile,
-                 sweep, empty)
-from kit import (rbox, screw, socket_screw, handle, vent, knob, lamp, label_plate, tape_label, toggle, FONT_BRUSH,
+                 sweep, empty, text_mesh)
+from kit import (rbox, extrude_profile, screw, socket_screw, handle, vent, knob, lamp, label_plate, tape_label, toggle, FONT_BRUSH,
                  FONT_SERIF, FONT_HAND)
 import cockpit as C
 from bedding import Bunk
@@ -232,8 +232,8 @@ def galley(K, anchors):
     C.Cab.add([Mr @ V((0.12, 0.05, 0.05)), Mr @ V((0.22, 0.1, 0.02)), V((1.28, -3.85, zt + 0.15)),
                V((1.29, -3.9, zt + 0.25))], 0.004, "CableWhite")
     # 搪瓷缸子（白底红口），一个在台面上，三个挂在吊柜下面
-    enamel_mug(K, T(0.82, -3.58, zt) @ R(200, 'Z'))
-    enamel_mug(K, T(0.84, -2.86, zt) @ R(150, 'Z'), words=False)
+    enamel_mug(K, T(0.82, -3.58, zt) @ R(200, 'Z'), tea=0.35, seed=1)
+    enamel_mug(K, T(0.84, -2.86, zt) @ R(150, 'Z'), words=False, seed=2)
     # 吊柜（两道肋骨之间）+ 柜下的灯管 + 挂杯钩
     cy0, cy1 = -3.45, -2.96
     abox(K["EquipGray"], 0.84, 1.2, cy0, cy1, 0.3, 0.58, r=0.008, seg=2)
@@ -255,7 +255,7 @@ def galley(K, anchors):
         hook = [V((0.86, yy, 0.295)), V((0.86, yy, 0.265)), V((0.875, yy, 0.255)), V((0.885, yy, 0.27))]
         sweep(K["Steel"], catmull(hook, 4), circle_profile(0.0018, 6))
         # 把手挂在钩子上，杯身斜着垂在下面
-        enamel_mug(K, T(0.885, yy, 0.262) @ R(-70, 'Y') @ T(-0.066, 0, -0.045), words=(k == 1))
+        enamel_mug(K, T(0.885, yy, 0.262) @ R(-70, 'Y') @ T(-0.066, 0, -0.045), words=(k == 1), seed=3 + k)
     # 筷子筒
     Mc = T(1.2, -3.66, zt)
     lathe(K["Bakelite"], [(0.0, 0.0), (0.035, 0.0), (0.035, 0.13), (0.031, 0.13), (0.031, 0.006), (0.0, 0.006)], 20, Mc)
@@ -573,9 +573,9 @@ def bunk_shelf(K, anchors, s, y0, y1, z, items):
     for kind, y, ang in items:
         M = T(s * (xw - 0.055), y, z) @ R(ang, 'Z')
         if kind == "mug":
-            enamel_mug(K, M)
+            enamel_mug(K, M, tea=0.2, seed=7)
         elif kind == "mug_plain":
-            enamel_mug(K, M, words=False)
+            enamel_mug(K, M, words=False, seed=8)
         elif kind == "can":
             lathe(K["Can"], [(0.0, 0.0), (0.032, 0.0), (0.033, 0.004), (0.033, 0.09), (0.03, 0.093),
                              (0.03, 0.006), (0.0, 0.006)], 24, M)
@@ -587,15 +587,55 @@ def bunk_shelf(K, anchors, s, y0, y1, z, items):
             anchors.append(empty(kind, K.coll, anchor_frame(V((s * (xw - 0.055), y, z)), V((-s, 0.3, 0)))))
 
 
-def enamel_mug(K, M, words=True):
-    """搪瓷缸子（白底红口）。"""
-    lathe(K["Silk"], [(0.0, 0.0), (0.038, 0.0), (0.04, 0.004), (0.04, 0.085), (0.036, 0.085), (0.036, 0.008),
-                      (0.0, 0.008)], 24, M)
-    torus(K["BtnRed"], 0.039, 0.003, 24, 6, M @ T(0, 0, 0.085))
-    sweep(K["Silk"], catmull([M @ V((0.039, 0, 0.068)), M @ V((0.065, 0, 0.06)), M @ V((0.066, 0, 0.03)),
-                              M @ V((0.039, 0, 0.022))], 5), circle_profile(0.005, 8))
+def enamel_mug(K, M, words=True, tea=0.0, seed=0):
+    """搪瓷缸子（白底红口）：冲压的铁胎外面挂一层搪瓷。
+    - 制造：杯底一圈加强筋、卷边的杯口（红色）、点焊上去的把手（两头压扁的焊片）
+    - 使用：磕掉瓷露出黑铁的崩口、杯里一圈茶垢；tea>0 时杯里有茶（茶面离杯口的高度比例）
+    words：True 印「先进」，也可以直接给字（沿杯身弯过去，不是贴一块平板）。"""
+    rng = random.Random(seed)
+    r, h = 0.04, 0.085
+    lathe(K["Silk"], [(0.0, 0.002), (0.034, 0.002), (0.036, 0.0), (0.039, 0.0015), (0.039, 0.005), (0.0375, 0.007),
+                      (r, 0.01), (r, h), (0.036, h), (0.036, 0.012), (0.0, 0.012)], 32, M)
+    torus(K["BtnRed"], 0.0385, 0.0032, 32, 8, M @ T(0, 0, h))
+    # 把手：一根扁带弯成 C 形，两头是压扁的焊片
+    hp = catmull([M @ V((r + 0.001, 0, 0.07)), M @ V((0.064, 0, 0.064)), M @ V((0.067, 0, 0.034)),
+                  M @ V((r + 0.001, 0, 0.022))], 6)
+    sweep(K["Silk"], hp, [(-0.0022, -0.0045), (0.0022, -0.0045), (0.0022, 0.0045), (-0.0022, 0.0045)])
+    for z in (0.07, 0.022):
+        rbox(K["Silk"], 0.004, 0.014, 0.012, M @ T(r + 0.0012, 0, z), r=0.0015, seg=1)
+    # 茶垢：内壁上一圈褐色的印子（喝了几年的茶缸子洗不掉）
+    stain_z = h - 0.012 - (h - 0.02) * min(max(tea, 0.25), 0.8)
+    lathe(K["TeaStain"], [(0.0357, stain_z - 0.012), (0.0357, stain_z + 0.004)], 32, M, flip=True)
+    if tea > 0.0:
+        cylinder(K["Tea"], 0.0358, 0.001, 32, M @ T(0, 0, h - 0.012 - (h - 0.02) * tea))
+    # 崩口：口沿、杯身、杯底边各磕掉几块瓷，露出黑铁（不规则的小片）
+    for k in range(rng.randint(3, 5)):
+        a = rng.uniform(0, 2 * math.pi)
+        if k == 0:
+            z, rr = h - 0.002, r + 0.0032   # 口沿上
+        elif k == 1:
+            z, rr = 0.006, 0.0392            # 杯底边
+        else:
+            z, rr = rng.uniform(0.02, 0.075), r
+        p = M @ V((math.cos(a) * rr, math.sin(a) * rr, z))
+        out = (M.to_3x3() @ V((math.cos(a), math.sin(a), 0.6 if k == 0 else 0.0))).normalized()
+        sz = rng.uniform(0.0025, 0.0055)
+        prof = [(math.cos(t) * sz * rng.uniform(0.55, 1.0), math.sin(t) * sz * rng.uniform(0.55, 1.0))
+                for t in [2 * math.pi * j / 9 for j in range(9)]]
+        extrude_profile(K["Dark"], prof, frame(p, out) @ T(0, 0, 0.0001), 0.00025)
     if words:
-        K.text("先进", M @ T(-0.0402, 0, 0.045) @ R(-90, 'Y') @ R(-90, 'Z'), 0.014, key="InkRed", font=FONT_SERIF)
+        wrap_text(K, "先进" if words is True else words, M, r + 0.0003, 0.047, 0.015, "InkRed", FONT_SERIF)
+
+
+def wrap_text(K, s, M, r, z, size, key, font, angle=180.0):
+    """沿圆柱面（M 的 Z 轴、半径 r）弯过去的文字，中心在方位角 angle、高度 z。"""
+    ob = text_mesh(s, K.uid("Int_Txt"), K.coll, K.M[key], Matrix(), size=size, extrude=0.0, font_path=font,
+                   resolution=1)
+    a0 = math.radians(angle)
+    for v in ob.data.vertices:
+        a = a0 + v.co.x / r
+        v.co = M @ V((math.cos(a) * r, math.sin(a) * r, z + v.co.y))
+    return ob
 
 
 def photo(K, F, ang, caption, seed=0):
