@@ -52,6 +52,7 @@ func _add_collision(root: Node3D, trimesh: bool) -> void:
 		if m.mesh == null:
 			continue
 		var body := StaticBody3D.new()
+		body.add_to_group("sonar_hard")  # 声呐上当硬目标（回波强、后面有声影），见 sonar_display.gd
 		var shape := CollisionShape3D.new()
 		shape.shape = m.mesh.create_trimesh_shape() if trimesh else m.mesh.create_convex_shape(true, true)
 		body.add_child(shape)

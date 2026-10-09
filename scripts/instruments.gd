@@ -1,5 +1,5 @@
 extends Node
-## 驾驶舱仪表：指针（带弹簧阻尼和抖动）、数码管、指示灯、报警灯牌、氧气流量计浮子、声呐屏回波。
+## 驾驶舱仪表：指针（带弹簧阻尼和抖动）、数码管、指示灯、报警灯牌、氧气流量计浮子；声呐屏见 sonar_display.gd。
 ## 指针对象由 Blender 生成：原点在转轴上，静止时指在刻度起点，绕局部 Y 轴顺时针转 sweep 度到满量程。
 
 ## 指针名 -> 满量程转过的角度
@@ -10,8 +10,6 @@ const GAUGES := {
 	"O2": 90.0, "CO2": 90.0, "Hyd": 270.0, "Comp": 270.0, "O2Tank": 270.0,
 	"BatV": 90.0, "BatA": 90.0, "Heading2": 360.0, "Speed": 270.0, "Ballast2": 270.0, "Signal": 90.0,
 }
-const SONAR_RANGE := 60.0
-const SONAR_RAYS := 48
 const SEG_FONT := preload("res://assets/fonts/DSEG7Classic-Bold.ttf")
 
 ## 报警灯牌（和 Blender 里 annunciator 的顺序一致）
@@ -25,9 +23,6 @@ var _lamps: Array[StandardMaterial3D] = []
 var _warns: Array[StandardMaterial3D] = []
 var _warn_state: Array[int] = []  # 0 灭 1 亮 2 闪
 var _floats := {}  # 名字 -> {node, base}
-var _crt: ShaderMaterial
-var _echoes: Array[Vector4] = []
-var _sonar_ray := 0
 var _battery := 4.6
 var _co2 := 0.55
 var _dive_time := 0.0
@@ -54,10 +49,10 @@ func _ready() -> void:
 		_floats[String(n.name)] = {"node": n, "base": n.position}
 	var screen := sub.find_child("Screen_Sonar", true, false) as MeshInstance3D
 	if screen:
-		_crt = (screen.get_active_material(0) as ShaderMaterial).duplicate()
-		screen.set_surface_override_material(0, _crt)
-	_echoes.resize(8)
-	_echoes.fill(Vector4.ZERO)
+		var sonar := SonarDisplay.new()
+		sonar.name = "Sonar"
+		sonar.setup(sub, screen, sub.find_child("Lamp_SonarTx", true, false) as MeshInstance3D)
+		add_child(sonar)
 	# 演示用：通信中断灯一直闪（以后由事件系统控制）
 	set_warning(Warn.COMMS, 2)
 
@@ -173,7 +168,6 @@ func _process(delta: float) -> void:
 		var h := 0.044 + sin(t * 2.3 + k.length()) * 0.0015 + (randf() - 0.5) * 0.0006
 		n.position = f.base + n.basis.y.normalized() * h
 
-	_update_sonar()
 
 
 func _set_gauge(key: String, target: float, delta: float) -> void:
@@ -198,28 +192,3 @@ func _altitude() -> float:
 	q.exclude = [sub.get_rid()]
 	var hit := space.intersect_ray(q)
 	return origin.distance_to(hit.position) if hit else -1.0
-
-
-## 真·声呐：每帧往周围水平方向打几条射线，命中的地形/礁石变成屏幕上的回波点。
-func _update_sonar() -> void:
-	if _crt == null:
-		return
-	var space := sub.get_world_3d().direct_space_state
-	var origin := sub.global_position + Vector3(0, -0.5, 0)
-	for k in 2:
-		_sonar_ray = (_sonar_ray + 1) % SONAR_RAYS
-		var a := TAU * _sonar_ray / SONAR_RAYS
-		var dir := (-sub.global_basis.z).rotated(Vector3.UP, a)
-		dir.y = -0.18
-		var q := PhysicsRayQueryParameters3D.create(origin, origin + dir.normalized() * SONAR_RANGE)
-		q.exclude = [sub.get_rid()]
-		var hit := space.intersect_ray(q)
-		var slot := _sonar_ray % 8
-		if hit:
-			var dist := origin.distance_to(hit.position) / SONAR_RANGE
-			# 屏幕上方是船头：角度 0.75 对应 +Y
-			var screen_angle := fposmod(0.75 + a / TAU, 1.0)
-			_echoes[slot] = Vector4(screen_angle, dist, 1.0, 0.0)
-		else:
-			_echoes[slot] = Vector4.ZERO
-	_crt.set_shader_parameter("echoes", PackedVector4Array(_echoes))

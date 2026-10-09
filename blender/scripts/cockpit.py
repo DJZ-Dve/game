@@ -17,7 +17,7 @@ from mathutils import Vector as V, Matrix
 
 from lib import (material, frame, T, R, S, cylinder, box, uvsphere, lathe, torus, catmull, circle_profile, text_mesh,
                  rect_profile, sweep, build, empty, _grid_faces)
-from kit import (Parts, Cables, rbox, star_profile, extrude_profile, screw, socket_screw, toggle,
+from kit import (Parts, Cables, rbox, bev_layer, star_profile, extrude_profile, screw, socket_screw, toggle,
                  flip_cover, knob, pointer_knob, button, lamp, vent, handle, fuse, connector, label_plate, silk,
                  tape_label, sticky_note, meter_rect, gauge_round, seg_display, annunciator, rotameter,
                  valve_wheel, unit, FONT_BRUSH, FONT_SERIF, FONT_HAND)
@@ -30,7 +30,7 @@ DECK = -0.9                     # 地板面
 FRAMES = (-2.3, -1.7, -1.1, -0.5, 0.1, 0.7, 1.3)   # 肋骨（控制舱）
 AFT_FRAMES = (-2.9, -3.5, -4.1, -4.7, -5.3, -5.9)  # 肋骨（生活舱）
 BAYS = [(FRAMES[i], FRAMES[i + 1]) for i in range(1, 6)]   # 工作台的五个开间（最前面一个是舷窗）
-CON_Y0, CON_Y1 = -1.76, 1.85    # 两舷工作台的前后范围
+CON_Y0, CON_Y1 = -1.76, 1.97    # 两舷工作台的前后范围（前端和驾驶台翼板的外端对齐，见 helm_plan）
 DESK_Z = -0.12                  # 桌面高度（离地 78 厘米）
 DESK_X = 0.775                  # 桌沿离中线
 PANEL_B = (1.15, DESK_Z)        # 斜仪表板下沿 (|x|, z)
@@ -1525,118 +1525,191 @@ def helm_panel(K, F, w, h, depth=0.5, key="Console", face="PanelGray", hole=None
     return F
 
 
-def helm(K, anchors):
-    # ---- 主板（正对驾驶椅，上沿往后仰 15°）
-    n_c = V((0, -math.cos(math.radians(15)), math.sin(math.radians(15))))
-    u_c = V((0, math.sin(math.radians(15)), math.cos(math.radians(15))))
-    Cm = V((0, 2.22, 0.18))
-    cx, cy, sw, sh = 0.0, 0.11, 0.22, 0.165
-    Fc = helm_panel(K, frame(Cm, n_c, u_c), 0.8, 0.62, hole=(cx, cy, sw, sh))
-    label_plate(K, Fc, 0, 0.29, "镇海号  主操纵台", 0.011)
-    gauge_round(K, Fc, -0.26, 0.12, 0.09, "Depth", hi=10, label="深度", unit="×1000 m", major=10, red_from=0.75)
-    silk(K, Fc, -0.26, -0.005, "数字深度 m", 0.0085)
-    seg_display(K, Fc, -0.26, -0.04, 0.15, 0.036, "Depth")
-    # 声呐显示器：深凹进去的显像管，外面一圈厚遮光罩
-    P = Fc @ T(cx, cy, 0)
-    hw = 0.03
-    for x, y, bw, bh in ((0, sh / 2 + hw / 2, sw + 2 * hw, hw), (0, -sh / 2 - hw / 2, sw + 2 * hw, hw),
-                         (-sw / 2 - hw / 2, 0, hw, sh), (sw / 2 + hw / 2, 0, hw, sh)):
-        rbox(K["Bakelite"], bw, bh, 0.05, P @ T(x, y, 0.01), r=0.006, seg=3)
-    box(K["Dark"], sw, sh, 0.004, P @ T(0, 0, -0.07))
-    for sx in (-1, 1):
-        box(K["Dark"], 0.004, sh, 0.07, P @ T(sx * sw / 2, 0, -0.035))
-    for sy in (-1, 1):
-        box(K["Dark"], sw, 0.004, 0.07, P @ T(0, sy * sh / 2, -0.035))
+# 一体式三段环绕操纵台。俯视时三块板的下沿连成一条折线（台基线）：中间主板正对驾驶椅，左右翼板往驾驶椅方向折
+# HELM_WING 度，外端正好顶到两边高机柜的内侧面。三块板都往后仰 HELM_TILT 度；上沿是台基线每段沿自己的法线往后平移、
+# 再抬高得到的折线（转角处斜接），所以每块板都是一块平面梯形，相邻两块在转角处严丝合缝，共用一根转角立柱。
+# 下沿压一道扶手台沿（台体 + 人造革扶手垫），上沿盖一道帽檐，两头各一块侧板接到高机柜上。
+HELM_YB = 2.16              # 主板下沿（台基线）的 y
+HELM_HALF = 0.47            # 主板下沿半宽
+HELM_WING = 30.0            # 翼板往驾驶椅方向折的角度
+HELM_TILT = 15.0            # 面板后仰角度
+HELM_H = 0.62               # 面板斜高
+HELM_TOP = DESK_Z - 0.039   # 操纵桌桌面
+HELM_ZB = HELM_TOP + 0.03   # 面板下沿（坐在扶手台沿的台体上）
+HELM_TZ = HELM_ZB + HELM_H * math.cos(math.radians(HELM_TILT))   # 面板上沿高度
+HELM_CAP = 0.028            # 帽檐厚度
+SONAR_Y = 0.095             # 声呐显示器在主板上的中心高度（主板坐标系）
 
-    def screen(bm):
-        nx, ny = 24, 18
-        rows = []
-        for j in range(ny + 1):
-            y = -sh / 2 + sh * j / ny
-            row = []
-            for i in range(nx + 1):
-                x = -sw / 2 + sw * i / nx
-                bulge = 0.01 * (1 - (x / (sw * 0.6)) ** 2) * (1 - (y / (sh * 0.62)) ** 2)
-                row.append(bm.verts.new(P @ V((x, y, -0.03 + bulge))))
-            rows.append(row)
-        faces = _grid_faces(bm, rows, closed_u=False)
-        uvmap = {}
-        for j, row in enumerate(rows):
-            for i, v in enumerate(row):
-                uvmap[v] = (i / nx, 1.0 - j / ny)
-        uv = bm.loops.layers.uv.new("UVMap")
-        for f in faces:
-            for loop in f.loops:
-                loop[uv].uv = uvmap[loop.vert]
-    K.separate("Screen_Sonar", "CRT", screen, smooth=True, sharp=None, recalc=False)
-    silk(K, Fc, 0.0, 0.245, "声呐  SONAR", 0.0085)
-    for x, lb in ((-0.075, "亮度"), (-0.025, "对比"), (0.025, "增益"), (0.075, "量程")):
-        knob(K, Fc, x, -0.03, 0.011, 0.013, ticks=7)
-        silk(K, Fc, x, -0.0055, lb, 0.0065)
-    gauge_round(K, Fc, 0.27, 0.15, 0.06, "Heading", hi=360, label="航向", major=8, sub=3, start=90,
+
+def helm_plan():
+    """台基线：左外、左内、右内、右外四个点（俯视，z=0），以及三段各自「往后」的水平法线。"""
+    c, s_ = math.cos(math.radians(HELM_WING)), math.sin(math.radians(HELM_WING))
+    L = (0.8 - HELM_HALF) / c   # 翼板外端落在高机柜内侧面（|x| = 0.8）上
+    pts = [V((-HELM_HALF - L * c, HELM_YB - L * s_, 0)), V((-HELM_HALF, HELM_YB, 0)), V((HELM_HALF, HELM_YB, 0)),
+           V((HELM_HALF + L * c, HELM_YB - L * s_, 0))]
+    return pts, [V((-s_, c, 0)), V((0, 1, 0)), V((s_, c, 0))]
+
+
+def offset_line(pts, backs, d, z=0.0):
+    """折线每段沿自己的法线平移 d（往后为正），转角处斜接；再抬到高度 z。"""
+    out = []
+    for i, p in enumerate(pts):
+        ns = [backs[j] for j in (i - 1, i) if 0 <= j < len(backs)]
+        m = ns[0] if len(ns) == 1 else (ns[0] + ns[1]) / (1 + ns[0].dot(ns[1]))
+        out.append(p + m * d + V((0, 0, z)))
+    return out
+
+
+def helm_faces():
+    """三块面板：[(四个角 [左下, 右下, 右上, 左上], 面板坐标系)]，顺序左翼、主板、右翼。
+    面板坐标系原点在板面中心，Z 朝驾驶员，Y 沿板面朝上，X 是面对面板时的右手方向。"""
+    pts, backs = helm_plan()
+    t = math.radians(HELM_TILT)
+    base = offset_line(pts, backs, 0.0, HELM_ZB)
+    top = offset_line(pts, backs, HELM_H * math.sin(t), HELM_TZ)
+    out = []
+    for i, b in enumerate(backs):
+        n = -b * math.cos(t) + V((0, 0, math.sin(t)))
+        u = b * math.sin(t) + V((0, 0, math.cos(t)))
+        F = frame((base[i] + base[i + 1]) / 2 + u * HELM_H / 2, n, u)
+        out.append(([base[i], base[i + 1], top[i + 1], top[i]], F))
+    return out
+
+
+def slab(bm, pts, n, t):
+    """凸多边形（世界坐标）沿 -n 方向加厚 t。"""
+    lay = bev_layer(bm)
+    f = [bm.verts.new(p) for p in pts]
+    b = [bm.verts.new(V(p) - V(n) * t) for p in pts]
+    faces = [bm.faces.new(f), bm.faces.new(list(reversed(b)))]
+    k = len(pts)
+    for i in range(k):
+        j = (i + 1) % k
+        faces.append(bm.faces.new((f[j], f[i], b[i], b[j])))
+    for fc in faces:
+        fc[lay] = 1
+
+
+def band(bm, pts, backs, d0, d1, z0, z1):
+    """沿台基线的一条带子（每段一块斜接的梯形台，相邻两段共边）：前后沿是台基线平移 d0、d1，高度 z0~z1。"""
+    a = offset_line(pts, backs, d0, z1)
+    b = offset_line(pts, backs, d1, z1)
+    for i in range(len(backs)):
+        slab(bm, [a[i], a[i + 1], b[i + 1], b[i]], V((0, 0, 1)), z1 - z0)
+
+
+def ring_plate(bm, M, hw, hh, r, t, n=96):
+    """矩形板中间开一个圆孔（板面 z=0，往 -z 加厚 t）。n 取 8 的倍数，矩形的四个角正好落在顶点上。"""
+    lay = bev_layer(bm)
+    ring = []
+    for i in range(n):
+        a = 2 * math.pi * i / n
+        c, s_ = math.cos(a), math.sin(a)
+        k = min(hw / abs(c) if abs(c) > 1e-9 else 1e9, hh / abs(s_) if abs(s_) > 1e-9 else 1e9)
+        q = [M @ V((c * k, s_ * k, 0)), M @ V((c * r, s_ * r, 0)), M @ V((c * r, s_ * r, -t)),
+             M @ V((c * k, s_ * k, -t))]
+        ring.append([bm.verts.new(p) for p in q])
+    for i in range(n):
+        A, B = ring[i], ring[(i + 1) % n]
+        for k in range(4):
+            f = bm.faces.new((A[k], B[k], B[(k + 1) % 4], A[(k + 1) % 4]))
+            f[lay] = 1
+
+
+def helm(K, anchors):
+    (Ql, Fl), (Qc, Fc), (Qr, Fr) = helm_faces()
+    pts, backs = helm_plan()
+    console_shell(K, pts, backs, ((Ql, Fl), (Qc, Fc), (Qr, Fr)))
+
+    # ---- 主板：中间声呐显示器，左边深度，右边航向/纵倾，下面推进电表和系统开关
+    sonar_unit(K, Fc @ T(0, SONAR_Y, 0))
+    gauge_round(K, Fc, -0.335, 0.175, 0.085, "Depth", hi=10, label="深度", unit="×1000 m", major=10, red_from=0.75)
+    silk(K, Fc, -0.335, 0.05, "数字深度 m", 0.0085)
+    seg_display(K, Fc, -0.335, 0.015, 0.15, 0.036, "Depth")
+    gauge_round(K, Fc, 0.335, 0.18, 0.075, "Heading", hi=360, label="航向", major=8, sub=3, start=90,
                 sweep_deg=360, num_labels=["北", "", "东", "", "南", "", "西", ""])
-    gauge_round(K, Fc, 0.27, -0.01, 0.045, "Trim", hi=20, label="纵倾", unit="°", major=4,
+    gauge_round(K, Fc, 0.335, 0.02, 0.042, "Trim", hi=20, label="纵倾", unit="°", major=4,
                 num_labels=["-10", "-5", "0", "5", "10"])
-    # 下排：四块方表 + 八个开关和指示灯
-    specs = [("Volt", 150, "V", "主电压", 5), ("Amp", 100, "A", "主电流", 5),
-             ("ThrL", 3, "×1000 r/min", "左推转速", 3), ("ThrR", 3, "×1000 r/min", "右推转速", 3)]
-    for x, (nm, hi, u_, lb, mj) in zip((-0.24, -0.08, 0.08, 0.24), specs):
-        meter_rect(K, Fc, x, -0.13, 0.075, nm, hi=hi, unit=u_, label=lb, major=mj)
+    specs = [("Volt", 150, "V", "主电压", 5, -0.38), ("Amp", 100, "A", "主电流", 5, -0.29),
+             ("ThrL", 3, "×1000 r/min", "左推转速", 3, 0.29), ("ThrR", 3, "×1000 r/min", "右推转速", 3, 0.38)]
+    for nm, hi, u_, lb, mj, x in specs:
+        meter_rect(K, Fc, x, -0.09, 0.07, nm, hi=hi, unit=u_, label=lb, major=mj)
+    # 声呐的旋钮：量程是档位开关，其余是电位器
+    y = -0.145
+    pointer_knob(K, Fc, -0.165, y, 0.012, angle=0)
+    for a_, lb in ((90, "25"), (45, "50"), (0, "100"), (-45, "200"), (-90, "400")):
+        r_ = 0.027
+        silk(K, Fc, -0.165 - math.sin(math.radians(a_)) * r_, y + math.cos(math.radians(a_)) * r_, lb, 0.0045)
+    for x, lb in ((-0.1, "增益"), (-0.035, "时变增益"), (0.03, "余辉"), (0.095, "亮度"), (0.165, "游标")):
+        knob(K, Fc, x, y, 0.0105, 0.013, ticks=7)
+    for x, lb in ((-0.165, "量程"), (-0.1, "增益"), (-0.035, "时变增益"), (0.03, "余辉"), (0.095, "亮度"),
+                  (0.165, "游标")):
+        silk(K, Fc, x, y - 0.033, lb, 0.0058)
     labels = ["主推左", "主推右", "垂推", "侧推", "照明一", "照明二", "声呐", "摄像"]
     for i, lb in enumerate(labels):
         x = -0.28 + i * 0.08
-        toggle(K, Fc, x, -0.255, up=(i in (0, 1, 2, 4, 6)), s=1.2)
-        silk(K, Fc, x, -0.226, lb, 0.0072)
-        lamp(K, Fc, x + 0.026, -0.27, 0.0052, LAMP_COLORS[i], name=f"Lamp_{i}")
-    tape_label(K, Fc, 0.2, -0.3, "左推偶尔卡 多拨两下", 0.009, -1.5)
+        toggle(K, Fc, x, -0.25, up=(i in (0, 1, 2, 4, 6)), s=1.2)
+        silk(K, Fc, x, -0.222, lb, 0.0072)
+        lamp(K, Fc, x + 0.026, -0.265, 0.0052, LAMP_COLORS[i], name=f"Lamp_{i}")
+    tape_label(K, Fc, 0.335, -0.18, "左推偶尔卡 多拨两下", 0.0085, -1.5)
 
-    # ---- 左右翼板
-    wings = []
-    for s in (-1, 1):
-        # 翼板和主板在外框处相接，往驾驶椅方向折 45°
-        yaw = math.radians(45)
-        xdir = V((s * math.cos(yaw), -math.sin(yaw), 0))
-        edge = V((s * (0.4 + 0.034), 2.22, 0.18))
-        cen = edge + xdir * (0.23 + 0.034)
-        n = (V((-s * math.sin(yaw), -math.cos(yaw), 0)) * math.cos(math.radians(15))
-             + V((0, 0, math.sin(math.radians(15)))))
-        Fw = helm_panel(K, frame(cen, n.normalized(), V((0, 0, 1))), 0.46, 0.62,
-                        hole=(0, -0.19, 0.36, 0.14) if s < 0 else None)
-        wings.append(Fw)
-    Fl, Fr = wings
-    # 左翼：压载、配平、应急抛载
-    label_plate(K, Fl, 0, 0.29, "压载 / 配平", 0.0095)
-    gauge_round(K, Fl, -0.1, 0.15, 0.06, "Ballast", hi=100, label="压载水舱", unit="%", major=5, red_from=0.85)
-    gauge_round(K, Fl, 0.11, 0.15, 0.06, "Ballast2", hi=100, label="可调压载", unit="%", major=5)
-    for x, cap, lb in ((-0.15, "BtnGreen", "注水"), (-0.09, "BtnRed", "排水"), (-0.03, "BtnBlack", "停泵")):
-        button(K, Fl, x, 0.0, 0.011, cap)
-        silk(K, Fl, x, 0.03, lb, 0.0075)
-    pointer_knob(K, Fl, 0.11, -0.01, 0.016, angle=40)
+    # ---- 左翼：压载、配平、应急抛载
+    gauge_round(K, Fl, -0.085, 0.17, 0.05, "Ballast", hi=100, label="压载水舱", unit="%", major=5, red_from=0.85)
+    gauge_round(K, Fl, 0.085, 0.17, 0.05, "Ballast2", hi=100, label="可调压载", unit="%", major=5)
+    for x, cap, lb in ((-0.13, "BtnGreen", "注水"), (-0.075, "BtnRed", "排水"), (-0.02, "BtnBlack", "停泵")):
+        button(K, Fl, x, 0.03, 0.0105, cap)
+        silk(K, Fl, x, 0.057, lb, 0.0072)
+    pointer_knob(K, Fl, 0.1, 0.025, 0.015, angle=40)
     for a_, lb in ((50, "前"), (0, "中"), (-50, "后")):
-        silk(K, Fl, 0.11 + math.cos(math.radians(90 + a_)) * 0.036, -0.01 + math.sin(math.radians(90 + a_)) * 0.036,
-             lb, 0.0075)
-    silk(K, Fl, 0.11, -0.065, "配平泵", 0.0075)
-    P = sub_panel(K, Fl, 0, -0.19, 0.36, 0.14, "PanelDark")
-    flip_cover(K, P, -0.09, 0.0)
-    flip_cover(K, P, 0.0, 0.0)
-    label_plate(K, P, 0.1, 0.0, "应急抛载", 0.011, plate="LabelRed")
-    silk(K, P, -0.09, -0.05, "左压铁", 0.0068)
-    silk(K, P, 0.0, -0.05, "右压铁", 0.0068)
-    # 右翼：离底高度、外部照明、舱内照明调光
-    label_plate(K, Fr, 0, 0.29, "高度计 / 照明", 0.0095)
-    silk(K, Fr, 0, 0.215, "离底高度 m", 0.0085)
-    seg_display(K, Fr, 0, 0.17, 0.15, 0.04, "Alt")
-    silk(K, Fr, 0, 0.1, "潜航时间", 0.0085)
-    seg_display(K, Fr, 0, 0.06, 0.15, 0.036, "Clock")
-    for k, (lb, ang) in enumerate((("左探照", -40), ("右探照", -40), ("顶灯", 30), ("仪表", 60))):
-        x = -0.15 + k * 0.1
-        pointer_knob(K, Fr, x, -0.07, 0.014, angle=ang)
-        silk(K, Fr, x, -0.035, lb, 0.0072)
-    for k in range(5):
-        fuse(K, Fr, -0.16 + k * 0.08, -0.2, ("5A", "5A", "2A", "1A", "10A")[k])
-    sticky_note(K, Fr, 0.14, 0.17, ["下潜前", "检查 3号舱", "密封圈"], 0.0085, angle=-5)
+        silk(K, Fl, 0.1 + math.cos(math.radians(90 + a_)) * 0.034, 0.025 + math.sin(math.radians(90 + a_)) * 0.034,
+             lb, 0.0072)
+    silk(K, Fl, 0.1, -0.025, "配平泵", 0.0072)
+    # 应急抛载：凸出来的一块黑色底座，上下两根镀铬护杆，免得手肘碰到
+    P = Fl @ T(0, -0.165, 0)
+    rbox(K["PanelDark"], 0.3, 0.15, 0.012, P @ T(0, 0, 0.006), r=0.003, seg=2)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            screw(K, P @ T(0, 0, 0.012), sx * 0.138, sy * 0.063, r=0.003)
+    Pe = P @ T(0, 0, 0.012)
+    flip_cover(K, Pe, -0.09, 0.008)
+    flip_cover(K, Pe, -0.02, 0.008)
+    label_plate(K, Pe, 0.085, 0.008, "应急抛载", 0.0095, plate="LabelRed")
+    silk(K, Pe, -0.09, -0.042, "左压铁", 0.0066)
+    silk(K, Pe, -0.02, -0.042, "右压铁", 0.0066)
+    for sy in (-1, 1):
+        a, b = P @ V((-0.15, sy * 0.082, 0)), P @ V((0.15, sy * 0.082, 0))
+        nz = (P.to_3x3() @ V((0, 0, 1))).normalized()
+        sweep(K["Chrome"], [a, a + nz * 0.03, b + nz * 0.03, b], circle_profile(0.0045, 12))
+        for p in (a, b):
+            cylinder(K["Chrome"], 0.008, 0.004, 16, frame(p, nz))
 
-    # ---- 顶板（报警灯牌 + 消音按钮）
+    # ---- 右翼：离底高度、潜航时间、照明、保险丝、声呐监听
+    silk(K, Fr, 0, 0.245, "离底高度 m", 0.0085)
+    seg_display(K, Fr, 0, 0.2, 0.15, 0.04, "Alt")
+    silk(K, Fr, 0, 0.135, "潜航时间", 0.0085)
+    seg_display(K, Fr, 0, 0.095, 0.15, 0.036, "Clock")
+    for k, (lb, ang) in enumerate((("左探照", -40), ("右探照", -40), ("顶灯", 30), ("仪表", 60))):
+        x = -0.12 + k * 0.08
+        pointer_knob(K, Fr, x, -0.02, 0.013, angle=ang)
+        silk(K, Fr, x, 0.012, lb, 0.0068)
+    for k in range(5):
+        fuse(K, Fr, -0.14 + k * 0.07, -0.13, ("5A", "5A", "2A", "1A", "10A")[k])
+    vent(K, Fr, -0.055, -0.225, 0.15, 0.05, 8, 0.0035)
+    silk(K, Fr, -0.055, -0.186, "声呐监听", 0.0068)
+    knob(K, Fr, 0.085, -0.225, 0.009, 0.012, ticks=7)
+    silk(K, Fr, 0.085, -0.25, "音量", 0.0062)
+    Mj = Fr @ T(0.135, -0.225, 0)
+    cylinder(K["Chrome"], 0.0065, 0.004, 20, Mj)
+    cylinder(K["Dark"], 0.0028, 0.0002, 12, Mj @ T(0, 0, 0.004))
+    silk(K, Fr, 0.135, -0.25, "耳机", 0.0062)
+    sticky_note(K, Fr, -0.125, 0.232, ["下潜前", "检查 3号舱", "密封圈"], 0.0085, angle=6)
+
+    # ---- 帽檐前沿的铭牌
+    capf = offset_line(pts, backs, HELM_H * math.sin(math.radians(HELM_TILT)) - 0.035, HELM_TZ + HELM_CAP / 2)
+    for i, txt, size in ((0, "压载 / 配平", 0.0095), (1, "镇海号  主操纵台", 0.011), (2, "高度计 / 照明", 0.0095)):
+        label_plate(K, frame((capf[i] + capf[i + 1]) / 2 - backs[i] * 0.0005, -backs[i]), 0, 0, txt, size)
+
+    # ---- 顶板（报警灯牌 + 消音按钮），挂在帽檐上方
     n_o = V((0, -0.6, -0.8))
     u_o = V((0, -0.8, 0.6))
     Fo = helm_panel(K, frame(V((0, 2.06, 0.74)), n_o, u_o), 0.66, 0.24, depth=0.35)
@@ -1645,12 +1718,12 @@ def helm(K, anchors):
     button(K, Fo, 0.27, 0.03, 0.012, "BtnYellow")
     silk(K, Fo, 0.27, -0.01, "消音", 0.008)
     vent(K, Fo, 0.27, -0.07, 0.07, 0.05, 6, 0.004)
+    # 顶板和帽檐之间的背板
+    abox(K["Console"], -0.42, 0.42, 2.33, 2.62, HELM_TZ + HELM_CAP - 0.005, 0.7, r=0.012, seg=2)
 
-    # 主板和顶板之间、台体顶上的盖板
-    abox(K["Console"], -0.46, 0.46, 2.26, 2.8, 0.47, 0.7, r=0.012, seg=2)
     # ---- 下面的操纵桌和踢脚板
     abox(K["Console"], -0.78, 0.78, 1.8, 2.24, DESK_Z - 0.09, DESK_Z - 0.04, r=0.014, seg=3)
-    abox(K["DeskTop"], -0.76, 0.76, 1.818, 2.2, DESK_Z - 0.045, DESK_Z - 0.039, r=0.002, seg=1)
+    abox(K["DeskTop"], -0.76, 0.76, 1.818, 2.2, DESK_Z - 0.045, HELM_TOP, r=0.002, seg=1)
     abox(K["Console"], -0.74, 0.74, 1.92, 2.7, DECK, DESK_Z - 0.09, r=0.01, seg=2)
     P = frame(V((0, 1.92, -0.5)), V((0, -1, 0)))
     vent(K, P, 0, 0.1, 0.5, 0.16, 14, 0.006)
@@ -1659,7 +1732,7 @@ def helm(K, anchors):
             socket_screw(K, P, sx * 0.66, sy * 0.3, r=0.007)
     label_plate(K, P, 0, -0.15, "电池监控单元 内有高压", 0.012, plate="LabelRed")
     # 操纵杆（右手：推进/转向）、升降手柄（左手）
-    top = DESK_Z - 0.039
+    top = HELM_TOP
     Pj = T(0.3, 1.98, top)
     rbox(K["PanelDark"], 0.14, 0.14, 0.03, Pj @ T(0, 0, 0.015), r=0.01, seg=3)
     for sx in (-1, 1):
@@ -1673,7 +1746,7 @@ def helm(K, anchors):
           stick)
     button(K, stick @ T(0, 0, 0.17), 0, 0, 0.007, "BtnRed")
     silk(K, Pj @ T(0, -0.055, 0.0301), 0, 0, "推进 / 转向", 0.0075)
-    Pl = T(-0.3, 1.98, top)
+    Pl = T(-0.3, 1.97, top)
     rbox(K["PanelDark"], 0.08, 0.18, 0.05, Pl @ T(0, 0, 0.025), r=0.01, seg=3)
     box(K["Dark"], 0.012, 0.13, 0.002, Pl @ T(0, 0, 0.0505))
     for k in range(7):
@@ -1682,17 +1755,16 @@ def helm(K, anchors):
     cylinder(K["Chrome"], 0.007, 0.12, 12, lev)
     cylinder(K["Knob"], 0.014, 0.08, 16, lev @ T(-0.04, 0, 0.12) @ R(90, 'Y'))
     silk(K, Pl @ T(0, -0.1, 0.0002), 0, 0, "升 / 降", 0.0075)
-    anchors.append(empty("Anchor_Spectacles", K.coll, anchor_frame(V((0.52, 1.95, top)), V((0.3, 1, 0)))))
-    anchors.append(empty("Anchor_Clipboard", K.coll, anchor_frame(V((-0.55, 1.98, top)), V((-0.2, 1, 0)))))
+    anchors.append(empty("Anchor_Spectacles", K.coll, anchor_frame(V((0.53, 1.93, top)), V((0.3, 1, 0)))))
 
-    # 蛇管台灯：夹在主板上沿，灯罩朝下照着面板
-    base = Fc @ V((0.36, 0.33, 0.02))
-    shade = V((0.22, 1.98, 0.62))
+    # 蛇管台灯：夹在帽檐上、顶板外侧，先竖着往上，绕到顶板前面再弯下来，灯罩朝下照着主板
+    base = V((0.5, 2.31, HELM_TZ + HELM_CAP))
+    shade = V((0.3, 1.99, 0.64))
     target = Fc @ V((0.0, -0.05, 0))
     fwd = (target - shade).normalized()
-    rbox(K["Steel"], 0.05, 0.035, 0.04, T(*base) @ T(0, 0, 0.0), r=0.004, seg=2)
+    rbox(K["Steel"], 0.05, 0.035, 0.04, T(*base) @ T(0, 0, 0.02), r=0.004, seg=2)
     up = V((0, 0, 1))
-    path = catmull([base + up * 0.02, base + up * 0.18 + (shade - base) * 0.2, shade + up * 0.1 - fwd * 0.03,
+    path = catmull([base + up * 0.04, V((0.5, 2.3, 0.62)), V((0.46, 2.15, 0.74)), shade + up * 0.06 - fwd * 0.03,
                     shade - fwd * 0.036], 10)
     sweep(K["Chrome"], path, circle_profile(0.0045, 10), scales=[1.0 + 0.18 * (i % 2) for i in range(len(path))])
     Fs = frame(shade, fwd)
@@ -1702,6 +1774,117 @@ def helm(K, anchors):
     uvsphere(K["LensWhite"], 0.0105, 16, 8, Fs @ T(0, 0, -0.016))
     anchors.append(empty("CabinSpot_Console", K.coll, anchor_frame(shade + fwd * 0.005, fwd)))
     return Fc, Fo
+
+
+def console_shell(K, pts, backs, faces):
+    """台体：三块梯形面板、转角立柱、扶手台沿、帽檐、两头的侧板。"""
+    t = math.radians(HELM_TILT)
+    for Q, F in faces:
+        n = F.to_3x3() @ V((0, 0, 1))
+        slab(K["PanelGray"], Q, n, 0.012)
+    # 转角立柱（相邻两块板共用）和两头的端柱：沿板边，正面朝两块板法线的平均方向
+    ns = [F.to_3x3() @ V((0, 0, 1)) for _, F in faces]
+    edges = [(faces[0][0][0], faces[0][0][3], ns[0])]
+    for i in range(len(faces) - 1):
+        edges.append((faces[i][0][1], faces[i][0][2], (ns[i] + ns[i + 1]).normalized()))
+    edges.append((faces[-1][0][1], faces[-1][0][2], ns[-1]))
+    for a, b, n in edges:
+        M = frame((a + b) / 2, n, b - a)
+        rbox(K["Console"], 0.036, (b - a).length + 0.02, 0.03, M @ T(0, 0, -0.003), r=0.008, seg=3)
+        for yy in (-0.24, 0.0, 0.24):
+            socket_screw(K, M @ T(0, 0, 0.012), 0, yy, r=0.0055)
+    # 扶手台沿：台体 + 人造革扶手垫
+    band(K["Console"], pts, backs, -0.075, 0.035, HELM_TOP, HELM_ZB)
+    pad = offset_line(pts, backs, -0.04, HELM_ZB + 0.011)
+    sweep(K["Vinyl"], pad, rect_profile(0.07, 0.022, 0.009))
+    # 帽檐：比面板上沿往前探 3.5 厘米，往后一直盖到壳体附近
+    top = offset_line(pts, backs, HELM_H * math.sin(t), 0)
+    band(K["Console"], top, backs, -0.035, 0.25, HELM_TZ - 0.004, HELM_TZ + HELM_CAP)
+    # 两头的侧板：竖着，从台基线外端往后，补上倾斜的翼板和竖直的高机柜之间那条三角缝
+    for i, s in ((0, -1), (3, 1)):
+        b = backs[0] if i == 0 else backs[-1]
+        p = pts[i]
+        side = V((b.y, -b.x, 0)) * s   # 沿台基线往外
+        q = [p + V((0, 0, HELM_TOP)), p + b * 0.42 + V((0, 0, HELM_TOP)),
+             p + b * 0.42 + V((0, 0, HELM_TZ + HELM_CAP)), p + V((0, 0, HELM_TZ + HELM_CAP))]
+        slab(K["Console"], q, -side, 0.022)
+
+
+def sonar_unit(K, P):
+    """主动声呐显示器（机架式插箱）：灰色方机箱，正面黑色面框中间是圆形显像管，外圈一道刻着方位的刻度环；
+    上面一道遮光檐，两边提手，四角松不脱螺钉。荧光屏单独成对象 Screen_Sonar（Godot 里画 PPI 图像）。
+    P：显示器正中、主板板面上的坐标系。"""
+    hs, hd = 0.195, 0.045        # 机箱半宽、凸出板面的深度
+    rs, rh = 0.142, 0.151        # 荧光屏半径、面框开孔半径
+    rr = 0.188                   # 刻度环外径
+    zf = hd                      # 面框正面
+    for x, y, w, h in ((0, hs - 0.006, 2 * hs, 0.012), (0, -hs + 0.006, 2 * hs, 0.012),
+                       (-hs + 0.006, 0, 0.012, 2 * hs), (hs - 0.006, 0, 0.012, 2 * hs)):
+        rbox(K["EquipGray"], w, h, hd, P @ T(x, y, hd / 2), r=0.003, seg=2)
+    ring_plate(K["PanelDark"], P @ T(0, 0, zf), hs - 0.001, hs - 0.001, rh, 0.008)
+    box(K["Dark"], 2 * hs - 0.02, 2 * hs - 0.02, 0.004, P @ T(0, 0, 0.002))
+    # 显像管喉部（面框开孔到荧光屏边缘的锥面）
+    zs = 0.012
+    lathe(K["Dark"], [(rs + 0.002, zs - 0.004), (rs + 0.003, zs + 0.004), (rh, zf - 0.008)], 96, P)
+    # 刻度环：黑色胶木环，白色刻线每 5°，每 10° 长线，每 30° 刻数字（000~330）
+    lathe(K["Bakelite"], [(rh, zf), (rh, zf + 0.005), (rh + 0.002, zf + 0.007), (rr - 0.002, zf + 0.007),
+                          (rr, zf + 0.005), (rr, zf)], 96, P)
+    zt = zf + 0.007
+    for k in range(72):
+        b = 5 * k
+        L = 0.012 if b % 30 == 0 else 0.009 if b % 10 == 0 else 0.005
+        a = math.radians(b)
+        r0 = rh + 0.003 + L / 2
+        box(K["Silk"], 0.0009 if b % 10 else 0.0012, L, 0.0003,
+            P @ T(math.sin(a) * r0, math.cos(a) * r0, zt) @ R(-b, 'Z'))
+        if b % 30 == 0:
+            r1 = rh + 0.0255
+            K.text(f"{b:03d}", P @ T(math.sin(a) * r1, math.cos(a) * r1, zt) @ R(-b, 'Z'), 0.0072)
+    # 荧光屏：微微鼓起的球面，UV 按屏幕平面投影（Godot 里贴 PPI 画面）
+    bul = 0.007
+
+    def screen(bm):
+        nr, na = 18, 96
+        rings = [[bm.verts.new(P @ V((0, 0, zs + bul)))] * na]
+        for j in range(1, nr + 1):
+            r_ = rs * j / nr
+            rings.append([bm.verts.new(P @ V((math.cos(2 * math.pi * i / na) * r_, math.sin(2 * math.pi * i / na) * r_,
+                                              zs + bul * (1 - (r_ / rs) ** 2)))) for i in range(na)])
+        uv = bm.loops.layers.uv.new("UVMap")
+        for j in range(nr):
+            for i in range(na):
+                k = (i + 1) % na
+                q = [rings[j][i], rings[j + 1][i], rings[j + 1][k], rings[j][k]]
+                if j == 0:
+                    q = [rings[0][0], rings[1][i], rings[1][k]]
+                f = bm.faces.new(q)
+                for loop in f.loops:
+                    p = P.inverted() @ loop.vert.co
+                    loop[uv].uv = (0.5 + p.x / (2 * rs), 0.5 + p.y / (2 * rs))
+    K.separate("Screen_Sonar", "CRT", screen, smooth=True, sharp=None, recalc=False)
+    # 屏前的防眩玻璃（跟着屏幕的弧度，再往外 4 毫米）
+    lathe(K["Glass"], [(rs * k / 8 + 0.0035 * (k == 8), zs + 0.004 + bul * (1 - (k / 8) ** 2)) for k in range(9)], 96, P)
+    # 遮光檐：顶板 + 两块三角侧板
+    zh = 0.075
+    rbox(K["EquipGray"], 2 * hs, 0.006, zh, P @ T(0, hs - 0.003, zf + zh / 2), r=0.002, seg=1)
+    for sx in (-1, 1):
+        x = sx * (hs - 0.003)
+        slab(K["EquipGray"], [P @ V((x, hs, zf)), P @ V((x, hs, zf + zh)), P @ V((x, hs - 0.16, zf))],
+             P.to_3x3() @ V((sx, 0, 0)), 0.006)
+    # 四角松不脱螺钉、角上的字和灯
+    Pf = P @ T(0, 0, zf)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            socket_screw(K, Pf, sx * (hs - 0.016), sy * (hs - 0.016), r=0.0055)
+    silk(K, Pf, -0.15, 0.158, "主动声呐", 0.0062)
+    silk(K, Pf, -0.15, -0.162, "SJD-7", 0.0062)
+    lamp(K, Pf, 0.153, 0.162, 0.0042, "LensAmber", name="Lamp_SonarTx")
+    silk(K, Pf, 0.153, 0.147, "发射", 0.0052)
+    lamp(K, Pf, 0.153, -0.153, 0.0042, "LensGreen")
+    silk(K, Pf, 0.153, -0.168, "电源", 0.0052)
+    # 两边提手（插箱从台里抽出来检修用）
+    for sx in (-1, 1):
+        handle(K, P, sx * (hs + 0.022), 0.0, 0.12, key="Chrome", standoff=0.028)
 
 
 def helm_desk(K, anchors, Fc):
@@ -1733,13 +1916,13 @@ def helm_desk(K, anchors, Fc):
     cylinder(K["Silk"], 0.0041, 0.03, 10, M)
     cylinder(K["Ash"], 0.0043, 0.012, 10, M @ T(0, 0, 0.03), r2=0.0036)
     # 软包烟（拆开了，冒出一支）和火柴盒
-    Mp = T(-0.05, 2.05, top) @ R(-18, 'Z')
+    Mp = T(-0.05, 2.0, top) @ R(-18, 'Z')
     rbox(K["Silk"], 0.056, 0.088, 0.021, Mp @ T(0, 0, 0.0105), r=0.004, seg=2)
     rbox(K["BtnRed"], 0.0566, 0.034, 0.0214, Mp @ T(0, -0.022, 0.0105), r=0.004, seg=2)
     rbox(K["Alu"], 0.03, 0.006, 0.015, Mp @ T(-0.008, 0.043, 0.0105), r=0.002, seg=1)
     cylinder(K["Silk"], 0.004, 0.022, 10, Mp @ T(0.01, 0.04, 0.012) @ R(-90, 'X'))
     cylinder(K["CableOrange"], 0.0041, 0.006, 10, Mp @ T(0.01, 0.062, 0.012) @ R(-90, 'X'))
-    Mx = T(-0.2, 2.07, top) @ R(12, 'Z')
+    Mx = T(-0.2, 1.99, top) @ R(12, 'Z')
     rbox(K["Cardboard"], 0.036, 0.053, 0.015, Mx @ T(0, 0, 0.0075), r=0.001, seg=1)
     rbox(K["BtnYellow"], 0.03, 0.044, 0.0006, Mx @ T(0, 0, 0.0152), r=0.0, seg=1)
     K.text("火柴", Mx @ T(0, 0, 0.0156) @ R(90, 'Z'), 0.008, key="InkRed", font=FONT_SERIF)
@@ -1779,10 +1962,10 @@ def helm_desk(K, anchors, Fc):
     cylinder(K["BtnRed"], 0.0035, 0.005, 12, Mq @ T(0, 0, -0.048))
     # 纵倾表坏了：玻璃上两条胶布打个叉，旁边手写「坏」
     for ang in (38, -38):
-        rbox(K["MaskTape"], 0.09, 0.016, 0.0005, Fc @ T(0.27, -0.01, 0.0163) @ R(ang, 'Z'), r=0.0, seg=1)
-    K.text("坏", Fc @ T(0.27, -0.01, 0.0172) @ R(4, 'Z'), 0.012, key="Marker", font=FONT_HAND)
-    # 后来加装的一根线：从主板底下拉出来，贴着桌面，翻过桌沿垂到地上；中间一个接头缠着黑胶布
-    pts = [V((0.4, 2.14, -0.125)), V((0.41, 2.09, top + 0.004)), V((0.402, 1.97, top + 0.005)),
+        rbox(K["MaskTape"], 0.085, 0.015, 0.0005, Fc @ T(0.335, 0.02, 0.0163) @ R(ang, 'Z'), r=0.0, seg=1)
+    K.text("坏", Fc @ T(0.335, 0.02, 0.0172) @ R(4, 'Z'), 0.011, key="Marker", font=FONT_HAND)
+    # 后来加装的一根线：从扶手台沿底下钻出来，贴着桌面，翻过桌沿垂到地上；中间一个接头缠着黑胶布
+    pts = [V((0.4, 2.13, top + 0.012)), V((0.41, 2.07, top + 0.005)), V((0.402, 1.97, top + 0.005)),
            V((0.41, 1.84, top + 0.005)), V((0.418, 1.805, top - 0.01)), V((0.425, 1.785, top - 0.08)),
            V((0.43, 1.77, -0.45)), V((0.445, 1.745, DECK + 0.04)), V((0.47, 1.71, DECK + 0.009)), V((0.5, 1.68, DECK + 0.0065)),
            V((0.62, 1.62, DECK + 0.0065))]
@@ -2146,12 +2329,11 @@ def decals(anchors, coll):
         for sx, k in picks:
             d("Rust", F @ V((sx * (w / 2 - 0.018), ys[k] - 0.075, 0)), n, u, 0.045, 0.14, 0.04)
     # ---- 驾驶台主板：下排开关、声呐旋钮这些天天拨的地方，漆面被手油摸得发黑发亮
-    n_c = V((0, -math.cos(math.radians(15)), math.sin(math.radians(15))))
-    u_c = V((0, math.sin(math.radians(15)), math.cos(math.radians(15))))
-    Fc = frame(V((0, 2.22, 0.18)), n_c, u_c)
+    Fc = helm_faces()[1][1]
+    n_c, u_c = Fc.to_3x3() @ V((0, 0, 1)), Fc.to_3x3() @ V((0, 1, 0))
     for x in (-0.24, -0.08, 0.08, 0.24):
-        d("Grease", Fc @ V((x, -0.262, 0)), n_c, u_c, 0.16, 0.1, 0.04)
-    d("Grease", Fc @ V((0.0, -0.03, 0)), n_c, u_c, 0.2, 0.08, 0.04)
+        d("Grease", Fc @ V((x, -0.255, 0)), n_c, u_c, 0.16, 0.1, 0.04)
+    d("Grease", Fc @ V((0.0, -0.145, 0)), n_c, u_c, 0.36, 0.07, 0.04)
     # ---- 舷窗：窗下的冷凝水顺着压环往下淌，滴到肘托上
     for s in (-1, 1):
         o, dd = vp_axis(s)

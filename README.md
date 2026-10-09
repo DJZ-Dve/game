@@ -28,7 +28,10 @@
 ## 舱内布局
 耐压舱是一段横躺的圆筒（内径 2.7 米），加上艏部半球，长约 8 米，中间一道带水密门的隔壁分成两段：
 - **控制舱**（前段）
-  - 艏部是驾驶台：主仪表板、左右翼板、顶板报警灯牌、操纵杆，前面是驾驶椅
+  - 艏部是驾驶台：一体式三段环绕操纵台（主板正对驾驶椅，左右翼板往驾驶椅方向折 30°，转角共用立柱，
+    下沿一道人造革扶手台沿，上沿一道帽檐），上方顶板报警灯牌，桌上操纵杆，前面是驾驶椅
+    - 主板正中是机架式主动声呐显示器：圆形显像管、方位刻度环、遮光檐。声呐真的在扫：换能器每转一步往该方位打一扇射线，
+      海底连成一片、礁石沉船回波强且后面留声影，艏向朝上显示，带余辉、距离环、电子方位线和读数（`sonar_display.gd`）
   - 驾驶台后面左右各一个舷窗
   - 两舷是嵌在舱壁里的连续工作台，开间由肋骨分隔：右舷依次是配电、生命支持、液压站、舱内环境；左舷依次是神龛、导航、照明配电、水声通信
   - 后端是中间隔壁：水密门、氧气瓶（紫铜管沿隔壁、舱顶接到生命支持柜）、接线盒（线顺着隔壁爬进左舷桥架）
@@ -72,7 +75,7 @@ godot --path . --script res://scripts/tools/gen_decal_text.gd             # 重�
 godot --headless --path . --script res://scripts/tools/gen_decals.gd      # 重新生成贴花贴图
 godot --path . -- --bake-gi                   # 只重新烘焙舱内 VoxelGI
 godot --headless --path . --script res://scripts/tools/setup_project.gd   # 重写输入映射、重新生成材质
-tools/capture.sh shot.png --view=external --orbit=40                      # 截图
+tools/capture.sh shot.png --view=external --orbit=40                      # 截图（后台运行、不弹窗；FOREGROUND=1 前台）
 tools/glb_info.sh assets/models/submarine_cockpit.glb [网格名]            # 查看 glb 里的网格、顶点数
 tools/fetch_polyhaven.sh --models a,b --textures c,d                      # 下载 Poly Haven 素材（ambientCG 用 fetch_ambientcg.sh --ids）
 ```

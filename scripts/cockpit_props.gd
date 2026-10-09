@@ -49,7 +49,6 @@ const PROPS := {
 	"Anchor_GasMask": {"asset": "old_gas_mask"},
 	"Anchor_Extinguisher": {"asset": "korean_fire_extinguisher_01", "scale": 0.85},
 	"Anchor_Thermos": {"asset": "plastic_thermos"},
-	"Anchor_Clipboard": {"asset": "clipboard"},
 	"Anchor_Checklist": {"asset": "clipboard", "tilt": 90.0},
 	"Anchor_Logbook": {"asset": "binder_notebook", "keep": ["binder_notebook_closed"]},
 	"Anchor_Flashlight": {"asset": "signal_flashlight", "lay": true, "lift": 0.022},

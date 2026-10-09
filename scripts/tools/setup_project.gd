@@ -217,7 +217,6 @@ func _build_materials() -> void:
 	var crt := ShaderMaterial.new()
 	crt.resource_name = "M_CRT"
 	crt.shader = CRT
-	crt.set_shader_parameter("screen_size", Vector2(0.2, 0.15))
 	mats.append(crt)
 	# 海床
 	var sea := ShaderMaterial.new()

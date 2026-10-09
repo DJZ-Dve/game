@@ -10,7 +10,7 @@ if [[ -n $only && $only != (submarine|seabed) ]]; then
 fi
 root=${0:A:h:h}
 blender=${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}
-godot=${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}
+source "$root/tools/godot_bg.sh"
 
 typeset -A gens=(submarine gen_submarine.py seabed gen_seabed.py)
 for k in submarine seabed; do
@@ -22,8 +22,8 @@ done
 # 清掉导入缓存，确保导入后处理脚本重新套用材质
 rm -f "$root"/.godot/imported/(submarine_|seabed)*(N)
 "$godot" --headless --path "$root" --import 2>&1 | grep -E "ERROR|SCRIPT ERROR" || true
-# 舱内模型变了，VoxelGI 要重新烘焙（需要渲染，会闪一下游戏窗口）
+# 舱内模型变了，VoxelGI 要重新烘焙（需要渲染，在后台开一个屏幕外的窗口，见 godot_bg.sh）
 if [[ -z $only || $only == submarine ]]; then
-  "$godot" --path "$root" --resolution 640x360 -- --bake-gi 2>&1 | grep -E "ERROR|SCRIPT ERROR|saved|baked" || true
+  godot_window --path "$root" --resolution 640x360 -- --bake-gi | grep -E "ERROR|SCRIPT ERROR|saved|baked" || true
 fi
 echo "rebuild done"
