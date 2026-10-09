@@ -40,7 +40,7 @@ HATCH = (0.0, -3.35)            # 出入舱口中心 (x, y)，在生活舱顶上
 HATCH_R = 0.30
 HATCH_TOP = 1.55                # 舱盖底面高度（再往上就是艇外上层建筑的甲板）
 DOOR = (0.0, 0.05, 0.32, 0.68)  # 水密门：中心 x、中心 z、半宽、半高（门槛离地 27 厘米，过门要低头）
-DOOR_HINGE = (-(0.32 + 0.075), Y_AFT + 0.135)  # 门轴 (x, y)：在左舷一侧、门扇正面外，门往控制舱里开
+DOOR_HINGE = (-0.43, Y_AFT + 0.13)  # 门轴 (x, y)：在左舷一侧、门扇正面外，门往控制舱里开
 VP_Y = 1.0                      # 舷窗所在的 y
 LADDER_Y = -3.57
 OPEN_CAB = (-1, 2, 1, 55.0)     # 半开的柜门：舷、开间、第几扇、开的角度
@@ -330,9 +330,10 @@ def deck(K):
         abox(K["HullInner"], s * (gx + 0.03), s * (gx + 0.05), Y_AFT, y1 + 0.05, DECK - 0.36, DECK - 0.05)
     abox(K["HullInner"], -gx - 0.05, gx + 0.05, y1 + 0.03, y1 + 0.05, DECK - 0.36, DECK - 0.05)
     for x, r, key in ((-0.15, 0.05, "PipeGray"), (0.12, 0.032, "PipeBlue")):
-        sweep(K[key], [V((x, Y_AFT, DECK - 0.27)), V((x, y1, DECK - 0.27))], circle_profile(r, 20))
+        zp = DECK - 0.33 + r + 0.022   # 法兰下沿离槽底留一点
+        sweep(K[key], [V((x, Y_AFT, zp)), V((x, y1, zp))], circle_profile(r, 20))
         for y in (-1.4, -0.2, 1.0):
-            cylinder(K[key], r + 0.018, 0.022, 24, T(x, y, DECK - 0.27) @ R(-90, 'X'))
+            cylinder(K[key], r + 0.018, 0.022, 24, T(x, y, zp) @ R(-90, 'X'))
     abox(K["Bilge"], -gx - 0.03, gx + 0.03, Y_AFT, y1 + 0.03, DECK - 0.335, DECK - 0.31)
 
 
@@ -353,13 +354,13 @@ def bilge(K, anchors):
         anchors.append(empty(f"CabinLight_Bilge_{i}", K.coll, F @ T(0, 0, 0.07)))
     wz = DECK - 0.31  # 水面
     # 半沉的塑料瓶
-    Mb = T(0.1, -0.95, wz + 0.008) @ R(70, 'Z') @ R(90, 'Y') @ T(0, 0, -0.1)
+    Mb = T(0.0, -0.95, wz + 0.008) @ R(70, 'Z') @ R(90, 'Y') @ T(0, 0, -0.1)   # 漂在两根管子中间
     lathe(K["Bottle"], [(0.0, 0.0), (0.028, 0.002), (0.032, 0.012), (0.032, 0.13), (0.024, 0.16), (0.012, 0.175),
                         (0.012, 0.192), (0.0, 0.192)], 24, Mb)
     cylinder(K["BtnRed"], 0.0135, 0.014, 16, Mb @ T(0, 0, 0.19))
     # 烟头
     rng = random.Random(5)
-    for x, y in ((-0.12, -0.6), (0.05, -0.55), (0.18, 0.2), (-0.2, 0.75), (0.0, -1.6), (-0.05, 1.1)):
+    for x, y in ((-0.03, -0.6), (0.05, -0.55), (0.03, 0.2), (-0.27, 0.75), (0.0, -1.6), (-0.05, 1.1)):
         M = T(x, y, wz + 0.002) @ R(rng.uniform(0, 180), 'Z') @ R(90, 'Y')
         cylinder(K["Silk"], 0.0042, 0.022, 10, M)
         cylinder(K["CableOrange"], 0.0044, 0.012, 10, M @ T(0, 0, 0.022))
@@ -551,14 +552,17 @@ def bay_hydraulics(K):
     cylinder(K["Brass"], 0.025, 0.014, 6, Mv)
     valve_wheel(K, Mv @ T(0, 0, 0.006), 0.05, "BtnRed")
     silk(K, F, 0.11, -0.2, "泄压阀", 0.0085)
-    # 两根液压软管从面板下部穿出、弯进桌面下
+    # 两根液压软管从面板下部的接头出来，弯下去从桌面上的橡胶护圈钻进柜子里
     for k, x in enumerate((-0.15, -0.09)):
         connector(K, F, x, -0.2, r=0.011, plug="Steel")
     for k, x in enumerate((-0.15, -0.09)):
         s0 = F @ V((x, -0.2, 0.035))
         n = (F.to_3x3() @ V((0, 0, 1))).normalized()
-        e = V((1.12, s0.y + 0.05 * k, DESK_Z - 0.01))
-        Cab.add([s0, s0 + n * 0.06, (s0 + e) / 2 + n * 0.05 + V((0, 0, -0.08)), e], 0.008, "CableBlack")
+        e = V((1.1, s0.y + 0.05 * k, DESK_Z))
+        Cab.add([s0, s0 + n * 0.06, (s0 + e) / 2 + n * 0.05 + V((0, 0, -0.06)), e + V((0, 0, 0.04)),
+                 e - V((0, 0, 0.03))], 0.008, "CableBlack")
+        lathe(K["Rubber"], [(0.009, 0.0), (0.017, 0.0), (0.017, 0.004), (0.013, 0.007), (0.009, 0.007)], 20,
+              T(e.x, e.y, DESK_Z))
 
 
 def bay_env(K, anchors):
@@ -744,22 +748,70 @@ def hatch(K):
 
 
 # ============================================================================ 中间隔壁和水密门
-DOOR_DOGS = (90, 32, 0, -32, -90)  # 门扇上压紧把手的位置（角度，0° 朝右舷、90° 朝上；门轴那一侧靠铰链压紧）
+# 快速水密门：中间一个手轮，经过减速箱带动曲柄盘，六根连杆同时拨动门扇四周的六个压紧把手（门轴那一侧在两个
+# 铰链中间也有一个）。把手压在门框外圈焊的楔块上，把门扇连同密封胶条压到门框的刀口上。
+DOOR_DOGS = (90, 25, 0, -25, -90, 180)  # 压紧把手的位置（门洞椭圆的参数角，0° 朝右舷、90° 朝上）
+DOOR_SPINDLE_K = -0.02  # 把手转轴离门洞边（负数 = 在门洞里面一点，背面的螺母从门洞里看得见）
+DOOR_CRANK_B = 0.06     # 曲柄盘上连杆销的半径
+DOOR_ARM_A = 0.055      # 把手曲臂长
+DOOR_LEAF_K = 0.07      # 门扇外沿离门洞边
+DOOR_FRAME_K = 0.085    # 门框外圈离门洞边
+DOOR_DOUBLER_K = 0.13   # 门框外面焊的补强板外沿离门洞边
+DOOR_HINGE_Z = 0.35     # 两个铰链离门中心的高度
+
+
+def door_ring(t_deg, k):
+    """门洞椭圆沿法线往外偏 k 的那一圈上、参数角 t 处的点（世界 x、z，y=0）和外法线。"""
+    dx, dz, da, db = DOOR
+    t = math.radians(t_deg)
+    n = V((db * math.cos(t), 0, da * math.sin(t))).normalized()
+    return V((dx + da * math.cos(t), 0, dz + db * math.sin(t))) + n * k, n
+
+
+def door_loop(k, y, n=96):
+    return [door_ring(360 * i / n, k)[0] + V((0, y, 0)) for i in range(n)]
+
+
+def door_dog_layout():
+    """每个压紧把手的转轴 S、把手朝外的方向、曲柄盘上的销 A0、曲臂上的销 B0（门平面里 (x, z)，关门状态）。
+    连杆基本上沿「门中心→转轴」方向，两头的销都偏到同一侧（逆时针转 90°），曲柄盘逆时针一转，
+    所有连杆一起往里拉，把手跟着逆时针转开、离开楔块。"""
+    dx, dz = DOOR[0], DOOR[1]
+    C = V((dx, 0, dz))
+    out = []
+    for deg in DOOR_DOGS:
+        S, n = door_ring(deg, DOOR_SPINDLE_K)
+        d = (S - C).normalized()
+        p = V((-d.z, 0, d.x))
+        out.append((S, n, C + p * DOOR_CRANK_B, S + p * DOOR_ARM_A))
+    return out
+
+
+def plate_xz(bm, pts, y0, h):
+    """门平面里的板：pts 是 (x, z) 多边形，从 y0 往 +Y 拉伸 h（h 为负就往 -Y）。"""
+    if h < 0:
+        y0, h = y0 + h, -h
+    extrude_profile(bm, [(x, -z) for x, z in pts], T(0, y0, 0) @ R(-90, 'X'), h)
 
 
 def bulkhead(K, anchors):
-    """控制舱和生活舱之间的隔壁（两面都看得见）。门框、压紧块、铰链座焊在隔壁上；
-    门扇和手轮单独导出（Door_Leaf_*、Door_Wheel_*），Godot 里绕 Door_Hinge 转（见 watertight_door.gd）。"""
-    import bmesh
+    """控制舱和生活舱之间的隔壁（两面都看得见）。
+    - 门洞四周一圈厚门框穿过隔壁，控制舱一面有一道刀口；门框外面两面各焊一圈补强板，补强板上焊着楔块和铰链座
+    - 竖向加强筋只在生活舱一面（门两边各一根，到桥架下面削斜收头）；管子、电缆桥架从门上方穿过去
+      （套管和穿舱框在 overhead 里做，见 pipe_sleeve、cable_transit）
+    - 门扇往控制舱一侧开，门轴在左舷。门扇、手轮、曲柄盘、压紧把手、连杆都单独导出（Door_*），
+      Godot 里由 watertight_door.gd 带着转：手轮转一圈多 → 曲柄盘转 50° → 连杆拉着六个把手一起转开。"""
     dx, dz, da, db = DOOR
     y = Y_AFT
     t_plate = 0.012
+    ya = y - t_plate
 
     def inside_door(x, z, k=1.0):
         return ((x - dx) / (da * k)) ** 2 + ((z - dz) / (db * k)) ** 2 < 1.0
 
     def plate(bm, yy, back=False):
         """隔壁板（单面），门洞和外圈的锯齿由门框、角焊盖住（门洞挖得比门框内沿大一圈，锯齿才藏得住）。"""
+        import bmesh
         step = 0.03
         nx = int(2 * R_IN / step) + 3
         nz = int((R_IN - DECK) / step) + 3
@@ -779,157 +831,91 @@ def bulkhead(K, anchors):
         if back:
             bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
     K.separate("Int_Bulkhead", "HullInner", lambda bm: plate(bm, y), recalc=False)
-    K.separate("Int_BulkheadAft", "HullInner", lambda bm: plate(bm, y - t_plate, back=True), recalc=False)
+    K.separate("Int_BulkheadAft", "HullInner", lambda bm: plate(bm, ya, back=True), recalc=False)
     bm = K["HullInner"]
     # 隔壁和壳体的连接处一圈角焊（两面）
     ring_sweep(bm, [(R_IN + 0.01, 0.0), (R_IN - 0.035, 0.0), (R_IN + 0.01, 0.045)][::-1], y, -140, 140, 180)
-    ring_sweep(bm, [(R_IN + 0.01, 0.0), (R_IN - 0.035, 0.0), (R_IN + 0.01, -0.045)], y - t_plate, -140, 140, 180)
-    # 加强筋：两面各一横两竖
-    zt = 0.95
-    xt = math.sqrt(R_IN ** 2 - zt ** 2) + 0.01
-    for sgn, y0 in ((1, y), (-1, y - t_plate)):
-        rbox(bm, 2 * xt, 0.11, 0.02, T(0, y0 + sgn * 0.055, zt), r=0.0, seg=1)
-        rbox(bm, 2 * xt, 0.02, 0.08, T(0, y0 + sgn * 0.11, zt), r=0.004, seg=2)
-        for xs in (-0.62, 0.62):
-            rbox(bm, 0.02, 0.11, zt - DECK, T(xs, y0 + sgn * 0.055, (zt + DECK) / 2))
-            rbox(bm, 0.08, 0.02, zt - DECK - 0.01, T(xs, y0 + sgn * 0.11, (zt + DECK) / 2 - 0.005), r=0.004, seg=2)
+    ring_sweep(bm, [(R_IN + 0.01, 0.0), (R_IN - 0.035, 0.0), (R_IN + 0.01, -0.045)], ya, -140, 140, 180)
+    # 生活舱一面的竖向加强筋（T 型材）：腹板上端削斜，翼板比腹板短一截
+    for xs in (-0.66, 0.66):
+        web = [(0.0, DECK), (-0.08, DECK), (-0.08, 0.64), (-0.025, 0.72), (0.0, 0.72)]
+        extrude_profile(bm, web, frame(V((xs - 0.006, ya, 0)), V((1, 0, 0))), 0.012)
+        rbox(bm, 0.06, 0.012, 0.64 - DECK, T(xs, ya - 0.074, (0.64 + DECK) / 2), r=0.003, seg=1)
+        for sx in (-1, 1):  # 腹板两边的角焊
+            sweep(bm, [V((xs + sx * 0.006, ya, DECK)), V((xs + sx * 0.006, ya, 0.7))],
+                  [(0, 0), (sx * 0.007, 0), (0, -0.007)], up_hint=V((0, 1, 0)))
 
-    # 门框（围板）：穿过隔壁，两面各凸出一截
-    path = [V((dx + math.cos(t) * (da + 0.045), y + 0.005, dz + math.sin(t) * (db + 0.045)))
-            for t in [2 * math.pi * k / 96 for k in range(96)]]
-    sweep(K["HullInner"], path, rect_profile(0.09, 0.13, 0.012), closed=True, up_hint=V((0, 1, 0)))
-    # 门框端面一圈螺栓（控制舱一面在门扇外沿以外，生活舱一面整圈都露着）
-    for face_y, sgn, rr in ((y + 0.07, 1, 0.082), (y - 0.06, -1, 0.06)):
-        for k in range(36):
-            t = 2 * math.pi * (k + 0.5) / 36
-            px, pz = dx + math.cos(t) * (da + rr), dz + math.sin(t) * (db + rr)
-            if sgn > 0:
-                if any(abs(math.remainder(t - math.radians(dg), 2 * math.pi)) < 0.12 for dg in DOOR_DOGS):
-                    continue
-                if px < dx - 0.25 and min(abs(pz - dz - 0.35), abs(pz - dz + 0.35)) < 0.13:
-                    continue  # 铰链座
-            M = frame(V((px, face_y, pz)), V((0, sgn, 0))) @ R(k * 23, 'Z')
-            cylinder(K["Steel"], 0.0075, 0.007, 6, M)
-            cylinder(K["Steel"], 0.0035, 0.011, 8, M)
-    # 门两边的扶手（低头钻门时抓的），两面都有
-    for yy, sgn in ((y, 1), (y - t_plate, -1)):
-        for x in (-0.6, 0.6):
-            P = frame(V((x, yy, 0.18)), V((0, sgn, 0)))
-            handle(K, P, 0, 0, 0.36, axis='Y', key="Steel", standoff=0.055)
-            for zz in (-0.18, 0.18):  # 底座焊在隔壁上：一块方垫板
-                rbox(K["Steel"], 0.04, 0.04, 0.006, P @ T(0, zz, 0.003), r=0.002, seg=1)
-    # 压紧块（门扇上的把手压在这上面）
+    # ---- 门框：一圈厚扁钢穿过隔壁（控制舱一面凸出 5 厘米，生活舱一面 6 厘米），里沿倒圆；
+    # 控制舱一面有一道刀口，关门时门扇背面的胶条压在上面
+    up = V((0, 1, 0))
+    prof = [(0.008, -0.07), (DOOR_FRAME_K, -0.07), (DOOR_FRAME_K, 0.05), (0.042, 0.05), (0.042, 0.06),
+            (0.039, 0.064), (0.033, 0.064), (0.03, 0.06), (0.03, 0.05), (0.008, 0.05), (0.0, 0.042),
+            (0.0, -0.062)]
+    sweep(bm, door_loop(0.0, y), prof, closed=True, up_hint=up)
+    for yy, sg in ((y, 1), (ya, -1)):
+        k0, k1 = DOOR_FRAME_K, DOOR_DOUBLER_K
+        for pr in ([(k0, 0.0), (k1, 0.0), (k1, 0.006), (k1 - 0.004, 0.01), (k0, 0.01)],   # 补强板
+                   [(k0, 0.0098), (k0 + 0.008, 0.0098), (k0, 0.018)],                    # 门框和补强板之间的角焊
+                   [(k1 - 0.001, 0.0), (k1 + 0.006, 0.0), (k1 - 0.001, 0.007)]):          # 补强板外沿的角焊
+            sweep(bm, door_loop(0.0, yy), [(u, sg * v) for u, v in pr], closed=True, up_hint=up)
+    # 楔块：焊在门框外圈和补强板上，顶面一头有个斜坡（把手从那边转回来压上去）
     for deg in DOOR_DOGS:
-        t = math.radians(deg)
-        px, pz = dx + math.cos(t) * (da + 0.105), dz + math.sin(t) * (db + 0.105)
-        rbox(K["Steel"], 0.05, 0.075, 0.035, T(px, y + 0.105, pz) @ R(-deg, 'Y'), r=0.004, seg=1)
-    # 铰链座：门轴竖着，上下两个铰链
+        q, n = door_ring(deg, DOOR_FRAME_K - 0.004)
+        F = frame(q + V((0, y, 0)), n, up)
+        extrude_profile(K["Steel"], [(-0.026, 0.006), (0.026, 0.006), (0.026, 0.124), (-0.006, 0.124),
+                                     (-0.026, 0.108)], F, 0.05)
+    # 铰链座：门轴竖着，上下两个。每个是一块底板焊在补强板上，两块耳板夹住门扇上的铰链臂，一根销子穿过去
     hx, hy = DOOR_HINGE
-    for zz in (-0.35, 0.35):
-        for dz_ in (-0.105, 0.035):
-            cylinder(K["Steel"], 0.024, 0.07, 16, T(hx, hy, dz + zz + dz_))
-        rbox(K["Steel"], 0.05, hy - y, 0.15, T(hx - 0.02, (y + hy) / 2, dz + zz), r=0.004, seg=1)
-        cylinder(K["Steel"], 0.009, 0.23, 12, T(hx, hy, dz + zz - 0.115))
-    anchors.append(empty("Door_Hinge", K.coll, anchor_frame(V((hx, hy, dz)), V((0, 1, 0)))))
+    lug = ([(hx - 0.045, y + 0.022), (hx + 0.04, y + 0.022), (hx + 0.036, hy - 0.012)]
+           + [(hx + math.cos(math.radians(a)) * 0.036, hy + math.sin(math.radians(a)) * 0.036)
+              for a in range(0, 181, 20)] + [(hx - 0.045, hy - 0.01)])
+    for zz in (dz - DOOR_HINGE_Z, dz + DOOR_HINGE_Z):
+        rbox(K["Steel"], 0.1, 0.022, 0.16, T(hx - 0.005, y + 0.011, zz), r=0.003, seg=1)
+        for zl in (zz + 0.037, zz - 0.053):
+            extrude_profile(K["Steel"], lug, T(0, 0, zl), 0.016)
+        cylinder(K["Steel"], 0.012, 0.13, 16, T(hx, hy, zz - 0.068))
+        lathe(K["Steel"], [(0.0, 0.0), (0.02, 0.0), (0.02, 0.005), (0.015, 0.011), (0.0, 0.012)], 20,
+              T(hx, hy, zz + 0.053))
+        cylinder(K["Steel"], 0.019, 0.011, 6, T(hx, hy, zz - 0.064))
+        sweep(K["Steel"], catmull([V((hx - 0.016, hy, zz - 0.07)), V((hx, hy, zz - 0.07)),
+                                   V((hx + 0.016, hy, zz - 0.07)), V((hx + 0.022, hy + 0.006, zz - 0.074))], 3),
+              circle_profile(0.0018, 6))   # 开口销
+        for sx in (-1, 1):
+            cylinder(K["Steel"], 0.007, 0.006, 6, T(hx - 0.005 + sx * 0.035, y + 0.022, zz) @ R(-90, 'X'))
+    anchors.append(empty("Door_Hinge", K.coll, anchor_frame(V((hx, hy, dz)), up)))
+    # 门两边的扶手（低头钻门时抓的），两面都有
+    for yy, sg in ((y, 1), (ya, -1)):
+        for x in (-0.52, 0.52):
+            P = frame(V((x, yy, 0.18)), V((0, sg, 0)))
+            handle(K, P, 0, 0, 0.36, axis='Y', key="Steel", standoff=0.055)
+            for zz in (-0.18, 0.18):
+                rbox(K["Steel"], 0.04, 0.04, 0.006, P @ T(0, zz, 0.003), r=0.002, seg=1)
 
-    # ---- 门扇（Door_Leaf_*）：椭圆厚板 + 两面各两道加强 + 压紧把手 + 铰链臂；手轮（Door_Wheel_*）两面各一个
-    D = Parts(K.coll, K.M, "Door_Leaf")
-    W = Parts(K.coll, K.M, "Door_Wheel")
-    door_y = y + 0.07
-    Md = T(dx, door_y, dz) @ R(-90, 'X')
-    cylinder(D["Console"], 1.0, 0.05, 64, Md @ S(da + 0.065, db + 0.065, 1))
-    lathe(D["Rubber"], [(1.0, 0.0), (1.0, 0.004)], 64, Md @ S(da + 0.066, db + 0.066, 1))
-    torus(D["Rubber"], 1.0, 0.006, 64, 6, Md @ S(da + 0.03, db + 0.03, 1) @ T(0, 0, -0.002))
-    for face_y, sgn in ((door_y + 0.05, 1), (door_y, -1)):
-        for zz in (-0.25, 0.25):
-            w = 2 * da * math.sqrt(max(0.0, 1 - (zz / db) ** 2))
-            rbox(D["EquipGray"], w, 0.03, 0.04, T(dx, face_y + sgn * 0.015, dz + zz), r=0.006, seg=2)
-    for deg in DOOR_DOGS:
-        t = math.radians(deg)
-        px, pz = dx + math.cos(t) * (da + 0.03), dz + math.sin(t) * (db + 0.03)
-        Mp = T(px, door_y + 0.05, pz) @ R(-90, 'X')
-        cylinder(D["Steel"], 0.018, 0.03, 16, Mp)
-        Ml = Mp @ T(0, 0, 0.035) @ R(-deg, 'Z')
-        rbox(D["Steel"], 0.12, 0.024, 0.018, Ml @ T(0.045, 0, 0), r=0.006, seg=2)
-        uvsphere(D["Steel"], 0.014, 12, 8, Ml @ T(0.1, 0, 0))
-    # 铰链臂：从门轴伸到门扇正面
-    for zz in (-0.35, 0.35):
-        ex = dx - (da + 0.065) * math.sqrt(max(0.0, 1 - (zz / (db + 0.065)) ** 2))
-        rbox(D["Steel"], ex - hx + 0.08, 0.03, 0.06, T((hx + ex + 0.08) / 2, hy, dz + zz), r=0.004, seg=1)
-        cylinder(D["Steel"], 0.026, 0.066, 16, T(hx, hy, dz + zz - 0.033))
-    # 门扇两面刷的字
-    for yy, n in ((door_y + 0.0502, V((0, 1, 0))), (door_y - 0.0002, V((0, -1, 0)))):
-        text_mesh("随手关门", D.uid("Door_Leaf_Txt"), K.coll, K.M["InkRed"], frame(V((dx, yy, dz - 0.45)), n),
-                  size=0.04, extrude=0.0, font_path=FONT_SERIF, resolution=2)
-        # 门号：喷漆模板字（模板字的断笔用一道细缝表示不出来，就用粗衬线字）
-        text_mesh("2", D.uid("Door_Leaf_Txt"), K.coll, K.M["PaintText"], frame(V((dx, yy, dz + 0.5)), n),
-                  size=0.12, extrude=0.0, font_path=FONT_SERIF, resolution=2)
-    # 门扇四周一圈加强板（压在门板上的扁钢圈）+ 一圈螺栓，两面都有
-    ra, rb = da + 0.065 - 0.028, db + 0.065 - 0.028
-    ring = [V((dx + math.cos(t) * ra, 0, dz + math.sin(t) * rb)) for t in [2 * math.pi * k / 96 for k in range(96)]]
-    for face_y, sgn in ((door_y + 0.05, 1), (door_y, -1)):
-        sweep(D["EquipGray"], [p + V((0, face_y + sgn * 0.003, 0)) for p in ring], rect_profile(0.03, 0.006, 0.001),
-              closed=True, up_hint=V((0, 1, 0)))
-        for k in range(30):
-            t = 2 * math.pi * (k + 0.5) / 30
-            # 压紧把手的转轴在这一圈上，让开
-            if sgn > 0 and any(abs(math.remainder(t - math.radians(dg), 2 * math.pi)) < 0.09 for dg in DOOR_DOGS):
-                continue
-            p = V((dx + math.cos(t) * ra, face_y + sgn * 0.006, dz + math.sin(t) * rb))
-            cylinder(D["Steel"], 0.0068, 0.005, 6, frame(p, V((0, sgn, 0))) @ R(k * 17, 'Z'))
-    # 控制舱一面：右上角一块黄铜检验铭牌（四颗铆钉）
-    Pb = frame(V((dx + 0.17, door_y + 0.0505, dz + 0.35)), V((0, 1, 0)))
-    rbox(D["Brass"], 0.105, 0.062, 0.0015, Pb @ T(0, 0, 0.00075), r=0.001, seg=1)
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            lathe(D["Brass"], [(0.0022, 0.0), (0.0018, 0.0012), (0.0, 0.0016)], 10,
-                  Pb @ T(sx * 0.045, sy * 0.024, 0.0015))
-    text_mesh("水密门  2 号\n试验压力 0.6 MPa\n1987 年 6 月  合格", D.uid("Door_Leaf_Txt"), K.coll, K.M["Ink"],
-              Pb @ T(0, 0, 0.0017), size=0.03, extrude=0.0, font_path=FONT_SERIF, resolution=1)
-    # 右边那个压紧把手上拴着一张检修牌：铁丝圈、一截细绳、马粪纸卡片，手写字
-    Mp = T(dx + da + 0.03, door_y + 0.05, dz) @ R(-90, 'X')
-    hook = Mp @ V((0.065, 0.0, 0.035))
-    torus(D["Steel"], 0.016, 0.0011, 16, 4, frame(hook, V((1, 0, 0))))
-    knot = hook + V((0.0, 0.004, -0.03))
-    tag_top = hook + V((0.004, 0.012, -0.075))
-    sweep(D["Cardboard"], catmull([hook + V((0, 0, -0.016)), knot, tag_top], 4), circle_profile(0.0008, 4))
-    Mt = frame(tag_top + V((0, 0.001, -0.05)), V((0.12, 1, 0.06)).normalized()) @ R(-5, 'Z')
-    rbox(D["MaskTape"], 0.064, 0.1, 0.0008, Mt, r=0.0, seg=1)
-    torus(D["Steel"], 0.0035, 0.0009, 12, 4, Mt @ T(0, 0.041, 0.0004))
-    text_mesh("检修\n密封圈渗水\n待换\n—林", D.uid("Door_Leaf_Txt"), K.coll, K.M["Marker"],
-              Mt @ T(0, -0.006, 0.0006), size=0.064, extrude=0.0, font_path=FONT_HAND, resolution=1)
-    # 手轮：阀杆穿过门扇，两面各一个，一起转
-    valve_wheel(W, T(dx, door_y + 0.05, dz) @ R(-90, 'X'), 0.13, "BtnRed", 4)
-    valve_wheel(W, T(dx, door_y, dz) @ R(90, 'X'), 0.11, "BtnRed", 4)
-    anchors.append(empty("Door_WheelAxis", K.coll, anchor_frame(V((dx, door_y + 0.025, dz)), V((0, 1, 0)))))
-    D.flush()
-    W.flush()
+    door_leaf(K, anchors)
 
     # ---- 控制舱一侧：门上方的铭牌和刷漆字、灯、氧气瓶、接线盒
-    P = frame(V((dx, y + 0.1215, zt + 0.02)), V((0, 1, 0)))  # 铭牌钉在加强筋的翼板上
+    P = frame(V((dx, y, dz + db + DOOR_DOUBLER_K + 0.075)), up)
     label_plate(K, P, 0, 0, "2号水密门  通生活舱", 0.014)
-    K.text("水密门 随手关闭", frame(V((dx, y + 0.001, DECK + 0.1)), V((0, 1, 0))), 0.035, key="InkRed")
-    K.text("当心碰头", frame(V((0.0, y + 0.1205, zt - 0.022)), V((0, 1, 0))), 0.026, key="Ink")
+    K.text("当心碰头", frame(V((dx, y, dz + db + DOOR_DOUBLER_K + 0.115)), up), 0.026, key="Ink")
+    K.text("水密门 随手关闭", frame(V((dx, y + 0.001, DECK + 0.1)), up), 0.035, key="InkRed")
     ceiling_lamp(K, anchors, T(0.85, y, 0.42) @ R(-90, 'X'), "CabinLight_Aft")
-    # 两个氧气瓶 + 绑带 + 减压阀和压力表
+    # 两个氧气瓶 + 绑带 + 减压阀和压力表；出来一根紫铜管顺着隔壁爬上去，沿舱顶往前接到生命支持柜
     for i, x in enumerate((0.76, 0.92)):
         base = V((x, y + 0.1, DECK))
         lathe(K["O2"], [(0.0, 0.0), (0.065, 0.0), (0.075, 0.015), (0.075, 0.62), (0.065, 0.67), (0.03, 0.7),
                         (0.022, 0.72), (0.0, 0.72)], 48, T(*base))
         cylinder(K["Brass"], 0.018, 0.06, 16, T(*base) @ T(0, 0, 0.72))
-        K.text("氧", frame(base + V((0, 0.076, 0.4)), V((0, 1, 0))), 0.07, key="Ink")
+        K.text("氧", frame(base + V((0, 0.076, 0.4)), up), 0.07, key="Ink")
         for z in (0.2, 0.55):
             torus(K["Rail"], 0.078, 0.006, 48, 6, T(x, y + 0.1, DECK + z) @ S(1, 1, 3))
     rbox(K["Rail"], 0.3, 0.02, 0.6, T(0.84, y + 0.012, DECK + 0.35), r=0.003, seg=1)
     Mr = T(0.76, y + 0.1, DECK + 0.78)
     rbox(K["Brass"], 0.05, 0.04, 0.05, Mr @ T(0, 0, 0.04), r=0.004, seg=2)
-    Pg = frame(V((0.76, y + 0.125, DECK + 0.82)), V((0, 1, 0)))
+    Pg = frame(V((0.76, y + 0.125, DECK + 0.82)), up)
     gauge_round(K, Pg, 0, 0, 0.026, "O2Tank", hi=25, label="MPa", major=5, flange=False, red_from=None)
-    Cab.add([V((0.785, y + 0.1, DECK + 0.82)), V((0.84, y + 0.15, DECK + 0.9)), V((1.0, y + 0.3, 0.3)),
-             V((1.34, -2.0, 0.2))], 0.007, "CableBlack")
-    # 接线盒
-    P = frame(V((-1.0, y, 0.35)), V((0, 1, 0)))
-    junction_box(K, P)
+    o2_line(K)
+    # 接线盒：线从盒顶出来，顺着隔壁往上，并进左舷的电缆桥架（见 overhead）
+    junction_box(K, frame(V((-0.92, y, 0.35)), up))
     anchors.append(empty("Anchor_Extinguisher", K.coll, anchor_frame(V((-0.9, -1.98, DECK)), V((-1, 0, 0)))))
     # 防毒面具挂在后部左舷壳体的钩子上
     hook = V((-math.sqrt(R_IN ** 2 - 0.55 ** 2) + 0.005, -2.3, 0.55))
@@ -941,14 +927,180 @@ def bulkhead(K, anchors):
     anchors.append(empty("Anchor_Medical", K.coll, anchor_frame(V((0.72, -2.08, DECK)), V((1, 0.1, 0)))))
 
     # ---- 生活舱一侧：门上方的铭牌、刷漆字
-    ya = y - t_plate
-    P = frame(V((dx, ya - 0.1215, zt + 0.02)), V((0, -1, 0)))
+    P = frame(V((dx, ya, dz + db + DOOR_DOUBLER_K + 0.075)), -up)
     label_plate(K, P, 0, 0, "2号水密门  通控制舱", 0.014)
-    K.text("当心碰头", frame(V((0.0, ya - 0.1205, zt - 0.022)), V((0, -1, 0))), 0.026, key="InkRed")
-    K.text("水密门 随手关闭", frame(V((dx, ya - 0.001, DECK + 0.1)), V((0, -1, 0))), 0.035, key="InkRed")
+    K.text("当心碰头", frame(V((dx, ya, dz + db + DOOR_DOUBLER_K + 0.115)), -up), 0.026, key="InkRed")
+    K.text("水密门 随手关闭", frame(V((dx, ya - 0.001, DECK + 0.1)), -up), 0.035, key="InkRed")
+
+
+def door_leaf(K, anchors):
+    """门扇和上面的机构。
+    门扇：12 毫米钢板，正面（控制舱）一圈包边扁钢，背面一圈胶条槽（胶条压在门框刀口上）和两道横加强筋。
+    正面中间是减速箱，上面的曲柄盘（Door_Crank_*）带六根连杆（Door_Rod_k），拉动四周的压紧把手（Door_Dog{k}_*）；
+    手轮两面各一个（Door_Wheel_*），一根轴穿过门扇。"""
+    dx, dz, da, db = DOOR
+    y = Y_AFT
+    hx, hy = DOOR_HINGE
+    yb, yf = y + 0.085, y + 0.097      # 门板背面、正面
+    up = V((0, 1, 0))
+    D = Parts(K.coll, K.M, "Door_Leaf")
+    W = Parts(K.coll, K.M, "Door_Wheel")
+    Cr = Parts(K.coll, K.M, "Door_Crank")
+    plate_xz(D["Console"], [(p.x, p.z) for p in door_loop(DOOR_LEAF_K, 0.0)], yb, yf - yb)
+    ring0 = door_loop(0.0, y)
+    # 正面包边扁钢；背面胶条槽（两道槽壁夹着胶条，胶条面比槽壁高出一毫米）
+    sweep(D["Console"], ring0, [(0.052, 0.0965), (DOOR_LEAF_K, 0.0965), (DOOR_LEAF_K, 0.119), (0.067, 0.122),
+                                (0.052, 0.122)], closed=True, up_hint=up)
+    for k0, k1 in ((0.018, 0.023), (0.049, 0.054)):
+        sweep(D["Steel"], ring0, [(k0, 0.066), (k1, 0.066), (k1, 0.0855), (k0, 0.0855)], closed=True, up_hint=up)
+    sweep(D["Rubber"], ring0, [(0.023, 0.065), (0.049, 0.065), (0.049, 0.0855), (0.023, 0.0855)], closed=True,
+          up_hint=up)
+    # 背面两道横加强筋（扁钢立着焊，两头削斜），都在门洞里面，开关门时不碰门框
+    for zz in (-0.3, 0.3):
+        L = da * math.sqrt(1 - (zz / db) ** 2) - 0.05
+        extrude_profile(D["Console"], [(-L, yb + 0.0005), (L, yb + 0.0005), (L - 0.025, yb - 0.045),
+                                       (-L + 0.025, yb - 0.045)], T(0, 0, dz + zz - 0.006), 0.012)
+    # 背面中间：手轮轴的填料函（压盖 + 两颗螺栓）
+    lathe(D["Console"], [(0.0, yb), (0.04, yb), (0.04, yb - 0.012), (0.032, yb - 0.02), (0.0, yb - 0.02)], 32,
+          T(dx, 0, dz) @ R(-90, 'X'))
+    Mg = T(dx, yb - 0.02, dz)
+    rbox(D["Steel"], 0.1, 0.008, 0.03, Mg @ T(0, -0.004, 0), r=0.004, seg=2)
+    for sx in (-1, 1):
+        cylinder(D["Steel"], 0.0065, 0.012, 6, Mg @ T(sx * 0.04, -0.008, 0) @ R(90, 'X'))
+    # 正面中间：减速箱（铸铁圆壳，盖子一圈螺栓）
+    Mb = T(dx, yf, dz) @ R(-90, 'X')
+    lathe(D["Console"], [(0.0, 0.0), (0.076, 0.0), (0.076, 0.03), (0.07, 0.036), (0.07, 0.04), (0.0, 0.04)], 40, Mb)
+    for i in range(8):
+        a = 2 * math.pi * (i + 0.5) / 8
+        cylinder(D["Steel"], 0.0055, 0.004, 6, Mb @ T(math.cos(a) * 0.063, math.sin(a) * 0.063, 0.04))
+    # 铰链臂：一头套在销子上，一头用四颗螺栓压在门扇正面的垫块上
+    for zz in (dz - DOOR_HINGE_Z, dz + DOOR_HINGE_Z):
+        cylinder(D["Steel"], 0.03, 0.068, 24, T(hx, hy, zz - 0.034))
+        rbox(D["Steel"], -0.22 - hx - 0.02, 0.026, 0.064, T((hx + 0.02 - 0.22) / 2, hy + 0.007, zz), r=0.004, seg=2)
+        rbox(D["Steel"], 0.11, 0.027, 0.08, T(-0.27, yf + 0.0135, zz), r=0.003, seg=1)
+        for bx in (-0.3, -0.24):
+            for bz in (-0.022, 0.022):
+                cylinder(D["Steel"], 0.007, 0.006, 6, T(bx, hy + 0.02, zz + bz) @ R(-90, 'X'))
+    # 压紧把手的轴套（门扇的一部分）；把手、曲臂、轴（Door_Dog{k}_*）绕轴套转
+    layout = door_dog_layout()
+    for S, n, A0, B0 in layout:
+        lathe(D["Console"], [(0.0, 0.0), (0.021, 0.0), (0.021, 0.024), (0.017, 0.027), (0.0, 0.027)], 24,
+              T(S.x, yf - 0.001, S.z) @ R(-90, 'X'))
+        lathe(D["Console"], [(0.0, 0.0), (0.019, 0.0), (0.019, 0.008), (0.0, 0.008)], 24,
+              T(S.x, yb, S.z) @ R(90, 'X'))
+    yc = y + 0.1465                    # 曲柄盘中面
+    # 连杆中面：相邻两根错开一层，转动时从彼此上面交叉过去
+    yrs = [y + 0.158 + (0.0125 if k % 2 else 0.0) for k in range(len(layout))]
+    for k, (S, n, A0, B0) in enumerate(layout):
+        yr = yrs[k]
+        G = Parts(K.coll, K.M, f"Door_Dog{k}")
+        pn = V((-n.z, 0, n.x))
+
+        def P2(u, v, S=S, n=n, pn=pn):
+            q = S + n * u + pn * v
+            return q.x, q.z
+        # 把手：锻钢扁条，底面贴着楔块顶面滑上去
+        plate_xz(G["Steel"], [P2(0.0, -0.015), P2(0.12, -0.011), P2(0.15, -0.007), P2(0.156, 0.0),
+                              P2(0.15, 0.007), P2(0.12, 0.011), P2(0.0, 0.015)], y + 0.1255, 0.0155)
+        cylinder(G["Steel"], 0.02, 0.0155, 24, T(S.x, y + 0.1255, S.z) @ R(-90, 'X'))
+        # 轴：穿过门扇，背面一颗螺母
+        cylinder(G["Steel"], 0.011, y + 0.147 - (yb - 0.02), 16, T(S.x, yb - 0.02, S.z) @ R(-90, 'X'))
+        cylinder(G["Steel"], 0.014, 0.009, 6, T(S.x, yb - 0.008, S.z) @ R(90, 'X'))
+        # 曲臂 + 销子，轴顶一颗螺母
+        d = (B0 - S).normalized()
+        dn = V((-d.z, 0, d.x))
+        arm = [S + dn * 0.016, B0 + dn * 0.011, B0 - dn * 0.011, S - dn * 0.016]
+        plate_xz(G["Steel"], [(q.x, q.z) for q in arm], y + 0.1425, 0.008)
+        for q, r_ in ((S, 0.016), (B0, 0.011)):
+            cylinder(G["Steel"], r_, 0.008, 20, T(q.x, y + 0.1425, q.z) @ R(-90, 'X'))
+        cylinder(G["Steel"], 0.0062, yr + 0.0105 - (y + 0.15), 12, T(B0.x, y + 0.15, B0.z) @ R(-90, 'X'))
+        cylinder(G["Steel"], 0.0085, 0.003, 12, T(B0.x, yr + 0.0075, B0.z) @ R(-90, 'X'))
+        cylinder(G["Steel"], 0.014, 0.008, 6, T(S.x, y + 0.1505, S.z) @ R(-90, 'X'))
+        G.flush()
+        anchors.append(empty(f"Door_DogAxis_{k}", K.coll, anchor_frame(S + V((0, y + 0.13, 0)), up)))
+        anchors.append(empty(f"Door_DogPin_{k}", K.coll, anchor_frame(B0 + V((0, yr, 0)), up)))
+        # 连杆：两头叉耳套在销子上，中间一个花篮螺母（调长度用）
+        u = (B0 - A0)
+        L = u.length
+        u.normalize()
+        z_ = u.cross(up)
+        Mrod = Matrix(((u.x, 0, z_.x, A0.x), (u.y, 1, z_.y, yr), (u.z, 0, z_.z, A0.z), (0, 0, 0, 1)))
+
+        def rod(bm, L=L):
+            cylinder(bm, 0.0052, L - 0.02, 12, T(0.01, 0, 0) @ R(90, 'Y'))
+            for x in (0.0, L):
+                lathe(bm, [(0.0, -0.0062), (0.0115, -0.0062), (0.0125, -0.005), (0.0125, 0.005),
+                           (0.0115, 0.0062), (0.0, 0.0062)], 16, T(x, 0, 0) @ R(-90, 'X'))
+            cylinder(bm, 0.0085, 0.045, 6, T(L * 0.5 - 0.0225, 0, 0) @ R(90, 'Y'))
+        K.separate(f"Door_Rod_{k}", "Steel", rod).matrix_world = Mrod
+    # 曲柄盘：减速箱输出轴上的一块圆盘，六个连杆销
+    cylinder(Cr["Steel"], 0.08, 0.009, 48, T(dx, yc - 0.0045, dz) @ R(-90, 'X'))
+    lathe(Cr["Steel"], [(0.0, 0.0), (0.03, 0.0), (0.03, 0.006), (0.0, 0.006)], 24, T(dx, yc + 0.0045, dz) @ R(-90, 'X'))
+    for (S, n, A0, B0), yr in zip(layout, yrs):
+        cylinder(Cr["Steel"], 0.0062, yr + 0.0105 - (yc + 0.0045), 12, T(A0.x, yc + 0.0045, A0.z) @ R(-90, 'X'))
+        cylinder(Cr["Steel"], 0.0085, 0.003, 12, T(A0.x, yr + 0.0075, A0.z) @ R(-90, 'X'))
+    anchors.append(empty("Door_CrankAxis", K.coll, anchor_frame(V((dx, yc, dz)), up)))
+    # 手轮：两面各一个，同一根轴
+    door_wheel(W, T(dx, y + 0.168, dz) @ R(-90, 'X'), 0.13)   # 抬高一点，辐条从上层连杆的销子头上面转过去
+    door_wheel(W, T(dx, yb - 0.045, dz) @ R(90, 'X'), 0.11)
+    cylinder(W["Steel"], 0.012, 0.03, 16, T(dx, y + 0.138, dz) @ R(-90, 'X'))
+    cylinder(W["Steel"], 0.012, 0.03, 16, T(dx, yb - 0.048, dz) @ R(-90, 'X'))
+    anchors.append(empty("Door_WheelAxis", K.coll, anchor_frame(V((dx, y + 0.12, dz)), up)))
+
+    # 门扇两面刷的字（避开连杆）
+    for yy, n, x2, z2, x1, z1 in ((yf + 0.0002, up, dx + 0.13, dz + 0.42, dx - 0.09, dz - 0.45),
+                                  (yb - 0.0002, -up, dx, dz + 0.45, dx, dz - 0.19)):
+        text_mesh("随手关门", D.uid("Door_Leaf_Txt"), K.coll, K.M["InkRed"], frame(V((x1, yy, z1)), n),
+                  size=0.04, extrude=0.0, font_path=FONT_SERIF, resolution=2)
+        text_mesh("2", D.uid("Door_Leaf_Txt"), K.coll, K.M["PaintText"], frame(V((x2, yy, z2)), n),
+                  size=0.12, extrude=0.0, font_path=FONT_SERIF, resolution=2)
+    # 控制舱一面：左上角一块黄铜检验铭牌（四颗铆钉）
+    Pb = frame(V((dx - 0.19, yf + 0.0002, dz + 0.18)), up)
+    rbox(D["Brass"], 0.105, 0.062, 0.0015, Pb @ T(0, 0, 0.00075), r=0.001, seg=1)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            lathe(D["Brass"], [(0.0022, 0.0), (0.0018, 0.0012), (0.0, 0.0016)], 10,
+                  Pb @ T(sx * 0.045, sy * 0.024, 0.0015))
+    text_mesh("水密门  2 号\n试验压力 0.6 MPa\n1987 年 6 月  合格", D.uid("Door_Leaf_Txt"), K.coll, K.M["Ink"],
+              Pb @ T(0, 0, 0.0017), size=0.03, extrude=0.0, font_path=FONT_SERIF, resolution=1)
+    # 右下包边上焊的一个吊环，拴着一张检修牌：铁丝圈、一截细绳、马粪纸卡片，手写字
+    q, n = door_ring(-58, 0.061)
+    eye = q + V((0, y + 0.122, 0))
+    torus(D["Steel"], 0.009, 0.0022, 16, 6, frame(eye + V((0, 0.006, 0)), V((n.x, 0, n.z))) @ R(90, 'X'))
+    hook = eye + V((0, 0.009, -0.006))
+    torus(D["Steel"], 0.014, 0.0011, 16, 4, frame(hook + V((0, 0, -0.012)), V((1, 0, 0))))
+    knot = hook + V((0.0, 0.006, -0.05))
+    tag_top = hook + V((-0.006, 0.01, -0.09))
+    sweep(D["Cardboard"], catmull([hook + V((0, 0, -0.026)), knot, tag_top], 4), circle_profile(0.0008, 4))
+    Mt = frame(tag_top + V((0, 0.001, -0.05)), V((-0.1, 1, 0.05)).normalized()) @ R(6, 'Z')
+    rbox(D["MaskTape"], 0.064, 0.1, 0.0008, Mt, r=0.0, seg=1)
+    torus(D["Steel"], 0.0035, 0.0009, 12, 4, Mt @ T(0, 0.041, 0.0004))
+    text_mesh("检修\n密封圈渗水\n待换\n—林", D.uid("Door_Leaf_Txt"), K.coll, K.M["Marker"],
+              Mt @ T(0, -0.006, 0.0006), size=0.064, extrude=0.0, font_path=FONT_HAND, resolution=1)
+    D.flush()
+    W.flush()
+    Cr.flush()
+
+
+def door_wheel(K, M, r):
+    """门上的手轮：碟形（三根辐条从轮毂往外翘）、轮缘上一个转柄。M 的 Z 朝外，原点在轮毂底面。"""
+    lathe(K["Steel"], [(0.0, 0.0), (0.028, 0.0), (0.028, 0.03), (0.022, 0.036), (0.0, 0.036)], 24, M)
+    cylinder(K["Steel"], 0.012, 0.006, 6, M @ T(0, 0, 0.036))
+    zr = 0.044
+    torus(K["BtnRed"], r, r * 0.11, 64, 12, M @ T(0, 0, zr))
+    for i in range(3):
+        a = 2 * math.pi * i / 3 + math.pi / 2
+        c, s_ = math.cos(a), math.sin(a)
+        pts = [M @ V((c * 0.02, s_ * 0.02, 0.018)), M @ V((c * r * 0.5, s_ * r * 0.5, zr - 0.006)),
+               M @ V((c * r, s_ * r, zr))]
+        sweep(K["BtnRed"], catmull(pts, 5), [(x * 1.3, y_) for x, y_ in circle_profile(r * 0.065, 10)])
+    Mk = M @ T(r * math.cos(math.radians(-35)), r * math.sin(math.radians(-35)), zr)
+    cylinder(K["Steel"], 0.0055, 0.024, 10, Mk)
+    lathe(K["Knob"], [(0.0, 0.016), (0.011, 0.018), (0.0125, 0.05), (0.009, 0.06), (0.0, 0.062)], 16, Mk)
 
 
 def junction_box(K, P, w=0.2, h=0.16, d=0.1):
+    """接线盒：三根线从盒顶的接插件出来（往上并进桥架，见 overhead 里的 JBOX_LEADS）。"""
     unit(K, P @ T(0, 0, d), w, h, d, body="EquipGray", face="EquipGray", handles=False)
     F = P @ T(0, 0, d)
     label_plate(K, F, 0, 0.055, "接线盒", 0.0075)
@@ -957,12 +1109,50 @@ def junction_box(K, P, w=0.2, h=0.16, d=0.1):
     extrude_profile(K["Ink"], tri, F, 0.0004)
     extrude_profile(K["BtnYellow"], [(x * 0.8, y * 0.8 - 0.0008) for x, y in tri], F, 0.0007)
     K.text("当心触电", F @ T(0, -0.045, 0.0003), 0.009, key="Ink")
-    Pb = F @ T(0, -h / 2, -d / 2) @ R(90, 'X')
+    Pt = F @ T(0, h / 2, -d / 2) @ R(-90, 'X')
+    JBOX_LEADS.clear()
     for k in range(3):
         x = -w / 2 + w * (k + 0.5) / 3
-        start, nz, _ = connector(K, Pb, x, 0.0, r=0.008, plug="Olive" if k % 2 else "Steel")
-        Cab.add([start, start + nz * 0.05, start + nz * 0.25 + V((-0.05 * (k + 1), 0.1, 0)),
-                 V((-1.29, -2.25 + 0.04 * k, -0.45))], 0.005, ["CableBlack", "CableGray", "CableOrange"][k])
+        start, nz, _ = connector(K, Pt, x, 0.0, r=0.008, plug="Olive" if k % 2 else "Steel")
+        JBOX_LEADS.append((start, nz, ["CableBlack", "CableGray", "CableOrange"][k]))
+
+
+JBOX_LEADS = []   # 接线盒出线：(出口点, 方向, 颜色)，overhead 里把它们并进左舷桥架
+
+
+def o2_line(K):
+    """氧气减压阀出来的紫铜管：沿隔壁爬到舱顶，从肋骨翼板底下穿过，往前接到右舷生命支持柜的灯罩顶上。
+    每道肋骨处一个小吊卡，隔壁上两个管卡。"""
+    y = Y_AFT
+    xr, zr = 0.87, 0.78          # 沿舱顶走的那一段
+    ye = (BAYS[1][0] + BAYS[1][1]) / 2 + 0.05
+    pts = [V((0.787, y + 0.1, DECK + 0.82)), V((0.83, y + 0.075, DECK + 0.83)), V((0.98, y + 0.04, DECK + 0.87)),
+           V((1.06, y + 0.035, DECK + 1.0)), V((1.06, y + 0.035, 0.45)), V((1.04, y + 0.06, 0.66)),
+           V((0.92, y + 0.14, 0.77)), V((xr, y + 0.32, zr)), V((xr, y + 0.6, zr)), V((xr, ye - 0.3, zr)),
+           V((xr, ye - 0.12, zr)), V((xr + 0.035, ye - 0.04, zr - 0.02)), V((0.93, ye, HOOD_Z[1] + 0.03)),
+           V((0.93, ye, HOOD_Z[1] - 0.01))]
+    sweep(K["Copper"], catmull(pts, 8), circle_profile(0.006, 10))
+    # 灯罩顶上的穿板接头
+    cylinder(K["Brass"], 0.013, 0.012, 6, T(0.93, ye, HOOD_Z[1]))
+    cylinder(K["Brass"], 0.01, 0.008, 16, T(0.93, ye, HOOD_Z[1] + 0.012))
+    # 隔壁上的管卡
+    for z in (0.0, 0.3):
+        P = frame(V((1.06, y, z)), V((0, 1, 0)))
+        arc = [P @ V((math.cos(math.radians(a)) * 0.0085, 0, 0.035 + math.sin(math.radians(a)) * 0.0085))
+               for a in range(0, 181, 15)]
+        arc = [P @ V((0.0085, 0, 0.0))] + arc + [P @ V((-0.0085, 0, 0.0))]
+        sweep(K["Steel"], arc, [(-0.0008, -0.006), (0.0008, -0.006), (0.0008, 0.006), (-0.0008, 0.006)],
+              up_hint=V((0, 0, 1)))
+        for sx in (-1, 1):
+            rbox(K["Steel"], 0.012, 0.012, 0.0016, P @ T(sx * 0.016, 0, 0.0008), r=0.0, seg=1)
+            cylinder(K["Steel"], 0.0035, 0.002, 6, P @ T(sx * 0.016, 0, 0.0016))
+    # 肋骨翼板上的吊卡：一截扁钢从翼板往下，末端一个抱箍
+    for yf in FRAMES:
+        if not (y + 0.25 < yf < ye - 0.2):
+            continue
+        top = math.sqrt(1.19 ** 2 - xr ** 2)
+        rbox(K["Steel"], 0.004, 0.02, top - zr - 0.004, T(xr + 0.0105, yf + 0.03, (top + zr) / 2), r=0.0, seg=1)
+        torus(K["Steel"], 0.0085, 0.0018, 16, 4, T(xr, yf + 0.03, zr) @ R(90, 'X'))
 
 
 # ============================================================================ 头顶：管路、桥架、灯
@@ -973,49 +1163,259 @@ PIPES = [  # x, z, 半径, 材质（中间留出 50 厘米给直梯和舱口）
     (0.3, 1.06, 0.026, "PipeBlue"),     # 冷却水回水
     (0.38, 1.02, 0.016, "Copper"),      # 高压空气
 ]
+PIPE_FLANGES = (-1.4, -0.2, 0.95)   # 控制舱里管子中间的对接法兰
+SLEEVE = 0.084                      # 穿隔壁套管两头的法兰接合面离隔壁表面
+PIPE_BOW = (None, 1.4, 1.52, 1.4, 1.52)   # 每根管子在这个 y 往上弯、穿出耐压壳（通风管除外）；相邻两根前后错开，
+                                          # 不然穿壳件的法兰、补强垫板会挤到一起
+
+TRAY_ANG = 38.0     # 电缆桥架在舱顶两侧的位置（离正上方的角度）
+TRAY_RUNG = 1.111   # 横档上表面离轴线（电缆就铺在横档上）
+TRAY_HW = 0.08      # 两根边梁离桥架中线
+TRAY_END = 1.3      # 控制舱这头桥架到这里为止，再往前电缆垂进驾驶台两边的高机柜
+TRAY_RUNGS = {-1: [], 1: []}    # 横档的 y（扎带捆在横档上），tray() 里记下来
+TRAY_Y0 = Y_STERN - 0.004       # 电缆从后隔壁穿舱框里出来的地方（扁平线束的弧长从这里算起）
+MCT_MID = (Y_AFT - 0.012 - 0.065, Y_AFT + 0.065)   # 中间隔壁上电缆穿舱框的前后两端
+MCT_STERN = (Y_STERN - 0.01, Y_STERN + 0.065)
+PENETRATORS = ((-1, 0.4), (1, -1.4), (1, -0.2))      # 壳体上的电缆穿舱件 (舷, y)：在桥架外侧，线翻过边梁铺进桥架
+PEN_ANG = 52.0
+TRAY_CABLES = [(0.009, "CableBlack"), (0.007, "CableGray"), (0.008, "CableBlack"), (0.005, "CableOrange"),
+               (0.006, "CableBlack"), (0.005, "CableYellow"), (0.007, "CableGray"), (0.0045, "CableBlue"),
+               (0.006, "CableBlack")]
+
+
+def flange_pair(K, key, M, r, bolts=6):
+    """一对对接法兰：两片背靠背夹一层垫片，一圈螺栓（两头六角螺母）。M 的 Z 是管子轴线，原点在接合面上。"""
+    rf = r + (0.022 if r > 0.02 else 0.018)
+    for z0 in (-0.0145, 0.0005):
+        cylinder(K[key], rf, 0.014, 32, M @ T(0, 0, z0))
+    cylinder(K["Rubber"], rf - 0.003, 0.001, 32, M @ T(0, 0, -0.0005))
+    rb = (r + rf) / 2 + 0.002
+    for i in range(bolts):
+        a = 2 * math.pi * (i + 0.5) / bolts
+        Mb = M @ T(math.cos(a) * rb, math.sin(a) * rb, 0) @ R(math.degrees(a), 'Z')
+        cylinder(K["Steel"], 0.0026, 0.046, 8, Mb @ T(0, 0, -0.023))
+        for z0 in (-0.0205, 0.0145):
+            cylinder(K["Steel"], 0.0052, 0.006, 6, Mb @ T(0, 0, z0))
+
+
+def pipe_sleeve(K, x, z, r, key, y_front=None, y_back=None):
+    """管子穿隔壁：一截厚壁套管穿过隔壁板，和隔壁焊一圈，伸出来的头上带法兰，和两边的管子对接。
+    y_front：隔壁朝 +Y（朝艏）的那一面；y_back：朝 -Y 的那一面；只给一个就只做那一面（另一面看不见）。"""
+    fkey = "PipeGray" if key == "Lagging" else key
+    rs = r + 0.006
+    ya = y_back - SLEEVE if y_back is not None else y_front - 0.04
+    yb = y_front + SLEEVE if y_front is not None else y_back + 0.04
+    cylinder(K[fkey], rs, yb - ya, 24, T(x, ya, z) @ R(-90, 'X'))
+    for yy, sg in ((y_front, 1), (y_back, -1)):
+        if yy is None:
+            continue
+        flange_pair(K, fkey, T(x, yy + sg * SLEEVE, z) @ R(-90, 'X'), r)
+        lathe(K["HullInner"], [(rs, 0.0), (rs + 0.009, 0.0), (rs, 0.009), (rs, 0.0)], 24,
+              T(x, yy, z) @ R(-90 * sg, 'X'))
+
+
+def pipe_hanger(K, x, z, r, yh, flat_top=None):
+    """管子吊架：扁钢抱箍托住管子，两根螺杆吊到上面肋骨的翼板上（翼板是斜的，顶板贴着它斜放）。
+    flat_top：舱口附近肋骨断开了，改吊到舱口围板的平底面上（给出底面高度）。"""
+    ring_r = r + 0.006
+    arc = [V((x + math.cos(math.radians(a)) * ring_r, yh, z + math.sin(math.radians(a)) * ring_r))
+           for a in range(-180, 1, 15)]
+    sweep(K["Steel"], arc, [(-0.002, -0.012), (0.002, -0.012), (0.002, 0.012), (-0.002, 0.012)],
+          up_hint=V((0, 1, 0)))
+    if flat_top is None:
+        a = math.asin(x / 1.19)
+        n, tg = V((math.sin(a), 0, math.cos(a))), V((math.cos(a), 0, -math.sin(a)))
+        pc = V((n.x * 1.19, yh, n.z * 1.19))
+    else:
+        n, tg, pc = V((0, 0, 1)), V((1, 0, 0)), V((x, yh, flat_top))
+    for sx in (-1, 1):
+        xr = x + sx * ring_r
+        top = pc.z - 0.006 * n.z - n.x * (xr - pc.x + 0.006 * n.x) / n.z   # 顶板下表面
+        cylinder(K["Steel"], 0.005, top - z, 8, T(xr, yh, z))
+        cylinder(K["Steel"], 0.0075, 0.007, 6, T(xr, yh, top - 0.007))
+    c = pc - n * 0.003
+    M = Matrix(((tg.x, 0, n.x, c.x), (tg.y, 1, n.y, c.y), (tg.z, 0, n.z, c.z), (0, 0, 0, 1)))
+    rbox(K["Steel"], 2 * ring_r + 0.03, 0.03, 0.006, M, r=0.001, seg=1)
+
+
+def hull_fitting(K, key, x, y, r, zf):
+    """竖管穿出耐压壳：壳上焊一个厚壁接管座，根部一块补强垫板；下端法兰和管子对接（zf 是接合面高度）。"""
+    zh = math.sqrt(R_IN ** 2 - x * x)
+    flange_pair(K, key, T(x, y, zf), r)
+    cylinder(K[key], r + 0.008, zh + 0.02 - zf, 24, T(x, y, zf))
+    n = V((x, 0, zh)) / R_IN
+    cylinder(K["HullInner"], r + 0.045, 0.02, 32, frame(V((x, y, zh)) - n * 0.012, n))
+    lathe(K["HullInner"], [(r + 0.008, 0.0), (r + 0.016, 0.0), (r + 0.008, 0.008), (r + 0.008, 0.0)], 24,
+          T(x, y, zh - 0.012 - 0.04 * abs(x)))
+
+
+def tray_frame(s):
+    """s 舷桥架的局部坐标系：X 沿横档（+X 在右舷朝外下方、在左舷朝里上方），Y 沿艇长，Z 是半径方向（朝壳体）。"""
+    a = math.radians(TRAY_ANG * s)
+    w = V((math.cos(a), 0, -math.sin(a)))
+    n = V((math.sin(a), 0, math.cos(a)))
+    return Matrix(((w.x, 0, n.x, 0), (w.y, 1, n.y, 0), (w.z, 0, n.z, 0), (0, 0, 0, 1)))
+
+
+def tray(K, s, y0, y1, frame_ys):
+    """梯式电缆桥架：两根边梁、每 25 厘米一根横档；每道肋骨处一个 U 形托架兜着，两条腿用螺栓吊在肋骨翼板上。"""
+    L = tray_frame(s)
+    for u in (-TRAY_HW, TRAY_HW):
+        rbox(K["Rail"], 0.006, y1 - y0, 0.055, L @ T(u, (y0 + y1) / 2, 1.1275), r=0.0015, seg=1)
+    yy = y0 + 0.1
+    while yy < y1 - 0.05:
+        rbox(K["Rail"], 2 * TRAY_HW - 0.006, 0.02, 0.006, L @ T(0, yy, TRAY_RUNG - 0.003), r=0.001, seg=1)
+        TRAY_RUNGS[s].append(yy)
+        yy += 0.25
+    for yf in frame_ys:
+        yc = yf + 0.03
+        if y1 - 0.03 < yc < y1 + 0.05:
+            yc = y1 - 0.015    # 肋骨正好在桥架头上：托架往回挪一点，兜住桥架的头
+        if not (y0 + 0.03 < yc < y1):
+            continue
+        for u in (-1, 1):
+            uu = u * (TRAY_HW + 0.006)
+            rbox(K["Steel"], 0.006, 0.03, 0.097, L @ T(uu, yc, 1.1415), r=0.001, seg=1)
+            rbox(K["Steel"], 0.04, 0.05, 0.005, L @ T(uu, yc, 1.1875), r=0.001, seg=1)
+            cylinder(K["Steel"], 0.007, 0.006, 6, L @ T(uu + u * 0.011, yc, 1.185) @ R(180, 'X'))
+        rbox(K["Steel"], 2 * (TRAY_HW + 0.009), 0.03, 0.006, L @ T(0, yc, 1.096), r=0.001, seg=1)
+
+
+def cable_transit(K, s, y0, y1):
+    """桥架穿隔壁处的多电缆穿舱框（MCT）：焊在隔壁上的方钢框，里面塞满一格一格的橡胶密封块，
+    电缆从块中间穿过；最上面一条压紧板，两根顶紧螺栓。y0..y1 是框的前后两端。"""
+    L = tray_frame(s)
+    u0, r0, r1, t = 0.1, 1.055, 1.18, 0.012
+    ym, ln = (y0 + y1) / 2, y1 - y0
+    for rr in (r0 + t / 2, r1 - t / 2):
+        rbox(K["HullInner"], 2 * u0, ln, t, L @ T(0, ym, rr), r=0.002, seg=1)
+    for u in (-1, 1):
+        rbox(K["HullInner"], t, ln, r1 - r0, L @ T(u * (u0 - t / 2), ym, (r0 + r1) / 2), r=0.002, seg=1)
+    ri0, ri1 = r0 + t, r1 - t - 0.016
+    rbox(K["Rubber"], 2 * (u0 - t), ln - 0.016, ri1 - ri0, L @ T(0, ym, (ri0 + ri1) / 2), r=0.0, seg=1)
+    rbox(K["Steel"], 2 * (u0 - t), ln - 0.01, 0.014, L @ T(0, ym, ri1 + 0.008), r=0.001, seg=1)
+    for yy, sg in ((y0 + 0.0076, -1), (y1 - 0.0076, 1)):
+        for u in (-0.06, -0.02, 0.02, 0.06):   # 密封块之间的格缝
+            box(K["Dark"], 0.0015, 0.001, ri1 - ri0, L @ T(u, yy, (ri0 + ri1) / 2))
+        for rr in (ri0 + (ri1 - ri0) / 3, ri0 + 2 * (ri1 - ri0) / 3):
+            box(K["Dark"], 2 * (u0 - t), 0.001, 0.0015, L @ T(0, yy, rr))
+        for u in (-0.05, 0.05):
+            cylinder(K["Steel"], 0.0065, 0.012, 6, L @ T(u, yy - sg * 0.002, ri1 + 0.008) @ R(-90 * sg, 'X'))
+
+
+def penetrator(K, s, y):
+    """壳体上的电缆穿舱件：法兰盘压在壳上，一圈螺栓，五个航空插头朝舱里。返回 [(出口点, 方向)]。"""
+    a = math.radians(PEN_ANG * s)
+    d = V((math.sin(a), 0, math.cos(a)))
+    F = frame(V((d.x * (R_IN - 0.004), y, d.z * (R_IN - 0.004))), -d)
+    cylinder(K["EquipGray"], 0.1, 0.02, 48, F)
+    for i in range(10):
+        b = 2 * math.pi * i / 10
+        cylinder(K["Steel"], 0.008, 0.009, 6, F @ T(math.cos(b) * 0.085, math.sin(b) * 0.085, 0.02))
+    P = F @ T(0, 0, 0.02)
+    out = []
+    for k in range(5):
+        ang = 2 * math.pi * k / 5
+        start, nz, _ = connector(K, P, math.cos(ang) * 0.045, math.sin(ang) * 0.045, r=0.009,
+                                 plug="Olive" if k % 2 else "Steel")
+        out.append((start, nz))
+    return out
+
+
+def join_leads(s, y_j, outs, via=()):
+    """中途并进桥架的一组线：从出口点出来，经过 via（出口点 → 途经点的函数），在 y_j 处翻过桥架外侧的边梁，
+    铺到上面一层。返回 (y_j, [(r, 颜色, 并进处弧长, 走线点), ...])。"""
+    over = tray_frame(s) @ V((s * (TRAY_HW + 0.025), y_j + 0.04, 1.2))
+    return (y_j, [(0.0055, key, y_j + 0.16 - TRAY_Y0, [start, start + nz * 0.035] + [f(start, nz) for f in via] + [over])
+                  for start, nz, key in outs])
+
+
+def tray_cables(K, s, joins):
+    """一舷的电缆：从后隔壁的穿舱框出来，沿桥架一路往前，穿过中间隔壁，到控制舱前头整排垂进高机柜顶上的过线板。
+    joins：join_leads() 的结果，铺在上面一层（后并进来的放在靠外那一侧，不用从先铺好的线上面翻过去）。"""
+    L = tray_frame(s)
+    y_start = TRAY_Y0
+
+    def on(y, dr=0.0):
+        return L @ V((0, y, TRAY_RUNG + dr))
+    xg = s * 0.93
+    # 在桥架里一直是直的，过了边梁的头才往外、往下拐
+    path = ([on(y_start)] + [on(yy) for yy in [Y_STERN + 0.3 + 0.3 * k for k in range(30)] if yy < TRAY_END - 0.2]
+            + [on(TRAY_END - 0.1), on(TRAY_END + 0.02), V((s * 0.79, 1.4, 0.835)), V((s * 0.89, 1.445, 0.77)),
+               V((xg, 1.455, 0.7)), V((xg, 1.455, HOOD_Z[1] - 0.025))])
+    top = []
+    for y_j, group in sorted(joins, key=lambda j: j[0]):
+        top = (top + group) if s > 0 else (group + top)
+    layers = [TRAY_CABLES] + ([top] if top else [])
+    cradles = [yf + 0.03 for yf in FRAMES + AFT_FRAMES]
+    ties = [yy - y_start for i, yy in enumerate(TRAY_RUNGS[s])
+            if i % 2 == 0 and all(abs(yy - c) > 0.08 for c in cradles)]
+    rib = Cab.ribbon(path, L.to_3x3() @ V((0, 0, 1)), layers, ties=ties)
+    # 机柜顶上的过线板：钢板压一块开了槽的橡胶垫，四颗螺钉
+    for i, p in enumerate(rib["center"]):
+        if p.z < HOOD_Z[1] + 0.002:
+            break
+    t, n, w = rib["frames"][i]
+    c = p + n * rib["height"] / 2
+    c.z = HOOD_Z[1]
+    M = Matrix(((w.x, n.x, -t.x, c.x), (w.y, n.y, -t.y, c.y), (w.z, n.z, -t.z, c.z), (0, 0, 0, 1)))
+    W, H = rib["width"], rib["height"]
+    rbox(K["Steel"], W + 0.05, H + 0.05, 0.006, M @ T(0, 0, 0.003), r=0.002, seg=1)
+    rbox(K["Rubber"], W + 0.014, H + 0.014, 0.01, M @ T(0, 0, 0.005), r=0.002, seg=1)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            cylinder(K["Steel"], 0.004, 0.002, 12, M @ T(sx * (W / 2 + 0.017), sy * (H / 2 + 0.017), 0.006))
 
 
 def overhead(K, anchors):
-    y0, y1 = Y_AFT, 1.5
-    for x, z, r, key in PIPES:
+    """控制舱头顶：管子从中间隔壁的套管出来往前走，到驾驶台上方往上弯、穿出耐压壳（通风管是往下弯，接个风口）；
+    两舷的电缆桥架、穿舱件、顶灯。管子和桥架在生活舱那段见 quarters.overhead。"""
+    y0 = Y_AFT + SLEEVE
+    for i, (x, z, r, key) in enumerate(PIPES):
         bm = K[key]
-        path = [V((x, y0, z)), V((x, y1 - 0.15, z))]
-        # 末端一个弯头穿进壳体
-        bend = [V((x, y1 - 0.15 + 0.15 * math.sin(math.radians(a)), z + 0.15 * (1 - math.cos(math.radians(a)))))
-                for a in range(0, 91, 10)]
-        top = math.sqrt(R_IN ** 2 - x * x) + 0.05
-        sweep(bm, path[:-1] + bend + [V((x, y1, top))], circle_profile(r, 24 if r > 0.03 else 16))
-        # 包了保温层的管子：法兰露出铁皮，每隔一段一道钢带扎紧
-        fbm = K["PipeGray"] if key == "Lagging" else bm
+        fkey = "PipeGray" if key == "Lagging" else key
+        segs = 24 if r > 0.03 else 16
+        pipe_sleeve(K, x, z, r, key, y_front=Y_AFT, y_back=Y_AFT - 0.012)
+        y_end = 1.36
         if key == "Lagging":
-            for yb in [Y_AFT + 0.25 + k * 0.4 for k in range(10)]:
-                if yb < y1 - 0.2 and all(abs(yb - yf) > 0.08 for yf in (-1.4, -0.2, 0.95)):
-                    cylinder(K["Steel"], r + 0.002, 0.016, 32, T(x, yb, z) @ R(-90, 'X'), caps=False)
-        # 法兰（每隔两个肋骨一对）+ 螺栓
-        for yf in (-1.4, -0.2, 0.95):
-            for k in (-1, 1):
-                cylinder(fbm, r + 0.022, 0.014, 32, T(x, yf + k * 0.007, z) @ R(-90, 'X') @ T(0, 0, -0.007))
-            for i in range(6):
-                a = 2 * math.pi * (i + 0.5) / 6
-                cylinder(K["Steel"], 0.0055, 0.04, 6, T(x + math.cos(a) * (r + 0.013), yf - 0.02,
-                                                          z + math.sin(a) * (r + 0.013)) @ R(-90, 'X'))
-        # 吊架：每道肋骨一个，扁钢吊带抱住管子，螺杆吊到肋骨翼板上
+            # 通风管：在驾驶台上方往下弯，一段短竖管，渐缩口接一个能转方向的球形风口，对着驾驶员的头顶
+            yb, Rb = 1.36, 0.1
+            bend = [V((x, yb + Rb * math.sin(math.radians(a)), z - Rb * (1 - math.cos(math.radians(a)))))
+                    for a in range(0, 91, 10)]
+            ze = z - Rb - 0.05
+            sweep(bm, [V((x, y0, z))] + bend + [V((x, yb + Rb, ze))], circle_profile(r, segs))
+            M = T(x, yb + Rb, ze)
+            lathe(K["PipeGray"], [(0.0, 0.012), (r + 0.004, 0.012), (r + 0.004, -0.004), (r - 0.004, -0.012),
+                                  (0.047, -0.04), (0.047, -0.05), (0.0, -0.05)], 32, M)
+            torus(K["PipeGray"], 0.044, 0.006, 32, 8, M @ T(0, 0, -0.052))
+            eye = EYE_SEATED + V((0, 0, 0.25))
+            Ms = M @ T(0, 0, -0.058)
+            look = (eye - Ms.translation).normalized()
+            uvsphere(K["EquipGray"], 0.039, 24, 12, Ms)
+            Mn = frame(Ms.translation, look)
+            cylinder(K["EquipGray"], 0.02, 0.03, 20, Mn @ T(0, 0, 0.025))
+            cylinder(K["Dark"], 0.016, 0.001, 16, Mn @ T(0, 0, 0.0551))
+            for k in range(4):   # 喷口里的导流叶片
+                box(K["EquipGray"], 0.032, 0.0015, 0.012, Mn @ T(0, -0.012 + k * 0.008, 0.049))
+            for yb2 in [Y_AFT + 0.25 + k * 0.4 for k in range(10)]:
+                if yb2 < 1.3 and all(abs(yb2 - yf) > 0.08 for yf in PIPE_FLANGES):
+                    cylinder(K["Steel"], r + 0.002, 0.016, 32, T(x, yb2, z) @ R(-90, 'X'), caps=False)
+        else:
+            Rb = 0.1 if r < 0.02 else 0.12
+            yb = PIPE_BOW[i]
+            y_end = yb - Rb
+            zf = math.sqrt(R_IN ** 2 - x * x) - 0.085
+            bend = [V((x, yb - Rb + Rb * math.sin(math.radians(a)), z + Rb * (1 - math.cos(math.radians(a)))))
+                    for a in range(0, 91, 10)]
+            sweep(bm, [V((x, y0, z))] + bend + [V((x, yb, zf))], circle_profile(r, segs))
+            hull_fitting(K, fkey, x, yb, r, zf)
+        for yf in PIPE_FLANGES:
+            flange_pair(K, fkey, T(x, yf, z) @ R(-90, 'X'), r)
         for yf in FRAMES:
-            if yf > y1 - 0.2:
-                continue
-            # 吊到肋骨翼板上；肋骨在舱口处断开的地方吊到舱口围板底面
-            hang = 1.2 if math.hypot(x, yf - HATCH[1]) < 0.43 else math.sqrt(1.19 ** 2 - x * x)
-            yh = yf + 0.035
-            ring_r = r + 0.006
-            arc = [V((x + math.cos(math.radians(a)) * ring_r, yh, z + math.sin(math.radians(a)) * ring_r))
-                   for a in range(-180, 1, 15)]
-            sweep(K["Steel"], arc, [(-0.002, -0.012), (0.002, -0.012), (0.002, 0.012), (-0.002, 0.012)],
-                  up_hint=V((0, 1, 0)))
-            for sx in (-1, 1):
-                cylinder(K["Steel"], 0.005, hang - z, 8, T(x + sx * ring_r, yh, z))
-            box(K["Steel"], 2 * ring_r + 0.03, 0.03, 0.006, T(x, yh, hang - 0.003))
+            if yf + 0.035 < y_end - 0.02:
+                pipe_hanger(K, x, z, r, yf + 0.035)
     # 通风口
-    for yv in (-1.4, -0.2, 0.95):
+    for yv in PIPE_FLANGES:
         x, z, r, _ = PIPES[0]
         rbox(K["PipeGray"], 0.14, 0.12, 0.06, T(x, yv + 0.25, z - r - 0.01), r=0.008, seg=2)
         P = T(x, yv + 0.25, z - r - 0.041) @ R(180, 'X')
@@ -1032,34 +1432,36 @@ def overhead(K, anchors):
     uvsphere(K["Bilge"], 0.0042, 12, 8, T(*drip) @ S(1, 1, 1.25))
     anchors.append(empty("Anchor_Drip", K.coll, T(*(drip - V((0, 0, 0.004))))))
 
-    # 电缆桥架（梯形桥架 + 里面的线束）
+    # 电缆桥架：中间隔壁两面是穿舱框，往前到驾驶台两边的高机柜上方为止
     for s in (-1, 1):
-        a = math.radians(38 * s)
-        rc = 1.13
-        cx, cz = math.sin(a) * rc, math.cos(a) * rc
-        tang = V((math.cos(a), 0, -math.sin(a)))    # 沿壳体切向
-        nrm = V((math.sin(a), 0, math.cos(a)))      # 朝外（朝壳体）
-        for side in (-1, 1):
-            c = V((cx, 0, cz)) + tang * side * 0.08
-            prof = [(-0.025, -0.003), (0.025, -0.003), (0.025, 0.003), (-0.025, 0.003)]
-            sweep(K["Rail"], [V((c.x, Y_AFT, c.z)), V((c.x, 1.33, c.z))],
-                  [(p[0], p[1]) for p in prof], up_hint=tang)
-        for yy in [Y_AFT + 0.1 + k * 0.25 for k in range(16)]:
-            if yy > 1.3:
-                break
-            p = V((cx, yy, cz)) - nrm * 0.02
-            box(K["Rail"], 0.16, 0.02, 0.006, frame(p, nrm, V((0, 1, 0))))
-        # 吊杆到肋骨
-        for yf in FRAMES:
-            p = V((cx, yf + 0.03, cz))
-            q = nrm * 1.19
-            sweep(K["Steel"], [p, V((q.x, yf + 0.03, q.z))], circle_profile(0.005, 8))
-        specs = [(0.009, "CableBlack"), (0.007, "CableGray"), (0.008, "CableBlack"), (0.005, "CableOrange"),
-                 (0.006, "CableBlack"), (0.005, "CableYellow"), (0.007, "CableGray"), (0.0045, "CableBlue"),
-                 (0.006, "CableBlack")]
-        base = nrm * 1.145
-        Cab.bundle([V((base.x + 0.004 * math.sin(k), Y_AFT + k * 0.3, base.z)) for k in range(14)
-                    if Y_AFT + k * 0.3 < 1.35], specs, tie_every=0.4)
+        cable_transit(K, s, *MCT_MID)
+        tray(K, s, MCT_MID[1], TRAY_END, FRAMES)
+    # 壳体上的穿舱件：线从外侧翻过边梁铺进桥架
+    joins = {-1: [], 1: []}
+    keys = ["CableBlack", "CableGray", "CableOrange", "CableBlack", "CableBlue"]
+    for s, y in PENETRATORS:
+        outs = [(p, nz, keys[k]) for k, (p, nz) in enumerate(penetrator(K, s, y))]
+        a = math.radians(PEN_ANG * s)
+        tu = V((-math.cos(a) * s, 0, math.sin(a) * s))   # 沿壳体朝上（朝桥架）
+        # 先直着出来，过了插头尾巴再拐弯，不从别的插头上面蹭过去
+        joins[s].append(join_leads(s, y, outs, via=(lambda p, nz, tu=tu: p + nz * 0.07 + tu * 0.03,)))
+    # 隔壁上接线盒的三根线：顺着隔壁往上爬（两道线卡压住），在门上方从外侧翻进左舷桥架
+    if JBOX_LEADS:
+        # 在 -2.3 那道肋骨前面翻进桥架（肋骨翼板挡着，不能在它那儿翻）
+        joins[-1].append(join_leads(-1, Y_AFT + 0.12, JBOX_LEADS,
+                                    via=(lambda p, nz: V((p.x, Y_AFT + 0.035, 0.53)),
+                                         lambda p, nz: V((p.x, Y_AFT + 0.035, 0.65)),
+                                         lambda p, nz: V((p.x + 0.03, Y_AFT + 0.09, 0.77)))))
+        xs = [p.x for p, _, _ in JBOX_LEADS]
+        for z in (0.57, 0.63):   # 线卡：一条扁钢压住三根线，两头折下来用螺钉固定在隔壁上
+            rbox(K["Steel"], max(xs) - min(xs) + 0.03, 0.004, 0.012,
+                 T((max(xs) + min(xs)) / 2, Y_AFT + 0.0435, z), r=0.001, seg=1)
+            for xx in (min(xs) - 0.017, max(xs) + 0.017):
+                rbox(K["Steel"], 0.004, 0.045, 0.012, T(xx, Y_AFT + 0.0225, z), r=0.001, seg=1)
+                rbox(K["Steel"], 0.014, 0.003, 0.012, T(xx + (0.007 if xx > min(xs) else -0.007), Y_AFT + 0.0015, z),
+                     r=0.0, seg=1)
+    for s in (-1, 1):
+        tray_cables(K, s, joins[s])
     # 顶灯
     for i, yl in enumerate((-1.4, -0.2, 1.0)):
         ceiling_lamp(K, anchors, T(0.0, yl, R_IN - 0.01) @ R(180, 'X'), f"CabinLight_Dome_{i}")
@@ -1075,24 +1477,6 @@ def overhead(K, anchors):
                                    F @ V((math.cos(a) * 0.04, math.sin(a) * 0.04, 0.045)),
                                    F @ V((0, 0, 0.062))], 5), circle_profile(0.0015, 6))
     anchors.append(empty("CabinLight_Night", K.coll, F @ T(0, 0, 0.07)))
-    # 穿舱件：线从壳体外面引进来，落到桥架里
-    for s, y in ((-1, 0.4), (1, 0.4), (1, -1.4)):
-        a = math.radians(22 * s)
-        d = V((math.sin(a), 0, math.cos(a)))
-        F = frame(V((d.x * (R_IN - 0.004), y, d.z * (R_IN - 0.004))), -d)
-        cylinder(K["EquipGray"], 0.1, 0.02, 48, F)
-        for i in range(10):
-            b = 2 * math.pi * i / 10
-            cylinder(K["Steel"], 0.008, 0.009, 6, F @ T(math.cos(b) * 0.085, math.sin(b) * 0.085, 0.02))
-        P = F @ T(0, 0, 0.02)
-        keys = ["CableBlack", "CableGray", "CableOrange", "CableBlack", "CableBlue"]
-        for k in range(5):
-            ang = 2 * math.pi * k / 5
-            start, nz, _ = connector(K, P, math.cos(ang) * 0.045, math.sin(ang) * 0.045, r=0.009,
-                                     plug="Olive" if k % 2 else "Steel")
-            ta = math.radians(38 * s)
-            end = V((math.sin(ta) * 1.12, y + (k - 2) * 0.05 + 0.15, math.cos(ta) * 1.12))
-            Cab.add([start, start + nz * 0.05, (start + end) / 2 - V((0, 0, 0.05)), end], 0.0055, keys[k])
 
 
 def ceiling_lamp(K, anchors, M, name):
@@ -1400,8 +1784,8 @@ def helm_desk(K, anchors, Fc):
     # 后来加装的一根线：从主板底下拉出来，贴着桌面，翻过桌沿垂到地上；中间一个接头缠着黑胶布
     pts = [V((0.4, 2.14, -0.125)), V((0.41, 2.09, top + 0.004)), V((0.402, 1.97, top + 0.005)),
            V((0.41, 1.84, top + 0.005)), V((0.418, 1.805, top - 0.01)), V((0.425, 1.785, top - 0.08)),
-           V((0.43, 1.77, -0.45)), V((0.45, 1.74, DECK + 0.03)), V((0.5, 1.68, DECK + 0.005)),
-           V((0.62, 1.62, DECK + 0.005))]
+           V((0.43, 1.77, -0.45)), V((0.445, 1.745, DECK + 0.04)), V((0.47, 1.71, DECK + 0.009)), V((0.5, 1.68, DECK + 0.0065)),
+           V((0.62, 1.62, DECK + 0.0065))]
     Cab.add(pts, 0.0048, "CableGray", samples=8)
     js = V((0.403, 1.98, top + 0.006))
     Mj = frame(js, V((0.01, -1, 0)))
@@ -1738,16 +2122,17 @@ def decals(anchors, coll):
     d("Puddle", (-0.43, -0.2, DECK), UP, V((0.3, 1, 0)), 0.32, 0.24, 0.03)
     d("Hazard", (DOOR[0], Y_AFT + 0.07, DECK), UP, Z, 0.66, 0.09, 0.03)
     d("Hazard", (DOOR[0], Y_AFT - 0.08, DECK), UP, Z, 0.66, 0.09, 0.03)
-    # ---- 中间隔壁：舱段号、严禁烟火、门框压紧块底下的锈水、门边一个手印
-    d("TextC03", (-1.0, Y_AFT, 0.6), Z, UP, 0.26, 0.104, 0.05)
-    d("TextFire", (0.5, Y_AFT, 0.12), Z, UP, 0.075, 0.3, 0.05)
-    for x, z in ((0.43, 0.47), (0.43, -0.37), (0.06, 0.84)):
-        d("Rust", (x, Y_AFT + 0.03, z - 0.17), Z, UP, 0.06, 0.28, 0.1)
-    d("Rust", (-1.0, Y_AFT + 0.02, 0.1), Z, UP, 0.12, 0.32, 0.06)
-    d("Hand", (-0.52, Y_AFT + 0.01, 0.22), Z, V((-0.2, 0, 0.98)), 0.12, 0.22, 0.04)
+    # ---- 中间隔壁：舱段号、严禁烟火、门框楔块底下的锈水、接线盒底下的锈水、门边扶手旁一个手印
+    d("TextC03", (0.6, Y_AFT, 0.62), Z, UP, 0.26, 0.104, 0.05)
+    d("TextFire", (0.65, Y_AFT, 0.12), Z, UP, 0.075, 0.3, 0.05)
+    for deg in (25, -25, 90):
+        q, _ = door_ring(deg, DOOR_FRAME_K + 0.02)
+        d("Rust", (q.x, Y_AFT + 0.03, q.z - 0.17), Z, UP, 0.06, 0.28, 0.1)
+    d("Rust", (-0.92, Y_AFT + 0.02, 0.1), Z, UP, 0.12, 0.32, 0.06)
+    d("Hand", (-0.62, Y_AFT + 0.01, 0.3), Z, V((-0.2, 0, 0.98)), 0.12, 0.22, 0.04)
     # ---- 壳体：穿舱件下面的锈水
-    for s, y in ((-1, 0.4), (1, 0.4), (1, -1.4)):
-        a = math.radians(31)
+    for s, y in PENETRATORS:
+        a = math.radians(PEN_ANG + 9)
         p = V((s * math.sin(a) * R_IN, y, math.cos(a) * R_IN))
         d("Rust", p, V((-s * math.sin(a), 0, -math.cos(a))), V((-s * math.cos(a), 0, math.sin(a))), 0.1, 0.32, 0.12)
     # ---- 仪表板：老面板的螺钉下面挂着锈迹
@@ -1774,9 +2159,10 @@ def decals(anchors, coll):
         d("Streak", F @ V((0, -0.2, 1.19)), -dd, F.to_3x3() @ V((0, 1, 0)), 0.07, 0.12, 0.05)
         d("Puddle", (s * 1.03, VP_Y, DESK_Z + 0.04), UP, Z, 0.2, 0.16, 0.03)
     # ---- 管子上刷的介质和流向
-    for x, z, r, y, kind in ((-0.43, 0.97, 0.026, -0.75, "TextCool"), (-0.43, 0.97, 0.026, 0.62, "TextCool"),
-                             (-0.51, 0.91, 0.026, -1.0, "TextFireWater"), (-0.51, 0.91, 0.026, 0.25, "TextFireWater"),
-                             (0.3, 1.06, 0.026, -0.9, "TextReturn"), (-0.3, 1.02, 0.065, -0.6, "TextAir")):
+    for i, y, kind in ((1, -0.75, "TextCool"), (1, 0.62, "TextCool"), (2, -1.0, "TextFireWater"),
+                       (2, 0.25, "TextFireWater"), (3, -0.9, "TextReturn"), (0, -0.6, "TextAir")):
+        x, z, r, _ = PIPES[i]
+        r = r + 0.005 if i == 0 else r
         d(kind, (x, y, z - r), V((0, 0, -1)), V((1, 0, 0)), 0.26 if r < 0.05 else 0.3, r * 1.7, r * 2)
 
 

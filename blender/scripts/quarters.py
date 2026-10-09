@@ -79,75 +79,41 @@ def deck(K):
     abox(K["HullInner"], -gx - 0.05, gx + 0.05, Y_STERN, Y_FWD, DECK - 0.36, DECK - 0.33)
     for s in (-1, 1):
         abox(K["HullInner"], s * (gx + 0.03), s * (gx + 0.05), Y_STERN, Y_FWD, DECK - 0.36, DECK - 0.05)
-    sweep(K["PipeGray"], [V((-0.15, Y_STERN, DECK - 0.27)), V((-0.15, Y_FWD, DECK - 0.27))], circle_profile(0.05, 20))
+    zp = DECK - 0.33 + 0.05 + 0.022   # 和控制舱那段对齐，法兰下沿离槽底留一点
+    sweep(K["PipeGray"], [V((-0.15, Y_STERN, zp)), V((-0.15, Y_FWD, zp))], circle_profile(0.05, 20))
     for y in (-3.2, -4.4, -5.6):
-        cylinder(K["PipeGray"], 0.068, 0.022, 24, T(-0.15, y, DECK - 0.27) @ R(-90, 'X'))
+        cylinder(K["PipeGray"], 0.068, 0.022, 24, T(-0.15, y, zp) @ R(-90, 'X'))
     abox(K["Bilge"], -gx - 0.03, gx + 0.03, Y_STERN, Y_FWD, DECK - 0.335, DECK - 0.3)
 
 
 # ============================================================================ 头顶：管路、桥架、灯
 def overhead(K, anchors):
-    """控制舱的管子、电缆桥架穿过中间隔壁接着往后走，到后隔壁穿出去（进机舱）。"""
-    y0, y1 = Y_STERN, Y_FWD
+    """控制舱的管子、电缆桥架穿过中间隔壁接着往后走，到后隔壁穿出去（进机舱）。
+    管子两头接在隔壁的套管法兰上；桥架两头是穿舱框；电缆是一整排从后隔壁一直铺到驾驶台（见 cockpit.tray_cables）。"""
+    y0, y1 = Y_STERN + C.SLEEVE, Y_FWD - C.SLEEVE
     for x, z, r, key in PIPES:
         bm = K[key]
+        fkey = "PipeGray" if key == "Lagging" else key
         sweep(bm, [V((x, y0, z)), V((x, y1, z))], circle_profile(r, 24 if r > 0.03 else 16))
-        fbm = K["PipeGray"] if key == "Lagging" else bm
-        # 穿舱处的法兰（两头）+ 中间一对
-        for yf in (y1 - 0.03, -4.4, y0 + 0.03):
-            for k in (-1, 1):
-                cylinder(fbm, r + 0.022, 0.014, 32, T(x, yf + k * 0.007, z) @ R(-90, 'X') @ T(0, 0, -0.007))
-            for i in range(6):
-                a = 2 * math.pi * (i + 0.5) / 6
-                cylinder(K["Steel"], 0.0055, 0.04, 6, T(x + math.cos(a) * (r + 0.013), yf - 0.02,
-                                                          z + math.sin(a) * (r + 0.013)) @ R(-90, 'X'))
+        C.pipe_sleeve(K, x, z, r, key, y_front=Y_STERN)
+        C.flange_pair(K, fkey, T(x, -4.4, z) @ R(-90, 'X'), r)
         if key == "Lagging":
             for yb in [y0 + 0.3 + k * 0.4 for k in range(10)]:
                 if yb < y1 - 0.15 and abs(yb + 4.4) > 0.08:
                     cylinder(K["Steel"], r + 0.002, 0.016, 32, T(x, yb, z) @ R(-90, 'X'), caps=False)
         for yf in AFT_FRAMES:
-            hang = 1.2 if math.hypot(x, yf - HATCH[1]) < 0.43 else math.sqrt(1.19 ** 2 - x * x)
             yh = yf + 0.035
-            ring_r = r + 0.006
-            arc = [V((x + math.cos(math.radians(a)) * ring_r, yh, z + math.sin(math.radians(a)) * ring_r))
-                   for a in range(-180, 1, 15)]
-            sweep(K["Steel"], arc, [(-0.002, -0.012), (0.002, -0.012), (0.002, 0.012), (-0.002, 0.012)],
-                  up_hint=V((0, 1, 0)))
-            for sx in (-1, 1):
-                cylinder(K["Steel"], 0.005, hang - z, 8, T(x + sx * ring_r, yh, z))
-            box(K["Steel"], 2 * ring_r + 0.03, 0.03, 0.006, T(x, yh, hang - 0.003))
+            # 舱口那里肋骨断开了，吊到舱口围板的底面上
+            C.pipe_hanger(K, x, z, r, yh, flat_top=1.2 if math.hypot(x, yh - HATCH[1]) < 0.4 else None)
     # 通风口
     x, z, r, _ = PIPES[0]
     for yv in (-4.65, -5.75):
         rbox(K["PipeGray"], 0.14, 0.12, 0.06, T(x, yv, z - r - 0.01), r=0.008, seg=2)
         vent(K, T(x, yv, z - r - 0.041) @ R(180, 'X'), 0, 0, 0.11, 0.09, 8, 0.006)
-
-    # 电缆桥架
+    # 电缆桥架：两头是穿舱框
     for s in (-1, 1):
-        a = math.radians(38 * s)
-        rc = 1.13
-        cx, cz = math.sin(a) * rc, math.cos(a) * rc
-        tang = V((math.cos(a), 0, -math.sin(a)))
-        nrm = V((math.sin(a), 0, math.cos(a)))
-        for side in (-1, 1):
-            c = V((cx, 0, cz)) + tang * side * 0.08
-            sweep(K["Rail"], [V((c.x, y0, c.z)), V((c.x, y1, c.z))],
-                  [(-0.025, -0.003), (0.025, -0.003), (0.025, 0.003), (-0.025, 0.003)], up_hint=tang)
-        yy = y0 + 0.1
-        while yy < y1 - 0.05:
-            p = V((cx, yy, cz)) - nrm * 0.02
-            box(K["Rail"], 0.16, 0.02, 0.006, frame(p, nrm, V((0, 1, 0))))
-            yy += 0.25
-        for yf in AFT_FRAMES:
-            p = V((cx, yf + 0.03, cz))
-            q = nrm * 1.19
-            sweep(K["Steel"], [p, V((q.x, yf + 0.03, q.z))], circle_profile(0.005, 8))
-        specs = [(0.009, "CableBlack"), (0.007, "CableGray"), (0.008, "CableBlack"), (0.005, "CableOrange"),
-                 (0.006, "CableBlack"), (0.005, "CableYellow"), (0.007, "CableGray")]
-        base = nrm * 1.145
-        n = int((y1 - y0) / 0.3)
-        C.Cab.bundle([V((base.x + 0.004 * math.sin(k), y0 + (y1 - y0) * k / n, base.z)) for k in range(n + 1)],
-                     specs, tie_every=0.4)
+        C.cable_transit(K, s, *C.MCT_STERN)
+        C.tray(K, s, C.MCT_STERN[1], C.MCT_MID[0], AFT_FRAMES)
     # 顶灯：门后一盏（舱口前面），铺位上方两盏
     for i, yl in enumerate((-2.78, -4.4, -5.6)):
         ceiling_lamp(K, anchors, T(0.0, yl, R_IN - 0.01) @ R(180, 'X'), f"CabinLight_Dome_{3 + i}")
@@ -191,12 +157,17 @@ def galley(K, anchors):
            V((1.0, -3.06, zt + 0.18))]
     sweep(K["Chrome"], catmull(tap, 8), circle_profile(0.011, 12))
     cylinder(K["Chrome"], 0.025, 0.03, 16, T(1.27, -3.06, zt))
-    for yy, key in ((-3.0, "PipeBlue"), (-3.12, "BtnRed")):   # 冷水、热水
-        cylinder(K["Chrome"], 0.008, 0.03, 8, T(1.24, yy, zt + 0.12) @ R(90, 'Y'))
-        cylinder(K[key], 0.016, 0.018, 12, T(1.21, yy, zt + 0.12) @ R(90, 'Y'))
-    # 挡水板、靠墙一根水管
+    for yy, key in ((-3.0, "PipeBlue"), (-3.12, "BtnRed")):   # 冷水、热水：阀杆朝外，手柄刷了颜色
+        cylinder(K["Chrome"], 0.006, 0.03, 8, T(1.225, yy, zt + 0.12) @ R(90, 'Y'))
+        cylinder(K[key], 0.016, 0.018, 12, T(1.205, yy, zt + 0.12) @ R(90, 'Y'))
+    # 挡水板；冷热水两根立管从台面底下上来接到两个阀上，阀之间一根横管接龙头
     abox(K["Steel"], 1.28, 1.3, ya, yf, zt, zt + 0.3)
-    sweep(K["PipeBlue"], [V((1.29, yf, zt + 0.02)), V((1.27, -3.06, zt + 0.02))], circle_profile(0.012, 10))
+    for yy, key in ((-3.0, "PipeBlue"), (-3.12, "BtnRed")):
+        sweep(K["Copper"], [V((1.262, yy, zt - 0.01)), V((1.262, yy, zt + 0.112))], circle_profile(0.0065, 10))
+        lathe(K["Chrome"], [(0.0065, 0.0), (0.016, 0.0), (0.016, 0.003), (0.0065, 0.006)], 16, T(1.262, yy, zt))
+        cylinder(K["Brass"], 0.012, 0.03, 12, T(1.262, yy, zt + 0.105))
+    sweep(K["Copper"], [V((1.262, -3.0, zt + 0.12)), V((1.262, -3.12, zt + 0.12))], circle_profile(0.0065, 10))
+    cylinder(K["Brass"], 0.011, 0.024, 12, T(1.262, -3.06, zt + 0.12) @ R(90, 'X') @ T(0, 0, -0.012))
     # 栏杆：防止东西滑下台面
     for yy in (ya + 0.04, -3.3, -3.6, yf - 0.04):
         cylinder(K["Steel"], 0.006, 0.05, 8, T(FACE + 0.015, yy, zt))
@@ -229,8 +200,15 @@ def galley(K, anchors):
         rbox(K["Knob"], 0.05, 0.03, 0.02, Mr @ T(0, sy * 0.145, 0.15), r=0.006, seg=2)
     rbox(K["PanelDark"], 0.012, 0.06, 0.04, Mr @ T(-0.133, 0, 0.08) @ R(-4, 'Y'), r=0.003, seg=1)
     lamp(K, frame(Mr @ V((-0.14, 0, 0.09)), V((-1, 0, 0))), 0, 0, 0.004, "LensRed")
-    C.Cab.add([Mr @ V((0.12, 0.05, 0.05)), Mr @ V((0.22, 0.1, 0.02)), V((1.28, -3.85, zt + 0.15)),
-               V((1.29, -3.9, zt + 0.25))], 0.004, "CableWhite")
+    # 电源线顺着台面拖到挡水板上的插座
+    so = V((1.265, -3.84, zt + 0.2))
+    rbox(K["EquipBeige"], 0.03, 0.075, 0.075, T(*so), r=0.006, seg=2)
+    for sy in (-1, 1):
+        cylinder(K["Steel"], 0.003, 0.002, 8, T(so.x - 0.015, so.y + sy * 0.028, so.z) @ R(-90, 'Y'))
+    rbox(K["Bakelite"], 0.026, 0.036, 0.042, T(so.x - 0.028, so.y, so.z), r=0.005, seg=2)
+    C.Cab.add([Mr @ V((0.12, 0.05, 0.05)), Mr @ V((0.17, 0.05, 0.01)), V((1.2, -3.8, zt + 0.0065)),
+               V((1.232, -3.835, zt + 0.06)), V((1.237, -3.84, zt + 0.15)), V((so.x - 0.028, so.y, so.z - 0.02))],
+              0.004, "CableWhite")
     # 搪瓷缸子（白底红口），一个在台面上，三个挂在吊柜下面
     enamel_mug(K, T(0.82, -3.58, zt) @ R(200, 'Z'), tea=0.35, seed=1)
     enamel_mug(K, T(0.84, -2.86, zt) @ R(150, 'Z'), words=False, seed=2)
@@ -375,8 +353,11 @@ def bunks(K, anchors, s):
         toggle(K, F @ T(0, 0, 0.03), 0, 0.012, up=(s, k) in lit, s=0.7)
         if (s, k) in lit:
             anchors.append(empty(f"CabinLight_Bunk_{tag}{k}", K.coll, Fs @ T(0, 0, 0.05)))
-        C.Cab.add([F @ V((0, -0.025, 0.01)), F @ V((0, -0.06, 0.0)), V((s * (xw - 0.005), yl - 0.1, zl - 0.15)),
-                   V((s * (xw - 0.005), yl - 0.2, LOWER_Z - 0.04))], 0.003, "CableWhite")
+        # 电线从灯座底下出来，绕个小弯从衬板上的橡胶护圈钻进去（走衬板后面）
+        C.Cab.add([F @ V((0, -0.024, 0.012)), F @ V((0, -0.045, 0.014)), F @ V((0, -0.07, 0.008)),
+                   F @ V((0, -0.08, -0.004))], 0.003, "CableWhite")
+        lathe(K["Rubber"], [(0.004, 0.0), (0.008, 0.0), (0.008, 0.002), (0.0055, 0.004), (0.004, 0.004)], 12,
+              F @ T(0, -0.08, 0))
     # 床垫、被褥、枕头、帘子（布料模拟，见 bedding.py）。先摆底下的，摆好的东西是后面几件的碰撞体
     lower = Bunk(K, s, LOWER_Z, xin, xw, ya, yf, DECK, False, tag + "0")
     upper = Bunk(K, s, UPPER_Z, xin, xw, ya, yf, DECK, True, tag + "1")
@@ -741,10 +722,7 @@ def stern_bulkhead(K, anchors):
     K.separate("Int_SternBulkhead", "HullInner", plate, recalc=False)
     bm = K["HullInner"]
     ring_sweep(bm, [(R_IN + 0.01, 0.0), (R_IN - 0.035, 0.0), (R_IN + 0.01, 0.045)][::-1], y, -140, 140, 180)
-    zt = 0.95
-    xt = math.sqrt(R_IN ** 2 - zt ** 2) + 0.01
-    rbox(bm, 2 * xt, 0.11, 0.02, T(0, y + 0.055, zt), r=0.0, seg=1)
-    rbox(bm, 2 * xt, 0.02, 0.08, T(0, y + 0.11, zt), r=0.004, seg=2)
+    # 加强筋在机舱那一面；这一面只有管子的套管和电缆穿舱框（在 overhead 里做）
 
     # 检修门：椭圆围板 + 螺栓压住的盖板（不是门，是拿 20 颗螺栓封死的）
     hz, ha, hb = 0.0, 0.27, 0.42

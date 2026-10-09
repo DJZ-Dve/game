@@ -3,7 +3,7 @@
 - Parts：按材质分桶收集几何体，最后每种材质只生成一个对象（几千个小零件不会变成几千个对象）。
 - 面板零件（螺丝、拨动开关、旋钮、按钮、指示灯、表头、数码管、报警灯牌、接插件、把手、散热孔……）
   都在面板坐标系 P 里摆放：P 的 XY 平面是面板正面，+Z 朝外（朝操作的人），+Y 朝上。
-- Cables：线缆和线束（带扎带），最后统一扫掠成管子。
+- Cables：单根的线缆，和桥架上平铺的扁平线束（成排拐弯不拧麻花，扎带连横档一起捆），最后统一扫掠成管子。
 """
 import math
 import os
@@ -114,25 +114,6 @@ def star_profile(r, n=24, depth=0.06):
 def extrude_profile(bm, profile, M, h):
     """2D 剖面沿局部 Z 拉伸 h（带上下盖）。"""
     sweep(bm, [M @ V((0, 0, 0)), M @ V((0, 0, h))], profile, up_hint=(M.to_3x3() @ V((0, 1, 0))))
-
-
-def frames_along(points):
-    """平行传输标架：返回 [(p, t, n, b)]。"""
-    pts = [V(p) for p in points]
-    out = []
-    n_prev = None
-    t_prev = None
-    for i, p in enumerate(pts):
-        t = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
-        if n_prev is None:
-            ref = V((0, 0, 1)) if abs(t.z) < 0.9 else V((1, 0, 0))
-            n = ref.cross(t).normalized()
-        else:
-            n = (t_prev.rotation_difference(t) @ n_prev).normalized()
-        b = t.cross(n).normalized()
-        out.append((p, t, n, b))
-        n_prev, t_prev = n, t
-    return out
 
 
 def path_length(points):
@@ -506,7 +487,7 @@ def unit(K, F, w, h, d, body="EquipGreen", face="PanelDark", handles=True, screw
 class Cables:
     def __init__(self, rng):
         self.items = []  # (points, r, key)
-        self.ties = []  # (p, t, r)
+        self.loops = []  # (闭合路径, 线束走向, key, 锁扣坐标系)：扁平线束上的扎带
         self.rng = rng
 
     def add(self, pts, r, key="CableBlack", samples=6):
@@ -522,52 +503,74 @@ class Cables:
         mid = (p1 + e) / 2 - V((0, 0, sag))
         self.add([s, p1, mid, e], r, key)
 
-    def bundle(self, path, specs, tie_every=0.16, wobble=0.0025, samples=8, tie_key="Zip"):
-        """线束：specs=[(r, key), ...] 沿中心线并排走，按圈排布，带扎带。"""
-        center = catmull(path, samples)
-        fr = frames_along(center)
-        # 截面排布：中心一根，外面一圈圈排
-        offs = []
-        ring, k = 0, 0
-        rmax = max(r for r, _ in specs)
-        while len(offs) < len(specs):
-            if ring == 0:
-                offs.append((0.0, 0.0))
-                ring = 1
-                continue
-            n = 6 * ring
-            for j in range(n):
-                if len(offs) >= len(specs):
-                    break
-                a = 2 * math.pi * j / n + ring * 0.4
-                offs.append((math.cos(a) * rmax * 2.05 * ring, math.sin(a) * rmax * 2.05 * ring))
-            ring += 1
-        env = max(math.hypot(ox, oy) for ox, oy in offs) + rmax
-        for (r, key), (ox, oy) in zip(specs, offs):
-            ph = self.rng.uniform(0, 6.28)
-            fq = self.rng.uniform(6, 14)
-            pts = []
-            acc = 0.0
-            for i, (p, t, n_, b) in enumerate(fr):
-                if i:
-                    acc += (p - fr[i - 1][0]).length
-                wob = math.sin(acc * fq + ph) * wobble
-                pts.append(p + n_ * (ox + wob) + b * (oy + wob * 0.6))
+    def ribbon(self, path, n0, layers, ties=(), samples=6, gap=0.0025, wobble=0.0008, under=0.0085,
+               tie_key="Zip"):
+        """扁平线束：电缆一根挨一根平铺在支承面（桥架横档）上，可以叠几层；拐弯时整排一起弯，不拧麻花。
+        path：支承面上的中心线；n0：起点处支承面的法线（电缆铺在这一侧）。
+        layers：[[电缆, ...], ...]，第 0 层贴着支承面。电缆是 (r, key)，或者 (r, key, s0, lead)——
+          中途并进来的：s0 是并进来处的弧长，lead 是并进来之前的走线点（从接插件出来、翻过桥架边梁）。
+        ties：扎带位置（弧长），扎带连横档一起捆（under 是横档厚度加一点余量）。
+        返回 dict：center（中心线）、frames（每点的 (t, n, w)）、arc（弧长）、width、height。"""
+        center = catmull(path, samples) if len(path) > 2 else [V(p) for p in path]
+        fr = []
+        n = V(n0)
+        prev = None
+        for i in range(len(center)):
+            t = (center[min(i + 1, len(center) - 1)] - center[max(i - 1, 0)]).normalized()
+            n = (n - t * n.dot(t)).normalized() if prev is None else (prev.rotation_difference(t) @ n).normalized()
+            prev = t
+            fr.append((t, n, t.cross(n)))
+        arc = [0.0]
+        for i in range(1, len(center)):
+            arc.append(arc[-1] + (center[i] - center[i - 1]).length)
+
+        def at(s):
+            i = min(range(len(arc)), key=lambda j: abs(arc[j] - s))
+            return center[i], fr[i]
+        # 截面排布：每层从中线往两边摊开，上一层压在下一层最粗的那根上面
+        slots = []
+        base = width = 0.0
+        for layer in layers:
+            w = sum(2 * c[0] for c in layer) + gap * (len(layer) - 1)
+            width = max(width, w)
+            u = -w / 2
+            for c in layer:
+                slots.append((u + c[0], base + c[0], c))
+                u += 2 * c[0] + gap
+            base += 2 * max(c[0] for c in layer)
+        for u0, h, c in slots:
+            r, key = c[0], c[1]
+            s0, lead = (c[2], c[3]) if len(c) > 2 else (-1.0, [])
+            ph, fq = self.rng.uniform(0, 6.28), self.rng.uniform(5, 9)
+            body = [p + w_ * (u0 + math.sin(arc[i] * fq + ph) * wobble) + n_ * h
+                    for i, (p, (t, n_, w_)) in enumerate(zip(center, fr)) if arc[i] >= s0]
+            if lead:
+                # 先在高处横移到自己槽位的正上方，再竖着落下去（落的时候不再横移，不会蹭到边梁）
+                p1, (t1, n1, w1) = at(s0 - 0.1)
+                p2, (t2, n2, w2) = at(s0 - 0.05)
+                k = min(3, len(body) - 1)
+                pts = catmull([V(q) for q in lead] + [p1 + w1 * u0 + n1 * (h + 0.05), p2 + w2 * u0 + n2 * (h + 0.02),
+                                                      body[0], body[k]], 6)[:-1] + body[k:]
+            else:
+                pts = body
             self.items.append((pts, r, key))
-        # 扎带
-        acc, nxt = 0.0, tie_every * 0.5
-        for i in range(1, len(fr)):
-            acc += (fr[i][0] - fr[i - 1][0]).length
-            if acc >= nxt:
-                self.ties.append((fr[i][0], fr[i][1], env + 0.0012, tie_key))
-                nxt += tie_every * self.rng.uniform(0.8, 1.25)
-        return env
+        for s in ties:
+            p, (t, n_, w_) = at(s)
+            hu, top, rc = width / 2 + 0.003, base + 0.0015, 0.003
+            loop = []
+            for cu, cn, a0 in ((hu - rc, top - rc, 0), (-hu + rc, top - rc, 90), (-hu + rc, -under + rc, 180),
+                               (hu - rc, -under + rc, 270)):
+                for k in range(4):
+                    a = math.radians(a0 + 30 * k)
+                    loop.append(p + w_ * (cu + math.cos(a) * rc) + n_ * (cn + math.sin(a) * rc))
+            self.loops.append((loop, t, tie_key, frame(p + w_ * (hu + 0.0025) + n_ * (top * 0.5), w_)))
+        return {"center": center, "frames": fr, "arc": arc, "width": width, "height": base}
 
     def build(self, K):
         for pts, r, key in self.items:
             segs = 8 if r < 0.004 else 10 if r < 0.008 else 14
             sweep(K[key], pts, circle_profile(r, segs))
-        for p, t, r, key in self.ties:
-            M = frame(p, t)
-            torus(K[key], r, 0.0016, 24, 4, M @ S(1, 1, 2.2))
-            rbox(K[key], 0.006, 0.005, 0.007, M @ T(r + 0.002, 0, 0), r=0.0, seg=1)
+        for loop, t, key, head in self.loops:
+            sweep(K[key], loop, [(-0.0006, -0.0022), (0.0006, -0.0022), (0.0006, 0.0022), (-0.0006, 0.0022)],
+                  closed=True, up_hint=t)
+            rbox(K[key], 0.005, 0.006, 0.005, head, r=0.0, seg=1)
