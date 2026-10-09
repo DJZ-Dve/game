@@ -8,7 +8,7 @@ var _timer := 10.0
 
 
 func _ready() -> void:
-	if DebugArgs.has("capture"):
+	if DebugArgs.has("capture") or DebugArgs.has("no-hud"):
 		visible = false
 
 

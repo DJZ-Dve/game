@@ -4,6 +4,7 @@
 # 不经过声卡，绝不会从扬声器或耳机出声；窗口在后台（见 godot_bg.sh）。
 # 用法: tools/record.sh 输出名 秒数 [游戏参数...]
 #   例: tools/record.sh .tmp/door 8 --at=0,2.0 --yaw=180 --actions=30:interact,330:interact
+# 环境变量 CRF 调 mp4 的画质（默认 26，数字越小越清楚、文件越大；给别人看的用 18~20）
 # 产出: 输出名.mp4（给人看着听）、输出名.wav（给 tools/audio_report.py 分析）、输出名.log（游戏输出，含 SFX 事件）
 set -eu
 if (( $# < 2 )); then
@@ -25,7 +26,7 @@ if [[ ! -s $tmp/movie.avi ]]; then
   exit 1
 fi
 ffmpeg -v error -y -i "$tmp/movie.avi" -vn -c:a pcm_s16le "$out.wav"
-ffmpeg -v error -y -i "$tmp/movie.avi" -c:v libx264 -preset veryfast -pix_fmt yuv420p -crf 26 \
+ffmpeg -v error -y -i "$tmp/movie.avi" -c:v libx264 -preset veryfast -pix_fmt yuv420p -crf ${CRF:-26} \
   -c:a aac -b:a 192k -movflags +faststart "$out.mp4"
 rm -rf "$tmp"
 echo "录好了: $out.mp4  $out.wav  $out.log"

@@ -14,6 +14,7 @@ extends Node
 ##   --actions=帧:动作,...  按帧号自动按键（录音测试用，见 tools/record.sh）。
 ##                    `60:interact` 在第 60 帧按一下 E；`90:+move_forward` 按住、`150:-move_forward` 松开
 ##   --only-sfx=a,b / --mute-sfx=a,b  只开 / 关掉这几种声音（名字见 sub_audio.gd 的 VOL）
+##   --no-hud         不显示操作提示（录给别人看的视频用）
 ##   --sfx-log        每触发一个音效打一行 `SFX <帧号> <名字>`（tools/audio_report.py 拿它和录音对时间）
 
 var _args := {}

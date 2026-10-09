@@ -248,9 +248,14 @@ func _walk(delta: float) -> void:
 		input = Input.get_vector("turn_left", "turn_right", "move_forward", "move_back")
 	var wish := input.rotated(-yaw) * walk_speed
 	_vel = _vel.move_toward(wish, walk_accel * delta)
+	# 门洞只有 24 厘米宽：开着门朝门洞走时，把人往门洞中线上带，别卡在门框上
+	if _door_open() and absf(_pos.y - DOOR_POS.y) < 0.6 and _vel.y * signf(DOOR_POS.y - _pos.y) > 0.05:
+		_pos.x = move_toward(_pos.x, DOOR_POS.x, absf(_vel.y) * delta * 1.2)
+	var before := _pos
 	_pos = _clamp_to_walkable(_pos + _vel * delta)
 	var bob0 := _bob
-	_bob += _vel.length() * delta * 8.9  # 全速 1.3 m/s 时每秒 1.85 步（舱里过道窄，步子小）
+	# 步伐按实际挪动的距离算：顶着墙走时人没动，不该原地踏步
+	_bob += _pos.distance_to(before) * 8.9  # 全速 1.3 m/s 时每秒 1.85 步（舱里过道窄，步子小）
 	_land_v += (-_land * 400.0 - _land_v * 28.0) * delta
 	_land += _land_v * delta
 	# 两脚交替落地：步数跨过整数的那一帧
