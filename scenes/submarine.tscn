@@ -7,8 +7,7 @@
 [ext_resource type="Script" path="res://scripts/external_camera.gd" id="5_ext"]
 [ext_resource type="Script" path="res://scripts/instruments.gd" id="6_inst"]
 [ext_resource type="Script" path="res://scripts/cockpit_props.gd" id="7_props"]
-[ext_resource type="Script" path="res://scripts/marine_snow.gd" id="8_snow"]
-[ext_resource type="Shader" path="res://assets/shaders/marine_snow.gdshader" id="9_snowsh"]
+[ext_resource type="Script" path="res://scripts/water_fx.gd" id="8_water"]
 [ext_resource type="Script" path="res://scripts/flicker_light.gd" id="10_flick"]
 [ext_resource type="Script" path="res://scripts/watertight_door.gd" id="11_door"]
 
@@ -22,28 +21,6 @@ size = Vector3(0.7, 1.8, 2.9)
 [sub_resource type="FogMaterial" id="Fog_cut"]
 density = -0.022
 albedo = Color(0.371, 0.676, 0.7, 1)
-
-[sub_resource type="ParticleProcessMaterial" id="Snow_process"]
-emission_shape = 3
-emission_box_extents = Vector3(24, 14, 24)
-direction = Vector3(0, -1, 0)
-spread = 180.0
-initial_velocity_min = 0.01
-initial_velocity_max = 0.06
-gravity = Vector3(0, -0.02, 0)
-scale_min = 0.5
-scale_max = 1.5
-turbulence_enabled = true
-turbulence_noise_strength = 0.35
-turbulence_noise_scale = 6.0
-
-[sub_resource type="ShaderMaterial" id="Snow_mat"]
-render_priority = 0
-shader = ExtResource("9_snowsh")
-
-[sub_resource type="QuadMesh" id="Snow_quad"]
-material = SubResource("Snow_mat")
-size = Vector2(0.03, 0.03)
 
 [node name="Submarine" type="CharacterBody3D"]
 motion_mode = 1
@@ -85,6 +62,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, -0.17)
 size = Vector3(2.7, 2.3, 5.6)
 box_projection = true
 reflection_mask = 1
+cull_mask = 524287
 interior = true
 ambient_mode = 2
 ambient_color = Color(0.09, 0.08, 0.07, 1)
@@ -106,6 +84,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, 4.5)
 size = Vector3(2.7, 2.3, 3.75)
 box_projection = true
 reflection_mask = 1
+cull_mask = 524287
 interior = true
 ambient_mode = 2
 ambient_color = Color(0.09, 0.08, 0.07, 1)
@@ -139,13 +118,6 @@ script = ExtResource("5_ext")
 [node name="Instruments" type="Node" parent="."]
 script = ExtResource("6_inst")
 
-[node name="MarineSnow" type="GPUParticles3D" parent="."]
-amount = 6000
-lifetime = 30.0
-preprocess = 30.0
-local_coords = false
-visibility_aabb = AABB(-30, -20, -30, 60, 40, 60)
-process_material = SubResource("Snow_process")
-draw_pass_1 = SubResource("Snow_quad")
-script = ExtResource("8_snow")
+[node name="Water" type="Node3D" parent="."]
+script = ExtResource("8_water")
 cabin_path = NodePath("../Body")

@@ -25,6 +25,15 @@
 艉部十字尾舵 + 七叶大侧斜螺旋桨。螺旋桨跟着推进转，方向舵、升降舵跟着转向、上浮下潜偏转（`submarine.gd`）。
 外形参数在 `blender/scripts/gen_submarine.py` 开头（艇身半径、艏尖、艉锥、水线、围壳位置）。
 
+## 舱外的水（`scripts/water_fx.gd`）
+- **水体吸收**：全屏后处理按光程衰减颜色，红光最快、绿次之、蓝最慢，东西越远越偏蓝绿、越暗（`assets/shaders/underwater.gdshader`）。
+  耐压舱里是空气，不衰减；系数在 `water_fx.gd` 的 `absorption`，几个水下着色器共用
+- **光柱**：探照灯在体积雾里打出光柱。体积雾的各向异性只有 0.35，从舷窗顺着侧灯往外看也看得见光
+- **颗粒**：海雪、细悬浮物两层颗粒绕着相机铺开，颗粒本身固定在世界里随洋流漂，只有被灯照到才看得见（迎着光最亮）；
+  艇开起来颗粒会拉成拖影从舷窗外划过去（`assets/shaders/marine_snow.gdshader`）
+- **生物发光**：零星几个蓝绿色的小光点，隔一阵亮一下再熄掉，关了探照灯才看得清（`assets/shaders/bioluminescence.gdshader`）
+- 舱外视角的补光是一盏对着艇身的聚光灯（像跟拍的水下机器人），只照得到艇和艇底下一小片海床
+
 ## 舱内布局
 耐压舱是一段横躺的圆筒（内径 2.7 米），加上艏部半球，长约 8 米，中间一道带水密门的隔壁分成两段：
 - **控制舱**（前段）
@@ -75,7 +84,7 @@ godot --path . --script res://scripts/tools/gen_decal_text.gd             # 重�
 godot --headless --path . --script res://scripts/tools/gen_decals.gd      # 重新生成贴花贴图
 godot --path . -- --bake-gi                   # 只重新烘焙舱内 VoxelGI
 godot --headless --path . --script res://scripts/tools/setup_project.gd   # 重写输入映射、重新生成材质
-tools/capture.sh shot.png --view=external --orbit=40                      # 截图（后台运行、不弹窗；FOREGROUND=1 前台）
+tools/capture.sh shot.png --view=external --orbit=40                      # 截图（后台运行、不弹窗；FOREGROUND=1 前台；其余参数见 scripts/debug_args.gd）
 tools/glb_info.sh assets/models/submarine_cockpit.glb [网格名]            # 查看 glb 里的网格、顶点数
 tools/fetch_polyhaven.sh --models a,b --textures c,d                      # 下载 Poly Haven 素材（ambientCG 用 fetch_ambientcg.sh --ids）
 ```

@@ -8,6 +8,8 @@ extends Node
 ##   --door=open      开场时水密门开着
 ##   --lean=0/1       贴近左/右舷窗（配合 --at 站到舷窗附近）
 ##   --bake-gi        重新烘焙舱内 VoxelGI（控制舱、生活舱各一个），存到 assets/gi/ 后退出
+##   --cruise=油门     一直推着油门（-1~1），看艇开动起来时颗粒的拖影
+##   --water=off      关掉水体吸收后处理（对比用，见 water_fx.gd）
 ##   --sub-yaw=度     开场把潜艇转一个角度（检查舱内 GI、贴花是不是跟着艇走）
 
 var _args := {}

@@ -88,14 +88,14 @@ func _build_floodlights() -> void:
 		var l := SpotLight3D.new()
 		l.name = "Spot"
 		l.light_color = light_color
-		l.light_energy = light_energy * (0.5 if anchor.name.begins_with("Light_S") else 1.0)
+		l.light_energy = light_energy * (0.8 if anchor.name.begins_with("Light_S") else 1.0)
 		l.spot_range = light_range
 		l.spot_angle = light_angle
 		l.spot_angle_attenuation = 0.9
 		l.spot_attenuation = 1.2
 		l.shadow_enabled = true
 		l.shadow_blur = 1.5
-		l.light_volumetric_fog_energy = 1.6
+		l.light_volumetric_fog_energy = 4.0
 		l.light_size = 0.12
 		# 不参与舱内 VoxelGI（灯在艇外，算进去会从壳体漏光进来）
 		l.light_bake_mode = Light3D.BAKE_DISABLED
@@ -180,6 +180,8 @@ func _physics_process(delta: float) -> void:
 	thrust_input = Input.get_axis("move_back", "move_forward") if drive else 0.0
 	lift_input = Input.get_axis("descend", "ascend") if drive else 0.0
 	var turn := Input.get_axis("turn_right", "turn_left") if drive else 0.0
+	if DebugArgs.has("cruise"):
+		thrust_input = float(DebugArgs.get_arg("cruise"))
 
 	var forward := -global_basis.z
 	var hv := Vector3(velocity.x, 0.0, velocity.z)

@@ -609,7 +609,7 @@ def light_mounts():
     for s, side in ((-1, "L"), (1, "R")):
         for key, y, ang, d, lift in (("F", 2.45, 52, V((s * 0.12, 1, -0.3)), 0.1),
                                      ("B", 2.3, 132, V((s * 0.08, 1, -0.4)), 0.1),
-                                     ("S", 0.55, 107, V((s * 1, 0.3, -0.35)), 0.12)):
+                                     ("S", 0.55, 107, V((s * 1, 0.35, -0.12)), 0.12)):
             base, n = hull_point(y, s * ang)
             out[key + side] = (base + n * lift, d.normalized(), base, n)
     return out
