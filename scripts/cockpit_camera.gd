@@ -3,14 +3,16 @@ extends Camera3D
 ## 相机挂在 Body 下面，跟着艇身一起晃；走动用的是舱内局部坐标，不走物理引擎（舱里只有一条过道）。
 
 signal seated_changed(seated: bool)
-## 走动时每落一步（脚落地的位置，舱内局部坐标；strength 0~1 按步速）
-signal stepped(foot: Vector3, strength: float)
+## 走动时每落一步：脚落地的位置（舱内局部坐标）、strength 0~1 按步速、kind 是 walk / run / settle（停下收脚）
+signal stepped(foot: Vector3, strength: float, kind: StringName)
 
 enum Mode { SEATED, WALKING }
 
 @export var sensitivity := 0.0022
-@export var walk_speed := 1.3
+@export var walk_speed := 1.25
+@export var run_speed := 2.5
 @export var walk_accel := 7.0
+@export var run_accel := 5.0
 @export var eye_height := 1.62
 @export var body_radius := 0.2
 @export var normal_fov := 70.0
@@ -40,6 +42,14 @@ const DOOR_POS := Vector2(0.0, 2.6)  # 水密门（x, z），和 cockpit.py 的 
 const DOOR_RANGE := 1.1
 ## 过门时要低头（门洞上沿离地 1.63 米）
 const DOOR_DUCK := 0.26
+## 开关门时站的地方：控制舱这边拧手轮站在门正前方；门扇往控制舱这边开、扫过门前，所以开门拉门时往右后方让开，
+## 关门时也先站在右后方伸手去够；生活舱那边门往外推开、往里拉上，一直站在门前
+## 手轮在腰那么高，拧的时候低着头、上身往前探（door_lean，crew_body.gd 跟着弯腰）
+const DOOR_STAND_FRONT := Vector2(0.0, 2.0)
+const DOOR_STAND_SIDE := Vector2(0.4, 1.85)   # 离门轴 1 米多，门扇（半径 0.82 米）扫不到
+const DOOR_STAND_AFT := Vector2(0.0, 3.0)
+const DOOR_LOOK_PITCH := -0.95
+const DOOR_LEAN := Vector2(0.14, 0.07)  # 探身时眼睛往前、往下挪多少
 
 @export var door_path: NodePath
 
@@ -57,7 +67,13 @@ var _leans: Array[Transform3D] = []
 var _lean_target := -1
 var _pos := Vector2.ZERO  # 走动时脚下的位置（x, z）
 var _vel := Vector2.ZERO
-var _bob := 0.0  # 走路的相位：每 2π 一步，(_bob + π/2) 是 2π 的整数倍时脚落地
+## 步伐：走过的步数，整数时脚落地（偶数左脚、奇数右脚）。步频按实际速度算，crew_body.gd 按它对齐走路、跑步动画
+var gait_steps := 0.0
+## 实际移动的速度（米/秒，平滑过）；跑的程度 0 走 → 1 跑（按速度算）
+var gait_speed := 0.0
+var gait_run := 0.0
+var _stepping := false
+var _sprint := 0.0
 var _land := 0.0  # 落脚时身体被压下去的量（米，负的），弹簧阻尼弹回
 var _land_v := 0.0
 var _blend := 1.0  # 0→1：从切换前的位置过渡到当前模式
@@ -65,6 +81,16 @@ var _from := Transform3D.IDENTITY
 var _shake := 0.0
 var _noise := FastNoiseLite.new()
 var _door: Node
+## 正在开关门（走过去、动手、让开），这期间不听走动按键；door_aft 是人在生活舱那边
+var door_op := false
+var door_aft := false
+var door_yaw := 0.0
+## 拧手轮时上身往前探的程度 0~1
+var door_lean := 0.0
+var _door_toggled := false
+var _door_t := 0.0
+var _auto_pos := Vector2.ZERO
+var _auto_aim := false
 
 
 func configure(body: Node3D) -> void:
@@ -110,6 +136,17 @@ func is_seated() -> bool:
 	return mode == Mode.SEATED
 
 
+## 给 crew_body.gd：脚下的位置（舱内局部 x、z）
+func feet() -> Vector2:
+	return _pos
+
+
+## 坐着的程度：0 站着走动 → 1 坐在驾驶椅上，起身、坐下时跟着视角一起平滑过渡
+func sit_amount() -> float:
+	var k := smoothstep(0.0, 1.0, _blend)
+	return k if mode == Mode.SEATED else 1.0 - k
+
+
 func add_shake(strength: float) -> void:
 	_shake = clampf(_shake + strength * 0.6, 0.0, 1.0)
 
@@ -131,6 +168,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _interact() -> void:
+	if door_op:
+		return
 	if mode == Mode.SEATED:
 		_switch(Mode.WALKING)
 		_pos = Vector2(_stand.origin.x, _stand.origin.z)
@@ -141,7 +180,7 @@ func _interact() -> void:
 		yaw = 0.0
 		pitch = 0.0
 	elif _facing_door():
-		_door.toggle()
+		_start_door()
 
 
 func _switch(m: Mode) -> void:
@@ -167,9 +206,50 @@ func _facing_viewport() -> int:
 	return -1
 
 
+## 开关门：先走到手轮跟前站好、看着手轮，再动手；门扇甩过来时让开，关上以后再上前拧紧（_door_choreo）
+func _start_door() -> void:
+	door_op = true
+	door_aft = _pos.y > DOOR_POS.y
+	_door_toggled = false
+	_door_t = 0.0
+	if door_aft:
+		_go(DOOR_STAND_AFT, 0.0)
+	elif _door.is_open:
+		_go(DOOR_STAND_SIDE, PI - 0.35)
+	else:
+		_go(DOOR_STAND_FRONT, PI)
+
+
+func _go(p: Vector2, face: float) -> void:
+	_auto_pos = p
+	door_yaw = face
+	_auto_aim = true
+
+
+func _door_choreo(delta: float) -> void:
+	_door_t += delta
+	var arrived := _pos.distance_to(_auto_pos) < 0.04 and gait_speed < 0.2
+	if arrived:
+		_auto_aim = false
+	if not _door_toggled:
+		if arrived or _door_t > 1.6:
+			_door_toggled = true
+			_door.toggle()
+		return
+	if not door_aft:
+		var h: float = _door.hinge_angle()
+		if _door.is_open and h < deg_to_rad(0.5) and _auto_pos != DOOR_STAND_FRONT:
+			_go(DOOR_STAND_FRONT, PI)       # 关上了：上前一步拧紧
+		elif not _door.is_open and h > deg_to_rad(3.0) and _auto_pos != DOOR_STAND_SIDE:
+			_go(DOOR_STAND_SIDE, PI - 0.35)  # 门扇朝人甩过来：往右后方让开
+	if not _door.busy:
+		door_op = false
+		_auto_aim = false
+
+
 ## 站在水密门跟前（门两边都行）、脸朝着门
 func _facing_door() -> bool:
-	if _door == null or _door.busy:
+	if _door == null or _door.busy or door_op:
 		return false
 	var to: Vector2 = DOOR_POS - _pos
 	var look := Vector2(-sin(yaw), -cos(yaw))
@@ -190,6 +270,10 @@ func _process(delta: float) -> void:
 		base = Transform3D(_seat_eye.basis * look, _seat_eye.origin)
 		base.origin += Vector3(sin(t * 0.9) * 0.004, sin(t * 1.7) * 0.003, 0.0)  # 呼吸
 	else:
+		if door_op:
+			_door_choreo(delta)
+		var hands_on: bool = door_op and _door.hands and _pos.distance_to(_auto_pos) < 0.1
+		door_lean = move_toward(door_lean, 1.0 if hands_on else 0.0, delta * 2.5)
 		_walk(delta)
 		var vp := _facing_viewport()
 		if not DebugArgs.has("lean"):
@@ -198,7 +282,9 @@ func _process(delta: float) -> void:
 			lean = move_toward(lean, want, delta * 2.5)
 			if lean == 0.0:
 				_lean_target = -1
-		if _near_seat():
+		if door_op:
+			prompt = ""
+		elif _near_seat():
 			prompt = "E 坐下驾驶"
 		elif vp >= 0 and lean < 0.5:
 			prompt = "按住右键 贴近舷窗"
@@ -208,23 +294,29 @@ func _process(delta: float) -> void:
 			prompt = ""
 		# 走路的起伏按「倒摆」来：脚踩在身体正下方时头最高，两脚交替落地的瞬间最低（是个尖角，不是正弦波）；
 		# 每两步左右晃一次，重心移到撑地的那只脚上，头也往那边歪一点；落脚时再被压一下、点一下头（_land）
-		var sp := clampf(_vel.length() / walk_speed, 0.0, 1.0)
-		var steps := (_bob + PI / 2.0) / TAU          # 走过的步数，整数时脚落地
+		# 跑起来起伏更大、更尖，左右晃得少一点，落脚压得更狠，视野略微拉宽
+		var sp := clampf(gait_speed / walk_speed, 0.0, 1.0)
+		var steps := gait_steps
 		var arc := sin(PI * fposmod(steps, 1.0)) - 0.64  # 0.64 是弧线的平均值，平均高度不变
-		var side := sin(PI * fposmod(steps, 2.0))       # 正：右脚撑地，负：左脚撑地
+		var side := -sin(PI * fposmod(steps, 2.0))      # 负：左脚撑地（刚落的是左脚），正：右脚撑地
+		var amp := lerpf(0.028, 0.048, gait_run)
 		var duck := 0.0
 		if _door:
 			duck = DOOR_DUCK * (1.0 - smoothstep(0.12, 0.5, absf(_pos.y - DOOR_POS.y)))
+			if door_op:
+				duck = 0.0  # 开关门时站在门前，不是在钻门
 		base = Transform3D(Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch + _land * 1.2)
 			* Basis(Vector3.BACK, -side * deg_to_rad(0.5) * sp),
-			Vector3(_pos.x, DECK_Y + eye_height - duck + arc * 0.028 * sp + _land, _pos.y))
-		base.origin += Vector3(side * 0.014 * sp, 0, 0).rotated(Vector3.UP, yaw)
+			Vector3(_pos.x, DECK_Y + eye_height - duck + arc * amp * sp + _land, _pos.y))
+		base.origin += Vector3(side * lerpf(0.014, 0.01, gait_run) * sp, 0, 0).rotated(Vector3.UP, yaw)
+		var lk := smoothstep(0.0, 1.0, door_lean)
+		base.origin += Vector3(-sin(door_yaw), 0, -cos(door_yaw)) * DOOR_LEAN.x * lk + Vector3.DOWN * DOOR_LEAN.y * lk
 		if lean > 0.0 and _lean_target >= 0:
 			var k := smoothstep(0.0, 1.0, lean)
 			var tgt := _leans[_lean_target]
 			base = Transform3D(base.basis.slerp(tgt.basis * Basis.from_euler(Vector3(pitch * 0.3, 0, 0)), k),
 				base.origin.lerp(tgt.origin, k))
-		fov = lerpf(normal_fov, lean_fov, smoothstep(0.0, 1.0, lean))
+		fov = lerpf(normal_fov + 4.0 * gait_run, lean_fov, smoothstep(0.0, 1.0, lean))
 
 	# 模式切换时平滑过渡
 	if _blend < 1.0:
@@ -244,28 +336,63 @@ func _process(delta: float) -> void:
 func _walk(delta: float) -> void:
 	var input := Vector2.ZERO
 	var scripted := DebugArgs.has("actions")  # 录音测试时由脚本按键，鼠标没被捕获
-	if current and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or scripted) and lean < 0.1:
+	if current and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or scripted) and lean < 0.1 and not door_op:
 		input = Input.get_vector("turn_left", "turn_right", "move_forward", "move_back")
-	var wish := input.rotated(-yaw) * walk_speed
-	_vel = _vel.move_toward(wish, walk_accel * delta)
+	# 按住 Shift 往前跑（往后退、横着走不跑）；门洞跟前要低头钻门，跑不起来
+	var near_door := absf(_pos.y - DOOR_POS.y) < 0.7
+	var want_run := current and Input.is_action_pressed("sprint") and input.y < -0.3 and not near_door
+	_sprint = move_toward(_sprint, 1.0 if want_run else 0.0, delta * 3.0)
+	var top := lerpf(walk_speed, run_speed, _sprint)
+	if near_door:
+		top = minf(top, walk_speed * 0.8)
+	var wish := input.rotated(-yaw) * top
+	if door_op:
+		# 开关门时自己走到位、转过去看着手轮（走的时候才强行转视角，站定了鼠标照样能看）
+		var to := _auto_pos - _pos
+		wish = to.normalized() * minf(walk_speed * 0.7, to.length() * 4.0) if to.length() > 0.01 else Vector2.ZERO
+		if _auto_aim:
+			var k := 1.0 - exp(-delta * 6.0)
+			yaw = lerp_angle(yaw, door_yaw, k)
+			pitch = lerpf(pitch, DOOR_LOOK_PITCH, k)
+	_vel = _vel.move_toward(wish, lerpf(walk_accel, run_accel, _sprint) * delta)
 	# 门洞只有 24 厘米宽：开着门朝门洞走时，把人往门洞中线上带，别卡在门框上
 	if _door_open() and absf(_pos.y - DOOR_POS.y) < 0.6 and _vel.y * signf(DOOR_POS.y - _pos.y) > 0.05:
 		_pos.x = move_toward(_pos.x, DOOR_POS.x, absf(_vel.y) * delta * 1.2)
 	var before := _pos
 	_pos = _clamp_to_walkable(_pos + _vel * delta)
-	var bob0 := _bob
 	# 步伐按实际挪动的距离算：顶着墙走时人没动，不该原地踏步
-	_bob += _pos.distance_to(before) * 8.9  # 全速 1.3 m/s 时每秒 1.85 步（舱里过道窄，步子小）
+	var v := _pos.distance_to(before) / maxf(delta, 1e-4)
+	gait_speed = lerpf(gait_speed, v, 1.0 - exp(-delta * 12.0))
+	gait_run = smoothstep(walk_speed * 1.1, run_speed * 0.95, gait_speed)
 	_land_v += (-_land * 400.0 - _land_v * 28.0) * delta
 	_land += _land_v * delta
-	# 两脚交替落地：步数跨过整数的那一帧
-	var k := floorf((_bob + PI / 2.0) / TAU)
-	if k > floorf((bob0 + PI / 2.0) / TAU):
-		var side := 0.11 if int(k) % 2 == 0 else -0.11
-		var foot := Vector3(_pos.x, DECK_Y, _pos.y) + Vector3(side, 0, 0).rotated(Vector3.UP, yaw)
-		var strength := clampf(_vel.length() / walk_speed, 0.0, 1.0)
-		_land_v -= 0.13 * strength
-		stepped.emit(foot, strength)
+	var s0 := gait_steps
+	if gait_speed > 0.12:
+		if not _stepping:
+			# 起步：抬脚迈出去半步就落地，不用先走一整步才响
+			_stepping = true
+			gait_steps = floorf(gait_steps) + 0.5
+			s0 = gait_steps
+		# 步频（每秒几步）：走路随速度加快（1.25 米/秒约 1.7 步），跑起来 2.6 步上下，和动作捕捉的动画一致
+		var cadence := lerpf(0.95 + 0.6 * gait_speed, 2.25 + 0.15 * gait_speed, gait_run)
+		gait_steps += cadence * delta
+		var k := floorf(gait_steps)
+		if k > floorf(s0):
+			_step(int(k), clampf(gait_speed / walk_speed, 0.0, 1.0), &"run" if gait_run > 0.5 else &"walk")
+	elif _stepping:
+		# 停下：一步迈到一半以上的，把后脚收过来落一下；刚落地的就不用了
+		_stepping = false
+		if fposmod(gait_steps, 1.0) > 0.3:
+			gait_steps = ceilf(gait_steps)
+			_step(int(gait_steps), 0.35, &"settle")
+
+
+## 落一步：偶数左脚、奇数右脚
+func _step(k: int, strength: float, kind: StringName) -> void:
+	var side := -0.11 if k % 2 == 0 else 0.11
+	var foot := Vector3(_pos.x, DECK_Y, _pos.y) + Vector3(side, 0, 0).rotated(Vector3.UP, yaw)
+	_land_v -= lerpf(0.13, 0.3, gait_run) * strength
+	stepped.emit(foot, strength, kind)
 
 
 func _walk_areas() -> Array:

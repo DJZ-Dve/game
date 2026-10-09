@@ -11,6 +11,7 @@
 [ext_resource type="Script" path="res://scripts/flicker_light.gd" id="10_flick"]
 [ext_resource type="Script" path="res://scripts/watertight_door.gd" id="11_door"]
 [ext_resource type="Script" path="res://scripts/sub_audio.gd" id="12_audio"]
+[ext_resource type="Script" path="res://scripts/crew_body.gd" id="13_crew"]
 
 [sub_resource type="CapsuleShape3D" id="Capsule_hull"]
 radius = 1.55
@@ -111,6 +112,10 @@ door_path = NodePath("../Door")
 
 [node name="Audio" type="Node3D" parent="Body"]
 script = ExtResource("12_audio")
+
+[node name="CrewBody" type="Node3D" parent="Body"]
+script = ExtResource("13_crew")
+camera_path = NodePath("../CockpitCamera")
 
 [node name="ExternalCamera" type="Camera3D" parent="."]
 unique_name_in_owner = true

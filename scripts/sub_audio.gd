@@ -24,9 +24,11 @@ const COMPARTMENTS := [Vector2(-1.9, 2.5), Vector2(2.75, 6.3)]  # 控制舱、�
 const VOL := {
 	"hull_bed": -11.0, "sea_deep": -4.0, "vent": -24.0, "power_hum": -24.0, "fluoro_buzz": -27.0,
 	"motor_hum": -12.0, "prop_wash": -4.0, "sea_flow": -3.0, "pump": -13.0,
-	"door_grind": -17.0, "hinge_creak": -15.0, "gear_tick": -22.0, "door_unlatch": -6.0, "door_latch": -7.0,
-	"door_slam": -3.0, "creak": 0.0, "pop": -6.0, "sonar_ping": -12.0, "drip": -10.0,
-	"footstep": -3.0, "switch": -8.0, "hull_impact": 0.0,
+	"door_grind": -14.0, "hinge_creak": -13.0, "door_wedge": -13.0, "gear_tick": -21.0, "door_strain": -8.0,
+	"door_unlatch": -5.0, "door_seal": -12.0, "door_air": -17.0, "door_slam": -2.0, "door_knock": -9.0,
+	"door_latch": -2.0, "creak": 0.0, "pop": -6.0, "sonar_ping": -12.0, "drip": -10.0,
+	"footstep_plate": -3.0, "footstep_grate": -3.0, "footstep_sill": -4.0, "run_plate": -1.0, "run_grate": -1.0,
+	"step_settle": -7.0, "switch": -8.0, "hull_impact": 0.0,
 }
 
 ## 手轮每转过这么多度响一下齿轮
@@ -52,6 +54,7 @@ var _prop: AudioStreamPlayer3D
 var _pump: AudioStreamPlayer3D
 var _grind: AudioStreamPlayer3D
 var _hinge: AudioStreamPlayer3D
+var _wedge: AudioStreamPlayer3D
 var _buzz: AudioStreamPlayer3D
 var _pump_level := 0.0
 # 一次性的声音（每种一个播放器，AudioStreamRandomizer 在变体里随机挑、随机微调音高）
@@ -60,6 +63,7 @@ var _impact: AudioStreamPlayer
 
 var _wheel_last := 0.0
 var _hinge_last := 0.0
+var _unlatch_last := 0.0
 var _tick_acc := 0.0
 var _creak_wait := 6.0
 
@@ -96,10 +100,13 @@ func _ready() -> void:
 	_shot("creak", 5, 2.0, 1.08)
 	_shot("pop", 3, 2.0, 1.1)
 	_shot("drip", 6, 1.5, 1.06)
-	_shot("footstep", 8, 1.2, 1.07, 3.0)
+	for sfx: String in ["footstep_plate", "footstep_grate", "run_plate", "run_grate"]:
+		_shot(sfx, 10 if sfx.begins_with("footstep") else 8, 1.2, 1.07, 3.0)
+	_shot("footstep_sill", 4, 1.2, 1.05, 2.0)
+	_shot("step_settle", 4, 1.0, 1.06, 3.0)
 	_shot("gear_tick", 5, 1.0, 1.12, 2.0, 8)
-	_shot("door_unlatch", 2, 1.5, 1.03)
-	_shot("door_latch", 2, 1.5, 1.03)
+	for sfx: String in ["door_strain", "door_unlatch", "door_seal", "door_air", "door_knock", "door_latch"]:
+		_shot(sfx, 2, 1.5, 1.03)
 	_shot("door_slam", 2, 2.0, 1.03)
 	_shot("switch", 3, 0.8, 1.05)
 	_shot("sonar_ping", 1, 4.0, 1.0)
@@ -112,9 +119,11 @@ func _ready() -> void:
 	if _door:
 		_grind = _loop3d("door_grind", Vector3(0, 0, DOOR_Z), 1.2, &"Cabin")
 		_hinge = _loop3d("hinge_creak", Vector3(-0.43, 0, DOOR_Z - 0.13), 1.2, &"Cabin")
+		_wedge = _loop3d("door_wedge", Vector3(0, 0, DOOR_Z), 1.2, &"Cabin")
 		_door.sound.connect(_on_door)
 		_wheel_last = _door.wheel_angle()
 		_hinge_last = _door.hinge_angle()
+		_unlatch_last = _door.unlatch
 	_cam.stepped.connect(_on_step)
 	sub.bumped.connect(_on_bump)
 	sub.lights_switched.connect(func(_on: bool) -> void: _play("switch", SWITCH_POS))
@@ -209,19 +218,28 @@ func _bus_at(z: float) -> StringName:
 
 
 # ---------------------------------------------------------------------------- 事件
-func _on_door(event: StringName) -> void:
-	var at := to_local(_door.wheel_position())
-	match event:
-		&"unlatch":
-			_play("door_unlatch", at)
-		&"slam":
-			_play("door_slam", at)
-		&"latched":
-			_play("door_latch", at)
+## 门的事件名直接对应音效 door_<事件>（latched → door_latch）；strength 是这一下的轻重
+func _on_door(event: StringName, strength: float) -> void:
+	var sfx := "door_latch" if event == &"latched" else "door_" + event
+	if not _shots.has(sfx):
+		return
+	_play(sfx, to_local(_door.wheel_position()), false, linear_to_db(clampf(strength, 0.05, 1.3)))
 
 
-func _on_step(foot: Vector3, strength: float) -> void:
-	_play("footstep", foot, false, linear_to_db(lerpf(0.4, 1.0, strength)))
+## 脚步按落脚的地面挑：过道中间一条格栅、两边花纹钢板、门洞里的钢门槛（布局见 cockpit.py、quarters.py 的 deck）
+func _on_step(foot: Vector3, strength: float, kind: StringName) -> void:
+	var surface := _floor_at(foot)
+	var sfx := "step_settle" if kind == &"settle" else ("run_" if kind == &"run" else "footstep_") + surface
+	if surface == "sill" and kind != &"settle":
+		sfx = "footstep_sill"
+	_play(sfx, foot, false, linear_to_db(lerpf(0.4, 1.0, strength)))
+
+
+func _floor_at(p: Vector3) -> String:
+	if absf(p.z - DOOR_Z) < 0.08:
+		return "sill"
+	var on_grate := absf(p.x) < 0.3 and ((p.z > -1.55 and p.z < 2.35) or (p.z > 2.73 and p.z < 6.3))
+	return "grate" if on_grate else "plate"
 
 
 func _on_bump(strength: float) -> void:
@@ -304,7 +322,7 @@ func _drive(p: Node, level: float, sfx: String, pitch := 1.0) -> void:
 		DebugArgs.log_loop(sfx, true)
 
 
-## 水密门：手轮的齿轮咔哒、减速箱摩擦、铰链吱嘎都按实际转动的快慢出声
+## 水密门：手轮的齿轮咔哒、减速箱摩擦、铰链吱嘎、把手在楔块上刮都按实际转动的快慢出声
 func _update_door(delta: float) -> void:
 	if _door == null or delta <= 0.0:
 		return
@@ -320,10 +338,17 @@ func _update_door(delta: float) -> void:
 		_tick_acc = fmod(_tick_acc, TICK_DEG)
 		_play("gear_tick", at)
 	_grind.position = at
-	var ws := clampf(rad_to_deg(dw / delta) / 700.0, 0.0, 1.0)
-	_drive(_grind, ws ** 0.7, "door_grind", lerpf(0.8, 1.1, ws))
-	var hs := clampf(rad_to_deg(dh / delta) / 150.0, 0.0, 1.0)
-	_drive(_hinge, hs ** 0.6, "hinge_creak", lerpf(0.8, 1.1, hs))
+	var ws := clampf(rad_to_deg(dw / delta) / 500.0, 0.0, 1.0)
+	_drive(_grind, ws ** 0.7, "door_grind", lerpf(0.75, 1.05, ws))
+	var hs := clampf((rad_to_deg(dh / delta) - 4.0) / 120.0, 0.0, 1.0)  # 拧紧时胶条压进去那一点点不算
+	_drive(_hinge, hs ** 0.6, "hinge_creak", lerpf(0.75, 1.05, hs))
+	# 把手在楔块上刮：吃劲程度 × 把手转动的快慢；越吃劲音高越低越沉
+	var u: float = _door.unlatch
+	var us := clampf(absf(u - _unlatch_last) / delta / 0.35, 0.0, 1.0)
+	_unlatch_last = u
+	var grip: float = _door.wedge_load()
+	_wedge.position = at
+	_drive(_wedge, (grip * us) ** 0.7, "door_wedge", lerpf(1.05, 0.85, grip))
 
 
 ## 艇壳受压的吱嘎、嘣：隔一阵来一下，升降、转向的时候更勤

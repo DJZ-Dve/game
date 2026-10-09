@@ -66,3 +66,4 @@
 | Fabric001 | ambientcg/Fabric001 | https://ambientcg.com/a/Fabric001 | ambientCG | CC0 | 枕套（旧白棉布） |
 | Fabric071 | ambientcg/Fabric071 | https://ambientcg.com/a/Fabric071 | ambientCG | CC0 | 床垫条纹布 |
 | Fabric036 | ambientcg/Fabric036 | https://ambientcg.com/a/Fabric036 | ambientCG | CC0 | 铺位布帘（细帆布），染成灰绿 |
+| Construction_Male_05 + 动画 m_walk_neutral_01 / m_run_neutral / m_idle_neutral_01 / m_sit_chair_idle_neutral_01 | assets/models/crew_body.glb（原始文件由 tools/fetch_rocketbox.sh 下到 blender/cache/rocketbox，不进仓库） | https://github.com/microsoft/Microsoft-Rocketbox | Microsoft | MIT | 第一人称身体：去掉安全帽，工装改深海军蓝、鞋改黑皮靴，动画重定向烘焙到角色骨骼，缩放到眼高 1.62 米（blender/scripts/gen_crew.py） |

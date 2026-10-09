@@ -45,6 +45,7 @@ func _setup_input() -> void:
 		"ascend": [_key(KEY_SPACE), _key(KEY_R)],
 		"descend": [_key(KEY_CTRL), _key(KEY_C)],
 		"interact": [_key(KEY_E)],
+		"sprint": [_key(KEY_SHIFT)],
 		"toggle_lights": [_key(KEY_F)],
 		"toggle_view": [_key(KEY_TAB)],
 		"lean": [_mouse(MOUSE_BUTTON_RIGHT)],
@@ -280,6 +281,20 @@ func _interior_materials(mats: Array[Material]) -> void:
 	mats.append(_paint("M_PanelGray", Color(0.22, 0.23, 0.23), {"rough": 0.52, "edge": 0.8, "smudge": 0.7}))
 	mats.append(_paint("M_Steel", Color(0.55, 0.55, 0.55), {"rough": 0.36, "metal": 0.95, "rust": 0.15,
 		"edge": 0.0, "detail": "Metal016", "smudge": 0.5, "dust": 0.1}))
+	# ---- 水密门：门扇厚漆（棱边、把手周围磨出钢底，手油、锈水流痕），发黑的锻钢件（棱边磨亮），
+	# 手轮的红漆被手磨得斑驳，轴套根上挤出来的黄油
+	mats.append(_paint("M_DoorPaint", Color(0.2, 0.235, 0.22), {"rough": 0.45, "metal": 0.25, "edge": 1.6,
+		"rust": 0.22, "smudge": 0.9, "dust": 0.25, "streak": 0.55, "streak_cover": 0.5, "macro": 0.8,
+		"floor": 0.8, "nstrength": 0.38, "variation": 0.22, "wear": Color(0.58, 0.57, 0.54)}))
+	mats.append(_paint("M_Forged", Color(0.2, 0.2, 0.19), {"rough": 0.4, "metal": 0.9, "edge": 0.8,
+		"wear": Color(0.42, 0.41, 0.39), "wear_metal": 1.0, "rust": 0.16, "detail": "Metal016", "smudge": 0.6,
+		"dust": 0.1, "variation": 0.15, "nstrength": 0.22, "floor": 0.3}))
+	mats.append(_paint("M_WheelRed", Color(0.33, 0.028, 0.016), {"rough": 0.52, "metal": 0.05, "edge": 1.1,
+		"wear": Color(0.3, 0.3, 0.29), "rust": 0.12, "smudge": 1.0, "smudge_scale": 7.0, "dust": 0.08,
+		"macro": 0.6, "floor": 0.0, "nstrength": 0.3}))
+	var grease := _std("M_Grease", Color(0.035, 0.028, 0.014), 0.12)
+	grease.metallic_specular = 0.6
+	mats.append(grease)
 	mats.append(_paint("M_Copper", Color(0.62, 0.32, 0.2), {"rough": 0.35, "metal": 1.0, "rust": 0.1,
 		"edge": 0.0, "detail": "Metal016", "smudge": 0.4, "cond": 0.6, "cond_h": -0.5}))
 	mats.append(_tex_std("M_Bakelite", Color(0.03, 0.025, 0.022), "Plastic012B",

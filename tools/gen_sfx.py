@@ -278,26 +278,50 @@ def pump(rng):
 
 
 def door_grind(rng):
-    """转手轮时减速箱里的摩擦声（运行时音量跟着手轮转速）。"""
+    """转手轮时减速箱里的声音（运行时音量、音高跟着手轮转速）：铸铁壳里一对蜗轮蜗杆在干涩的黄油里啮合——
+    齿一个一个咬过去（每秒四十来下），每一下敲在减速箱壳和门扇的低频模态上，闷闷的“咯咯咯”；
+    底下一层齿面摩擦的沙沙声，再垫一点门扇被带着嗡的低频。"""
     n = 2 * SR
-    t = taxis(n)
-    per = np.repeat(np.clip(1 + 0.6 * rng.standard_normal(80), 0.1, 3), n // 80)
-    stick = (0.5 + 0.5 * np.cos(2 * np.pi * 40 * t)) ** 4 * per
-    rasp = noise(n, lambda f: bp(f, 250, 2200, 1), rng) * (0.4 + 0.6 * stick)
-    gear = noise(n, lambda f: bp(f, 60, 200, 2), rng) * db(-8)
-    return rasp + gear
+    rate = 42 + 6 * wobble(n, 0.3, 2, rng)
+    amp = np.clip(1 + 0.35 * wobble(n, 1, 8, rng), 0.2, 2)
+    x = np.convolve(stick_slip(n, rate, amp, rng, circular=True), pulse(0.8))[:n]
+    f = logu(rng, 140, 1300, 16)
+    ir = modes(0.5, f, rng.uniform(0.02, 0.07, 16) * (300 / f) ** 0.3, rng.uniform(0.4, 1, 16) * (f / 300) ** -0.5)
+    mesh = cconv(x, ir)
+    leaf = cconv(x, modes(0.6, plate_modes(rng, 62, 8), rng.uniform(0.08, 0.2, 8), np.ones(8)))
+    rasp = noise(n, lambda f: bp(f, 180, 1400, 1) * tilt(f, -3), rng) * np.clip(amp, 0.3, None)
+    return unit(mesh) + unit(leaf) * db(-6) + unit(rasp) * db(-14)
 
 
 def hinge_creak(rng):
-    """门扇荡开时铰链的吱嘎：45~75 次/秒的粘滑脉冲敲在门扇的模态上，速率慢慢游移
+    """门扇荡开时铰链的声音：几十公斤的门扇压在一根粗销子上转，干摩擦一顿一顿（每秒二三十下），
+    每一下敲在门扇和铰链座的低频模态上——低沉的“嘎——”，不是小门那种尖的吱呀；上面浮一点点尖音
     （运行时音量、音高跟着门扇角速度）。"""
     n = 3 * SR
-    rate = 60 + 15 * wobble(n, 0.3, 1.5, rng)
-    amp = np.clip(1 + 0.4 * wobble(n, 0.5, 4, rng), 0.2, 2)
+    rate = 30 + 8 * wobble(n, 0.3, 1.5, rng)
+    amp = np.clip(1 + 0.5 * wobble(n, 0.5, 5, rng), 0.15, 2.2)
     x = stick_slip(n, rate, amp, rng, circular=True)
-    ir = modes(0.4, logu(rng, 150, 1600, 14), rng.uniform(0.03, 0.15, 14), rng.uniform(0.3, 1, 14))
-    x = cconv(np.convolve(x, pulse(0.5))[:n], ir)
-    return x + noise(n, lambda f: bp(f, 900, 3500, 2), rng) * amp * db(-30) * rms(x)
+    x = np.convolve(x, pulse(0.9))[:n]
+    f = plate_modes(rng, rng.uniform(58, 68), 18)
+    leaf = cconv(x, modes(0.6, f, rng.uniform(0.6, 1.2, 18) * 0.12 * (f[0] / f) ** 0.4, rng.uniform(0.4, 1, 18) * (f / f[0]) ** -0.3))
+    fh = logu(rng, 500, 2200, 8)
+    pin = cconv(x, modes(0.3, fh, rng.uniform(0.02, 0.06, 8), rng.uniform(0.4, 1, 8)))
+    return unit(leaf) + unit(pin) * db(-9) + noise(n, lambda f: bp(f, 1200, 3500, 2), rng) * amp * db(-34)
+
+
+def door_wedge(rng):
+    """拧紧时把手骑上楔块：锻钢把手压着楔块的斜面硬往上蹭，压力越大顿得越狠（每秒五六十下的粘滑），
+    一下一下敲在把手、楔块这些小钢件（中高频）和整扇门（低频）上，夹着刮铁的沙沙声
+    （运行时音量跟着吃劲程度乘手轮转速）。"""
+    n = 2 * SR
+    rate = 55 + 12 * wobble(n, 0.5, 3, rng)
+    amp = np.clip(1 + 0.6 * wobble(n, 2, 15, rng), 0.1, 2.5)
+    x = np.convolve(stick_slip(n, rate, amp, rng, circular=True), pulse(0.25))[:n]
+    f = logu(rng, 450, 3200, 12)
+    small = cconv(x, modes(0.3, f, rng.uniform(0.01, 0.05, 12), rng.uniform(0.4, 1, 12)))
+    leaf = cconv(x, modes(0.6, plate_modes(rng, 64, 10), rng.uniform(0.05, 0.15, 10), np.ones(10)))
+    scrape = noise(n, lambda f: bp(f, 400, 3500, 2), rng) * amp
+    return unit(small) + unit(leaf) * db(-4) + unit(scrape) * db(-12)
 
 
 # ---------------------------------------------------------------------------- 一次性的声音
@@ -385,59 +409,172 @@ def drip(rng, kind="metal"):
 
 
 def gear_tick(rng):
-    """手轮减速箱的齿轮咔哒（运行时手轮每转过一个齿响一下）。"""
-    f = logu(rng, 1800, 7000, 6)
-    y = fftconv(pulse(0.12), modes(0.08, f, rng.uniform(0.006, 0.03, 6), rng.uniform(0.4, 1, 6)))
-    body = fftconv(pulse(0.5), modes(0.08, rng.uniform(400, 900, 2), [0.015, 0.01], [1, 0.6]))
-    return mix(y, body * 0.5)
+    """手轮减速箱的齿轮咔哒（运行时手轮每转过一个齿响一下）：粗齿咬过去的一下，带铸铁壳的闷响。"""
+    f = logu(rng, 900, 3500, 6)
+    y = fftconv(pulse(0.25), modes(0.08, f, rng.uniform(0.006, 0.025, 6), rng.uniform(0.4, 1, 6)))
+    body = fftconv(pulse(1.2), modes(0.12, rng.uniform(220, 520, 3), [0.03, 0.022, 0.015], [1, 0.7, 0.5]))
+    return mix(unit(y) * 0.6, unit(body))
 
 
-def _clunks(rng, count, spread, f_lo, f_hi, dull):
-    """几个压紧把手一起撞到楔块上：每个是一下金属闷响，时间上错开一点。"""
-    n = int(1.2 * SR)
+def leaf_ir(rng, dur=2.0, f11=None, k=16, decay=0.4):
+    """门扇本身：二十毫米钢板加包边，八九十公斤，最低一阶六十赫兹上下（简支板的模态）。"""
+    f = plate_modes(rng, f11 or rng.uniform(56, 68), k)
+    d = rng.uniform(0.6, 1.3, k) * decay * (f[0] / f) ** 0.5
+    a = rng.uniform(0.5, 1.0, k) * (f / f[0]) ** -0.45
+    return modes(dur, f, d, a)
+
+
+def rattle(rng, n, count, t0, t1, level_db, f_lo=700, f_hi=3200):
+    """把手、连杆、销子在间隙里被震得叮当几下：一串越来越轻、越来越密的小金属磕碰。"""
     y = np.zeros(n)
-    for k, at in enumerate(np.sort(rng.uniform(0, spread, count))):
-        f = logu(rng, f_lo, f_hi, 8)
-        c = mix(fftconv(pulse(dull), modes(0.5, f, rng.uniform(0.05, 0.2, 8), rng.uniform(0.3, 1, 8))),
-                fftconv(pulse(3.0), modes(0.3, rng.uniform(90, 200, 2), [0.08, 0.06], [1, 0.7])) * 2.0)
-        place(y, c * rng.uniform(0.5, 1.0) * (1.4 if k == 0 else 1.0), int(at * SR))
+    for k, at in enumerate(np.sort(rng.uniform(t0, t1, count))):
+        f = logu(rng, f_lo, f_hi, 6)
+        c = fftconv(pulse(rng.uniform(0.1, 0.3)), modes(0.15, f, rng.uniform(0.008, 0.04, 6), rng.uniform(0.4, 1, 6)))
+        place(y, unit(c) * db(level_db - 2.5 * k + rng.uniform(-3, 2)), int(at * SR))
     return y
 
 
-def door_unlatch(rng):
-    """开门：六个压紧把手从楔块上同时被拨开，第一下最响。"""
-    return fade(_clunks(rng, 6, 0.05, 250, 2200, 0.6), 0.0, 0.3)
+def _clunks(rng, count, spread, f_lo, f_hi, dull, n=None):
+    """几个压紧把手一起撞到（或离开）楔块：每个是一下发闷的金属响，带一点门扇的低频，时间上错开一点。"""
+    n = n or int(1.2 * SR)
+    y = np.zeros(n)
+    for k, at in enumerate(np.sort(rng.uniform(0, spread, count))):
+        f = logu(rng, f_lo, f_hi, 8)
+        c = mix(unit(fftconv(pulse(dull), modes(0.4, f, rng.uniform(0.03, 0.12, 8), rng.uniform(0.3, 1, 8)))),
+                unit(fftconv(pulse(3.0), modes(0.3, rng.uniform(110, 230, 2), [0.06, 0.05], [1, 0.7]))) * db(-2))
+        place(y, c * rng.uniform(0.55, 1.0) * (1.4 if k == 0 else 1.0), int(at * SR))
+    return y
 
 
-def door_latch(rng):
-    """关门拧紧：把手压上楔块前一小声挤压的吱，再是一串发闷的咬合声。"""
-    n = int(1.2 * SR)
+def door_strain(rng):
+    """开门第一下掰手轮：把手还咬在楔块上，手轮只挪几度——整套机构绷紧了“嘎——”地闷哼一声
+    （慢速粘滑敲在门扇低频上，越绷越紧、越顿越密），减速箱里嘎吱一下。"""
+    dur = 0.42
+    n = int(dur * SR)
     t = taxis(n)
-    k = int(0.15 * SR)
-    rate = np.zeros(n)
-    rate[:k] = np.linspace(120, 300, k)
-    squeak = np.convolve(stick_slip(n, rate, np.sin(np.pi * np.clip(t / 0.15, 0, 1)), rng), pulse(0.2))[:n]
-    squeak = fftconv(squeak, modes(0.2, logu(rng, 800, 3000, 6), rng.uniform(0.01, 0.04, 6), np.ones(6)))[:n]
-    y = _clunks(rng, 6, 0.08, 180, 1500, 1.0)
-    place(y, squeak / (np.abs(squeak).max() + 1e-9) * 0.25, 0)
-    return fade(y, 0.0, 0.3)
+    rate = 16 + 26 * (t / dur) ** 1.5
+    env = np.sin(np.pi * np.clip(t / dur, 0, 1)) ** 0.6 * np.clip(1 + 0.3 * wobble(n, 3, 20, rng), 0.2, 2)
+    x = np.convolve(stick_slip(n, rate, env, rng), pulse(1.0))[:n]
+    groan = fftconv(x, leaf_ir(rng, 0.8, decay=0.15))
+    f = logu(rng, 300, 1600, 10)
+    box_ = fftconv(x, modes(0.3, f, rng.uniform(0.02, 0.06, 10), rng.uniform(0.4, 1, 10)))
+    y = np.zeros(int(1.0 * SR))
+    place(y, unit(groan), 0)
+    place(y, unit(box_) * db(-7), 0)
+    return fade(y, 0.0, 0.25)
+
+
+def door_unlatch(rng):
+    """掰动了：绷着的劲一下松开，六个把手同时从楔块上蹦开——沉的一声“哐”（门扇被带着一震），
+    跟着连杆、把手在间隙里叮当几下。"""
+    n = int(1.6 * SR)
+    y = _clunks(rng, 6, 0.035, 160, 1400, 1.0, n)
+    y = unit(y)
+    place(y, unit(fftconv(pulse(3.5), leaf_ir(rng, 1.4, decay=0.3))) * db(-3), 0)
+    y += rattle(rng, n, 5, 0.04, 0.22, -14)
+    return fade(y, 0.0, 0.4)
+
+
+def door_seal(rng):
+    """胶条从门框刀口上松开：橡胶粘着撕开一串细小的噼啪，两舱一点点压差“噗”地泄掉——
+    一下很低的气压闷响，后面拖一口短短的嘶气。"""
+    n = int(0.9 * SR)
+    t = taxis(n)
+    y = np.zeros(n)
+    # 气压：一个周期左右的低频“噗”（门扇像活塞一样被吸住又松开）
+    f0 = rng.uniform(55, 75)
+    puff = np.sin(2 * np.pi * f0 * t) * np.exp(-t / 0.025) * np.clip(t / 0.004, 0, 1)
+    place(y, unit(puff), int(0.01 * SR))
+    # 橡胶撕开：几十个细碎的粘滑脉冲，敲在胶条和门扇边上
+    m = int(0.12 * SR)
+    rate = np.full(m, rng.uniform(250, 400))
+    peel = stick_slip(m, rate, np.hanning(m), rng)
+    peel = fftconv(np.convolve(peel, pulse(0.15))[:m], modes(0.1, logu(rng, 800, 4000, 6), rng.uniform(0.003, 0.01, 6), np.ones(6)))
+    place(y, unit(peel) * db(-10), 0)
+    # 嘶：压差泄掉的气流声，很快没了
+    h = int(0.45 * SR)
+    th = taxis(h)
+    hiss = filt(rng.standard_normal(h), lambda f: bp(f, 900, 6000, 1)) * np.exp(-th / 0.09) * np.clip(th / 0.01, 0, 1)
+    place(y, unit(hiss) * db(-16), int(0.012 * SR))
+    place(y, unit(fftconv(pulse(4.0), leaf_ir(rng, 0.6, decay=0.15))) * db(-9), int(0.01 * SR))
+    return fade(y, 0.0, 0.2)
+
+
+def door_air(rng):
+    """门扇快关上时，像一块大板子把空气推着往门洞里挤：低沉的“呼”越来越急，到撞上那一下戛然而止
+    （门扇离门框还有十几度时触发，大约 0.15 秒后撞上）。"""
+    n = int(0.3 * SR)
+    t = taxis(n)
+    hit = 0.16
+    env = np.clip(t / hit, 0, 1) ** 2.2 * np.where(t < hit, 1.0, np.exp(-(t - hit) / 0.015))
+    gust = filt(rng.standard_normal(n), lambda f: bp(f, 60, 700, 1) * tilt(f, -2)) * env
+    whis = filt(rng.standard_normal(n), lambda f: bp(f, 500, 1600, 2)) * env ** 2
+    return unit(gust) + unit(whis) * db(-12)
 
 
 def door_slam(rng):
-    """门扇甩回去撞上门框：低沉的一下重击，整扇钢门和隔壁嗡嗡地响很久，把手跟着叮当几下。"""
-    n = int(3.5 * SR)
+    """门扇撞上门框：胶条先垫一下、紧跟着钢包边磕上刀口，八九十公斤的门扇整个“咚”地一沉（最低六十赫兹上下），
+    隔壁和耐压壳被带着“轰”地嗡起来（更低、更长），门框、补强板的金属余音拖很久；
+    门扇像活塞一样把舱里的空气一压，耳朵里一下超低频的闷压；把手、连杆被震得在间隙里叮当几下。"""
+    n = int(4.0 * SR)
     y = np.zeros(n)
-    exc = mix(pulse(3.0), burst(4, lambda f: bp(f, 500, 6000, 1), rng) * 0.15)
-    thud = modes(1.2, rng.uniform(45, 160, 6), rng.uniform(0.12, 0.3, 6), rng.uniform(0.6, 1, 6))
-    f = logu(rng, 160, 3200, 30)
-    clang = modes(3.5, f, rng.uniform(0.25, 1.0, 30) * (300 / f) ** 0.4, rng.uniform(0.3, 1, 30) * (f / 300) ** -0.4)
-    place(y, unit(fftconv(exc, thud)), 0)
-    place(y, unit(fftconv(exc, clang)) * db(-5), 0)
-    w = int(0.08 * SR)
-    place(y, unit(filt(rng.standard_normal(w), lambda f: bp(f, 25, 80, 2)) * np.hanning(w)) * db(-6), 0)
-    for at in np.sort(rng.uniform(0.06, 0.25, 4)):
-        place(y, unit(gear_tick(rng)) * db(-20), int(at * SR))
-    return fade(y, 0.0, 0.6)
+    soft = pulse(5.0)                    # 胶条
+    hard = pulse(0.4)                    # 钢磕钢
+    # 门扇本体
+    leaf = leaf_ir(rng, 2.5, decay=0.5)
+    place(y, unit(fftconv(soft, leaf)), 0)
+    place(y, unit(fftconv(hard, leaf)) * db(-8), int(0.002 * SR))
+    # 隔壁、耐压壳：几个很低的大板模态，慢慢衰减
+    fb = rng.uniform(36, 90, 6)
+    bulk = modes(4.0, fb, rng.uniform(0.5, 1.2, 6), rng.uniform(0.5, 1, 6))
+    place(y, unit(fftconv(pulse(8.0), bulk)) * db(-3), int(0.004 * SR))
+    # 金属余音：门框、补强板、隔壁的中高阶模态（很弱，但拖得长）
+    f = logu(rng, 250, 2600, 30)
+    ring = modes(4.0, f, rng.uniform(0.3, 1.2, 30) * (300 / f) ** 0.35, rng.uniform(0.3, 1, 30) * (f / 300) ** -0.5)
+    place(y, unit(fftconv(hard, ring)) * db(-10), int(0.002 * SR))
+    # 气压：二三十赫兹半个周期的一下
+    w = int(0.06 * SR)
+    place(y, unit(np.sin(np.pi * np.arange(w) / w) ** 2) * db(-4), 0)
+    # 钢磕钢的那一下脆响（几毫秒的宽频）
+    place(y, unit(burst(3, lambda f: bp(f, 1200, 7000, 1), rng)) * db(-12), int(0.002 * SR))
+    # 把手、连杆叮当
+    y += rattle(rng, n, 7, 0.03, 0.32, -17, 600, 2600)
+    return fade(y, 0.0, 1.0)
+
+
+def door_knock(rng):
+    """门扇撞上门框弹回来一点，又被拉回去贴上：轻一些、闷一些的“咚”，没有那么多余音。"""
+    n = int(1.2 * SR)
+    y = np.zeros(n)
+    place(y, unit(fftconv(pulse(6.0), leaf_ir(rng, 1.0, decay=0.25))), 0)
+    place(y, unit(fftconv(pulse(0.5), modes(0.3, logu(rng, 400, 2000, 10), rng.uniform(0.02, 0.08, 10), np.ones(10)))) * db(-14), 0)
+    y += rattle(rng, n, 3, 0.02, 0.12, -20)
+    return fade(y, 0.0, 0.4)
+
+
+def door_latch(rng):
+    """拧到底、上锁：六个把手几乎同时压死在楔块上（一串很密的闷响，“咔嚓”），减速箱顶到头——
+    最沉的一下“哐”，整扇门、隔壁跟着低沉地嗡一下；隔一下是棘爪落进卡槽的“咔哒”，锁住了。"""
+    n = int(1.8 * SR)
+    y = np.zeros(n)
+    # 把手压死：六下闷响挤在 30 毫秒里
+    place(y, unit(_clunks(rng, 6, 0.03, 160, 1200, 1.2)) * db(-4), 0)
+    # 顶到头：门扇和隔壁的低频（钝的激励，很沉）+ 齿顶死的一下中高频
+    t0 = int(0.028 * SR)
+    place(y, unit(fftconv(pulse(4.0), leaf_ir(rng, 1.2, decay=0.22))), t0)
+    fb = rng.uniform(45, 95, 4)
+    place(y, unit(fftconv(pulse(8.0), modes(1.2, fb, rng.uniform(0.12, 0.28, 4), np.ones(4)))) * db(-6), t0)
+    f = logu(rng, 1200, 4500, 8)
+    place(y, unit(fftconv(pulse(0.2), modes(0.1, f, rng.uniform(0.005, 0.02, 8), rng.uniform(0.4, 1, 8)))) * db(-12), t0)
+    # 棘爪落下：咔—哒，两下，带一点减速箱壳的闷响
+    t1 = int(rng.uniform(0.13, 0.17) * SR)
+    for at, s in ((0, 0.0), (rng.uniform(0.008, 0.014), -5.0)):
+        f = logu(rng, 1500, 5500, 6)
+        c = mix(unit(fftconv(pulse(0.12), modes(0.06, f, rng.uniform(0.004, 0.015, 6), np.ones(6)))),
+                unit(fftconv(pulse(0.8), modes(0.1, rng.uniform(350, 700, 2), [0.025, 0.018], [1, 0.6]))) * db(-3))
+        place(y, unit(c) * db(-8 + s), t1 + int(at * SR))
+    y += rattle(rng, n, 3, 0.05, 0.12, -22)
+    return fade(y, 0.0, 0.5)
 
 
 def plate_modes(rng, f11, k):
@@ -447,29 +584,87 @@ def plate_modes(rng, f11, k):
     return np.array(f[:k]) * rng.uniform(0.98, 1.02, k)
 
 
-def footstep(rng):
-    """军靴踩在花纹钢地板上。地板是 6 mm 钢板（约 60×40 cm）搭在龙骨上，底下是空的舱底：
-    - 靴跟踩下去：钢板“咚”一下（板的模态，最低约 130 Hz；靴子压在板上，很快止住），舱底空腔跟着嗡一声
-    - 没压实的钢板在龙骨上磕一下（金属撞金属，冲击极短，又亮又脆）——踩铁的感觉主要靠这一下
-    - 脚掌跟着落下，轻一点；鞋底砂粒的擦声"""
-    n = int(0.35 * SR)
+def cloth(rng, ms, level_db):
+    """工装的裤腿、袖子跟着迈步擦一下：宽频的沙沙，起落都缓，中间一两下布料绷紧的“噗”。"""
+    m = int(ms * SR / 1000)
+    t = taxis(m)
+    env = np.sin(np.pi * t / (m / SR)) ** 2 * np.clip(1 + 0.5 * rng.standard_normal(m // 480 + 1).repeat(480)[:m], 0.2, 2)
+    x = filt(rng.standard_normal(m), lambda f: bp(f, 700, 7000, 1) * tilt(f, -2)) * env
+    return unit(x) * db(level_db)
+
+
+def scuff(rng, ms, level_db, lo=1200):
+    """鞋底在地上蹭一下（起步蹬地、停下收脚）。"""
+    return unit(burst(ms, lambda f: bp(f, lo, 8000, 2), rng)) * db(level_db)
+
+
+def footstep(rng, surface="plate", gait="walk"):
+    """军靴踩在地上。gait：walk 脚跟先着地、脚掌跟着落下；run 更硬更快，脚跟脚掌几乎一起，最后蹬地蹭一下；
+    settle 停下时把后脚收过来轻轻一放。surface：
+    plate  6 mm 花纹钢板（约 60×40 cm）搭在龙骨上，底下是空的舱底——板的模态（最低约 130 Hz，靴子压着很快止住）、
+           舱底空腔的嗡声、没压实的钢板在龙骨上磕一下（金属撞金属，又亮又脆）
+    grate  扁钢格栅：靴底同时压上好几根扁钢，一串很密的亮“嚓”（扁钢的高频模态），格栅板在角钢框上颠一两下“咔嗒”，
+           底下舱底的空腔直接露着
+    sill   门框的厚钢门槛：实心的，闷而短的一声“咚”，带一点隔壁的低频"""
+    n = int(0.45 * SR)
     y = np.zeros(n)
-    f = plate_modes(rng, rng.uniform(115, 150), 22)
-    d = rng.uniform(0.6, 1.4, 22) * 0.055 * (f[0] / f) ** 0.3       # 靴子一直压在板上，振动很快被压住；低的模态稍久
-    a = rng.uniform(0.4, 1.0, 22) * (f / f[0]) ** -0.15
-    plate = modes(0.3, f, d, a)
-    cavity = modes(0.2, rng.uniform(75, 100, 2), [0.04, 0.03], [1.0, 0.6])
-    fr = logu(rng, 900, 5500, 10)
-    frame = modes(0.15, fr, rng.uniform(0.01, 0.04, 10), rng.uniform(0.5, 1, 10))
-    heel = pulse(rng.uniform(0.8, 1.3))
-    place(y, unit(fftconv(heel, plate)), 0)
-    place(y, unit(fftconv(pulse(3.0), cavity)) * db(-7), 0)
-    knock = mix(unit(fftconv(pulse(0.08), frame)), unit(fftconv(pulse(0.08), plate)) * db(-4))
-    for k in range(rng.integers(1, 3)):     # 磕一两下
-        place(y, unit(knock) * db(-5 - 5 * k), int(rng.uniform(0.006, 0.02) * SR) + int(k * rng.uniform(0.012, 0.025) * SR))
-    place(y, unit(fftconv(pulse(2.0), plate)) * rng.uniform(0.3, 0.45), int(rng.uniform(0.06, 0.09) * SR))
-    place(y, unit(burst(rng.uniform(20, 40), lambda f: bp(f, 1500, 8000, 2), rng)) * db(-16), 0)
-    return y
+    run, settle = gait == "run", gait == "settle"
+    heel = pulse(rng.uniform(0.45, 0.7) if run else rng.uniform(2.0, 3.0) if settle else rng.uniform(0.8, 1.3))
+    fore_at = rng.uniform(0.022, 0.04) if run else rng.uniform(0.07, 0.11)
+    fore_amp = rng.uniform(0.55, 0.75) if run else rng.uniform(0.3, 0.45)
+    damp = 1.6 if run else 0.7 if settle else 1.0     # 跑的时候脚一下就抬起来，板子响得久一点
+    if surface == "plate":
+        f = plate_modes(rng, rng.uniform(115, 150), 22)
+        d = rng.uniform(0.6, 1.4, 22) * 0.055 * damp * (f[0] / f) ** 0.3
+        body = modes(0.35, f, d, rng.uniform(0.4, 1.0, 22) * (f / f[0]) ** -0.15)
+        cav = modes(0.25, rng.uniform(75, 100, 2), [0.04 * damp, 0.03 * damp], [1.0, 0.6])
+        cav_db = -7
+        fr = logu(rng, 900, 5500, 10)
+        tick = modes(0.15, fr, rng.uniform(0.01, 0.04, 10), rng.uniform(0.5, 1, 10))
+        knocks = 0 if settle else rng.integers(1, 4) if run else rng.choice([0, 1, 1, 2])
+    elif surface == "grate":
+        f = logu(rng, 650, 5200, 18)
+        body = modes(0.25, f, rng.uniform(0.015, 0.07, 18) * damp, rng.uniform(0.4, 1.0, 18) * (f / 650) ** -0.3)
+        panel = modes(0.2, plate_modes(rng, rng.uniform(190, 250), 8), rng.uniform(0.02, 0.05, 8) * damp, np.ones(8))
+        body = mix(unit(body), unit(panel) * db(-5))
+        cav = modes(0.3, rng.uniform(70, 105, 2), [0.06 * damp, 0.045 * damp], [1.0, 0.7])
+        cav_db = -9
+        fr = logu(rng, 1500, 6500, 8)
+        tick = modes(0.1, fr, rng.uniform(0.006, 0.025, 8), rng.uniform(0.5, 1, 8))
+        knocks = 0 if settle else rng.integers(2, 4) if run else rng.integers(1, 3)
+    else:   # sill
+        f = logu(rng, 280, 1800, 12)
+        body = modes(0.2, f, rng.uniform(0.008, 0.035, 12), rng.uniform(0.5, 1, 12) * (f / 280) ** -0.4)
+        cav = modes(0.4, rng.uniform(60, 140, 3), [0.15, 0.1, 0.08], [1.0, 0.6, 0.4])
+        cav_db = -6
+        tick = None
+        knocks = 0
+    # 靴底压上去：格栅上同时压上好几根扁钢，就是一串挤在两三毫秒里的小冲击
+    exc = heel
+    if surface == "grate":
+        exc = np.zeros(int(0.005 * SR) + len(heel))
+        for at in rng.uniform(0, 0.004, rng.integers(3, 6)):
+            place(exc, heel * rng.uniform(0.4, 1.0), int(at * SR))
+    place(y, unit(fftconv(exc, body)), 0)
+    place(y, unit(fftconv(pulse(3.0), cav)) * db(cav_db), 0)
+    # 磕一下 / 颠一下（金属撞金属，冲击极短）
+    t0 = rng.uniform(0.006, 0.02)
+    for k in range(int(knocks)):
+        hit = mix(unit(fftconv(pulse(0.08), tick)), unit(fftconv(pulse(0.08), body)) * db(-6))
+        place(y, unit(hit) * db(-5 - 5 * k + (3 if run else 0)), int(t0 * SR))
+        t0 += rng.uniform(0.01, 0.03)
+    # 脚掌落下
+    if not settle:
+        place(y, unit(fftconv(pulse(2.0), body)) * fore_amp, int(fore_at * SR))
+    # 鞋底砂粒的擦声；跑步最后蹬地一下；停下收脚是一下拖蹭
+    place(y, scuff(rng, rng.uniform(20, 40), -16), 0)
+    if run:
+        place(y, scuff(rng, rng.uniform(40, 70), -15, 900), int(rng.uniform(0.11, 0.16) * SR))
+    if settle:
+        place(y, scuff(rng, rng.uniform(70, 120), -15, 600), 0)
+    # 衣服
+    place(y, cloth(rng, rng.uniform(140, 220) if not run else rng.uniform(90, 140), -21 if run else -25), 0)
+    return fade(y, 0.0, 0.06)
 
 
 def switch(rng):
@@ -516,15 +711,25 @@ SOUNDS = {
     "pump": (pump, True, 1),
     "door_grind": (door_grind, True, 1),
     "hinge_creak": (hinge_creak, True, 1),
+    "door_wedge": (door_wedge, True, 1),
     "creak": (creak, False, 5),
     "pop": (pop, False, 3),
     "sonar_ping": (sonar_ping, False, 1),
     "drip": (drip, False, 6),
     "gear_tick": (gear_tick, False, 5),
+    "door_strain": (door_strain, False, 2),
     "door_unlatch": (door_unlatch, False, 2),
-    "door_latch": (door_latch, False, 2),
+    "door_seal": (door_seal, False, 2),
+    "door_air": (door_air, False, 2),
     "door_slam": (door_slam, False, 2),
-    "footstep": (footstep, False, 8),
+    "door_knock": (door_knock, False, 2),
+    "door_latch": (door_latch, False, 2),
+    "footstep_plate": (lambda r: footstep(r, "plate", "walk"), False, 10),
+    "footstep_grate": (lambda r: footstep(r, "grate", "walk"), False, 10),
+    "footstep_sill": (lambda r: footstep(r, "sill", "walk"), False, 4),
+    "run_plate": (lambda r: footstep(r, "plate", "run"), False, 8),
+    "run_grate": (lambda r: footstep(r, "grate", "run"), False, 8),
+    "step_settle": (lambda r: footstep(r, "grate", "settle"), False, 4),
     "switch": (switch, False, 3),
     "hull_impact": (hull_impact, False, 3),
 }

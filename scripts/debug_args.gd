@@ -15,6 +15,7 @@ extends Node
 ##                    `60:interact` 在第 60 帧按一下 E；`90:+move_forward` 按住、`150:-move_forward` 松开
 ##   --only-sfx=a,b / --mute-sfx=a,b  只开 / 关掉这几种声音（名字见 sub_audio.gd 的 VOL）
 ##   --no-hud         不显示操作提示（录给别人看的视频用）
+##   --body-preview   把第一人称的身体摆到视线前方 1.3 米、面朝相机（看身体的姿势、朝向，见 crew_body.gd）
 ##   --sfx-log        每触发一个音效打一行 `SFX <帧号> <名字>`（tools/audio_report.py 拿它和录音对时间）
 
 var _args := {}

@@ -20,7 +20,7 @@ from lib import (material, frame, T, R, S, cylinder, box, uvsphere, lathe, torus
 from kit import (Parts, Cables, rbox, bev_layer, star_profile, extrude_profile, screw, socket_screw, toggle,
                  flip_cover, knob, pointer_knob, button, lamp, vent, handle, fuse, connector, label_plate, silk,
                  tape_label, sticky_note, meter_rect, gauge_round, seg_display, annunciator, rotameter,
-                 valve_wheel, unit, FONT_BRUSH, FONT_SERIF, FONT_HAND)
+                 valve_wheel, unit, FONT_BRUSH, FONT_SERIF, FONT_HAND, FONT_SANS)
 
 # ---------------------------------------------------------------------------- 主尺寸（改这里要同步 Godot 的 crew.gd）
 R_IN = 1.35                     # 耐压壳内壁半径
@@ -160,6 +160,11 @@ def materials(M):
     add("CRT", "M_CRT", (0.03, 0.15, 0.06), 0.0, 0.1, emission=(0.2, 1.0, 0.35), strength=0.5)
     add("O2", "M_O2Blue", (0.33, 0.58, 0.75), 0.1, 0.5)
     add("Rubber", "M_Rubber", (0.02, 0.02, 0.02), 0.0, 0.8)
+    # 水密门
+    add("DoorPaint", "M_DoorPaint", (0.2, 0.23, 0.22), 0.3, 0.45)
+    add("Forged", "M_Forged", (0.17, 0.17, 0.16), 0.9, 0.45)
+    add("WheelRed", "M_WheelRed", (0.45, 0.04, 0.02), 0.1, 0.4)
+    add("Grease", "M_Grease", (0.035, 0.028, 0.015), 0.0, 0.15)
     # 神龛
     add("Lacquer", "M_RedLacquer", (0.3, 0.03, 0.02), 0.0, 0.35)
     add("Gold", "M_Gold", (0.78, 0.56, 0.2), 1.0, 0.3)
@@ -756,8 +761,11 @@ DOOR_CRANK_B = 0.06     # 曲柄盘上连杆销的半径
 DOOR_ARM_A = 0.055      # 把手曲臂长
 DOOR_LEAF_K = 0.07      # 门扇外沿离门洞边
 DOOR_FRAME_K = 0.085    # 门框外圈离门洞边
-DOOR_DOUBLER_K = 0.13   # 门框外面焊的补强板外沿离门洞边
+DOOR_DOUBLER_K = 0.15   # 门框外面焊的补强板外沿离门洞边
 DOOR_HINGE_Z = 0.35     # 两个铰链离门中心的高度
+DOOR_RING_K = -0.085    # 门扇正面一圈加强环离门洞边（在门洞里面）
+DOOR_IND = (-140.0, -90.0)  # 开关指示器：指针关门、开门时的方向（门平面里的角度，曲柄盘开门时转 +50°）
+FONT_STENCIL = FONT_SERIF.replace("NotoSerifSC-VF.ttf", "StardosStencil-Bold.ttf")
 
 
 def door_ring(t_deg, k):
@@ -785,6 +793,22 @@ def door_dog_layout():
         p = V((-d.z, 0, d.x))
         out.append((S, n, C + p * DOOR_CRANK_B, S + p * DOOR_ARM_A))
     return out
+
+
+def weld(bm, k0, y0, w, su=1, sv=1, h=None, n=576, ripple=0.019):
+    """沿门洞一圈的角焊缝：焊根在门洞偏 k0、高 y0 的那一圈，焊趾在 (k0 + su·w, y0) 和 (k0, y0 + sv·h)；
+    凸的圆弧焊道，沿焊道一道一道鱼鳞纹（截面大小锯齿形起伏，ripple 是纹距；0 = 不要纹）。"""
+    h = h or w
+    prof = [(0.0, 0.0)] + [(su * w * math.cos(math.radians(a)), sv * h * math.sin(math.radians(a)))
+                           for a in (0, 15, 35, 55, 75, 90)]
+    if su * sv < 0:
+        prof = prof[:1] + prof[1:][::-1]
+    path = door_loop(k0, y0, n)
+    scales = None
+    if ripple:
+        L = sum((path[i] - path[i - 1]).length for i in range(n))
+        scales = [0.9 + 0.16 * ((i * L / n / ripple) % 1.0) ** 0.6 for i in range(n)]
+    sweep(bm, path, prof, closed=True, up_hint=V((0, 1, 0)), scales=scales)
 
 
 def plate_xz(bm, pts, y0, h):
@@ -854,34 +878,52 @@ def bulkhead(K, anchors):
     sweep(bm, door_loop(0.0, y), prof, closed=True, up_hint=up)
     for yy, sg in ((y, 1), (ya, -1)):
         k0, k1 = DOOR_FRAME_K, DOOR_DOUBLER_K
-        for pr in ([(k0, 0.0), (k1, 0.0), (k1, 0.006), (k1 - 0.004, 0.01), (k0, 0.01)],   # 补强板
-                   [(k0, 0.0098), (k0 + 0.008, 0.0098), (k0, 0.018)],                    # 门框和补强板之间的角焊
-                   [(k1 - 0.001, 0.0), (k1 + 0.006, 0.0), (k1 - 0.001, 0.007)]):          # 补强板外沿的角焊
-            sweep(bm, door_loop(0.0, yy), [(u, sg * v) for u, v in pr], closed=True, up_hint=up)
-    # 楔块：焊在门框外圈和补强板上，顶面一头有个斜坡（把手从那边转回来压上去）
-    for deg in DOOR_DOGS:
+        # 补强板（外沿倒一道坡口）；门框和补强板之间、补强板外沿和隔壁之间各一道鱼鳞纹角焊
+        sweep(bm, door_loop(0.0, yy), [(u, sg * v) for u, v in
+                                         [(k0, 0.0), (k1, 0.0), (k1, 0.007), (k1 - 0.005, 0.012), (k0, 0.012)]],
+              closed=True, up_hint=up)
+        weld(bm, k0, yy + sg * 0.012, 0.008, su=1, sv=sg)
+        weld(bm, k1, yy, 0.008, su=1, sv=sg, h=0.007)
+    # 楔块：锻钢，焊在门框外圈和补强板上，顶面一头有个斜坡（把手从那边转回来压上去）；
+    # 两侧根部角焊；旁边刷着把手编号，楔块外头一道红漆对位线（把手压到位时和把手尖上的红线对齐）
+    for i, deg in enumerate(DOOR_DOGS):
         q, n = door_ring(deg, DOOR_FRAME_K - 0.004)
         F = frame(q + V((0, y, 0)), n, up)
-        extrude_profile(K["Steel"], [(-0.026, 0.006), (0.026, 0.006), (0.026, 0.124), (-0.006, 0.124),
-                                     (-0.026, 0.108)], F, 0.05)
-    # 铰链座：门轴竖着，上下两个。每个是一块底板焊在补强板上，两块耳板夹住门扇上的铰链臂，一根销子穿过去
-    hx, hy = DOOR_HINGE
-    lug = ([(hx - 0.045, y + 0.022), (hx + 0.04, y + 0.022), (hx + 0.036, hy - 0.012)]
-           + [(hx + math.cos(math.radians(a)) * 0.036, hy + math.sin(math.radians(a)) * 0.036)
-              for a in range(0, 181, 20)] + [(hx - 0.045, hy - 0.01)])
-    for zz in (dz - DOOR_HINGE_Z, dz + DOOR_HINGE_Z):
-        rbox(K["Steel"], 0.1, 0.022, 0.16, T(hx - 0.005, y + 0.011, zz), r=0.003, seg=1)
-        for zl in (zz + 0.037, zz - 0.053):
-            extrude_profile(K["Steel"], lug, T(0, 0, zl), 0.016)
-        cylinder(K["Steel"], 0.012, 0.13, 16, T(hx, hy, zz - 0.068))
-        lathe(K["Steel"], [(0.0, 0.0), (0.02, 0.0), (0.02, 0.005), (0.015, 0.011), (0.0, 0.012)], 20,
-              T(hx, hy, zz + 0.053))
-        cylinder(K["Steel"], 0.019, 0.011, 6, T(hx, hy, zz - 0.064))
-        sweep(K["Steel"], catmull([V((hx - 0.016, hy, zz - 0.07)), V((hx, hy, zz - 0.07)),
-                                   V((hx + 0.016, hy, zz - 0.07)), V((hx + 0.022, hy + 0.006, zz - 0.074))], 3),
-              circle_profile(0.0018, 6))   # 开口销
+        extrude_profile(K["Forged"], [(-0.03, 0.006), (0.03, 0.006), (0.03, 0.124), (-0.008, 0.124),
+                                      (-0.03, 0.106)], F, 0.05)
         for sx in (-1, 1):
-            cylinder(K["Steel"], 0.007, 0.006, 6, T(hx - 0.005 + sx * 0.035, y + 0.022, zz) @ R(-90, 'X'))
+            extrude_profile(K["Forged"], [(sx * 0.03, 0.011), (sx * 0.0385, 0.011), (sx * 0.03, 0.0195)][::sx],
+                            F @ T(0, 0, 0.004), 0.044)
+        t_ = V((-n.z, 0, n.x))
+        qn, _ = door_ring(deg, DOOR_FRAME_K + 0.036)
+        text_mesh(str(i + 1), K.uid("Int_Txt"), K.coll, K.M["PaintText"],
+                  frame(qn + t_ * 0.048 + V((0, y + 0.0122, 0)), up, n), size=0.026, extrude=0.0,
+                  font_path=FONT_STENCIL, resolution=2)
+        qm, _ = door_ring(deg, DOOR_FRAME_K + 0.058)
+        rbox(K["InkRed"], 0.004, 0.022, 0.0004, frame(qm + V((0, y + 0.0122, 0)), up, n), r=0.0, seg=1)
+    # 铰链座：门轴竖着，上下两个。每个是一块底板焊在补强板上，两块厚耳板夹住门扇上的铰链臂，一根粗销子穿过去，
+    # 销子上头一个大帽，下头螺母加开口销；耳板侧面一个黄油嘴
+    hx, hy = DOOR_HINGE
+    lug = ([(hx - 0.05, y + 0.022), (hx + 0.046, y + 0.022), (hx + 0.042, hy - 0.012)]
+           + [(hx + math.cos(math.radians(a)) * 0.042, hy + math.sin(math.radians(a)) * 0.042)
+              for a in range(0, 181, 15)] + [(hx - 0.05, hy - 0.01)])
+    for zz in (dz - DOOR_HINGE_Z, dz + DOOR_HINGE_Z):
+        rbox(K["Forged"], 0.115, 0.024, 0.19, T(hx - 0.005, y + 0.012, zz), r=0.004, seg=2)
+        for zl in (zz + 0.037, zz - 0.057):
+            extrude_profile(K["Forged"], lug, T(0, 0, zl), 0.02)
+        cylinder(K["Forged"], 0.014, 0.145, 16, T(hx, hy, zz - 0.074))
+        lathe(K["Forged"], [(0.0, 0.0), (0.025, 0.0), (0.025, 0.006), (0.019, 0.014), (0.0, 0.015)], 24,
+              T(hx, hy, zz + 0.057))
+        cylinder(K["Forged"], 0.022, 0.013, 6, T(hx, hy, zz - 0.07))
+        sweep(K["Steel"], catmull([V((hx - 0.018, hy, zz - 0.078)), V((hx, hy, zz - 0.078)),
+                                   V((hx + 0.018, hy, zz - 0.078)), V((hx + 0.025, hy + 0.006, zz - 0.083))], 3),
+              circle_profile(0.002, 6))   # 开口销
+        cylinder(K["Brass"], 0.006, 0.008, 6, T(hx, hy + 0.041, zz + 0.047) @ R(-90, 'X'))
+        uvsphere(K["Brass"], 0.004, 8, 6, T(hx, hy + 0.052, zz + 0.047))
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                cylinder(K["Forged"], 0.008, 0.007, 6, T(hx - 0.005 + sx * 0.042, y + 0.024, zz + sz * 0.075)
+                         @ R(-90, 'X'))
     anchors.append(empty("Door_Hinge", K.coll, anchor_frame(V((hx, hy, dz)), up)))
     # 门两边的扶手（低头钻门时抓的），两面都有
     for yy, sg in ((y, 1), (ya, -1)):
@@ -935,62 +977,122 @@ def bulkhead(K, anchors):
 
 def door_leaf(K, anchors):
     """门扇和上面的机构。
-    门扇：12 毫米钢板，正面（控制舱）一圈包边扁钢，背面一圈胶条槽（胶条压在门框刀口上）和两道横加强筋。
-    正面中间是减速箱，上面的曲柄盘（Door_Crank_*）带六根连杆（Door_Rod_k），拉动四周的压紧把手（Door_Dog{k}_*）；
-    手轮两面各一个（Door_Wheel_*），一根轴穿过门扇。"""
+    门扇：18 毫米钢板，正面（控制舱）外沿一圈包边扁钢、里面一圈加强环，都是鱼鳞纹角焊；背面一圈胶条槽
+    （胶条压在门框刀口上），两道 T 型横筋加中间的竖筋。
+    正面中间是铸铁减速箱，上面的曲柄盘（Door_Crank_*）带六根连杆（Door_Rod_k），拉动四周的压紧把手（Door_Dog{k}_*）；
+    曲柄盘上一根指针，对着下面的「关 / 开」指示牌；手轮两面各一个（Door_Wheel_*），一根轴穿过门扇。
+    把手、连杆、铰链是发黑的锻钢件，棱边磨出钢底；轴套、铰链上有黄油嘴，轴套根上一圈挤出来的黄油。"""
     dx, dz, da, db = DOOR
     y = Y_AFT
     hx, hy = DOOR_HINGE
-    yb, yf = y + 0.085, y + 0.097      # 门板背面、正面
+    yb, yf = y + 0.085, y + 0.103      # 门板背面、正面
     up = V((0, 1, 0))
     D = Parts(K.coll, K.M, "Door_Leaf")
     W = Parts(K.coll, K.M, "Door_Wheel")
     Cr = Parts(K.coll, K.M, "Door_Crank")
-    plate_xz(D["Console"], [(p.x, p.z) for p in door_loop(DOOR_LEAF_K, 0.0)], yb, yf - yb)
+    P = D["DoorPaint"]
+    plate_xz(P, [(p.x, p.z) for p in door_loop(DOOR_LEAF_K, 0.0)], yb, yf - yb)
     ring0 = door_loop(0.0, y)
-    # 正面包边扁钢；背面胶条槽（两道槽壁夹着胶条，胶条面比槽壁高出一毫米）
-    sweep(D["Console"], ring0, [(0.052, 0.0965), (DOOR_LEAF_K, 0.0965), (DOOR_LEAF_K, 0.119), (0.067, 0.122),
-                                (0.052, 0.122)], closed=True, up_hint=up)
+    # 正面包边扁钢（外角倒坡），里侧鱼鳞纹角焊
+    sweep(P, ring0, [(0.046, 0.102), (DOOR_LEAF_K, 0.102), (DOOR_LEAF_K, 0.117), (0.066, 0.122), (0.05, 0.122),
+                     (0.046, 0.119)], closed=True, up_hint=up)
+    weld(P, 0.046, yf, 0.006, su=-1, sv=1)
+    # 正面加强环：一圈立焊的扁钢，两边角焊（避开把手、轴套，连杆从它上面过）
+    rk = DOOR_RING_K
+    sweep(P, ring0, [(rk - 0.005, 0.102), (rk + 0.005, 0.102), (rk + 0.005, 0.121), (rk + 0.003, 0.123),
+                     (rk - 0.003, 0.123), (rk - 0.005, 0.121)], closed=True, up_hint=up)
+    weld(P, rk + 0.005, yf, 0.005, su=1, sv=1)
+    weld(P, rk - 0.005, yf, 0.005, su=-1, sv=1)
+    # 背面胶条槽（两道槽壁夹着胶条，胶条面比槽壁高出一毫米）
     for k0, k1 in ((0.018, 0.023), (0.049, 0.054)):
         sweep(D["Steel"], ring0, [(k0, 0.066), (k1, 0.066), (k1, 0.0855), (k0, 0.0855)], closed=True, up_hint=up)
     sweep(D["Rubber"], ring0, [(0.023, 0.065), (0.049, 0.065), (0.049, 0.0855), (0.023, 0.0855)], closed=True,
           up_hint=up)
-    # 背面两道横加强筋（扁钢立着焊，两头削斜），都在门洞里面，开关门时不碰门框
+    # 背面：两道 T 型横筋（两头削斜），中间的竖筋分成几段焊在横筋之间；都在门洞里面，开关门时不碰门框
     for zz in (-0.3, 0.3):
         L = da * math.sqrt(1 - (zz / db) ** 2) - 0.05
-        extrude_profile(D["Console"], [(-L, yb + 0.0005), (L, yb + 0.0005), (L - 0.025, yb - 0.045),
-                                       (-L + 0.025, yb - 0.045)], T(0, 0, dz + zz - 0.006), 0.012)
+        extrude_profile(P, [(-L, yb + 0.0005), (L, yb + 0.0005), (L - 0.03, yb - 0.048),
+                            (-L + 0.03, yb - 0.048)], T(0, 0, dz + zz - 0.006), 0.012)
+        rbox(P, 2 * L - 0.07, 0.008, 0.045, T(dx, yb - 0.052, dz + zz), r=0.002, seg=1)
+        for sz in (-1, 1):
+            sweep(P, [V((-L + 0.03, yb, dz + zz + sz * 0.006)), V((L - 0.03, yb, dz + zz + sz * 0.006))],
+                  [(0, 0), (0.0, 0.006 * sz), (-0.006, 0)][::sz], up_hint=V((0, 0, 1)))
+    for z0, z1 in ((0.07, 0.294), (-0.294, -0.07), (0.306, db - 0.08), (-db + 0.08, -0.306)):
+        zc, h = dz + (z0 + z1) / 2, abs(z1 - z0)
+        rbox(P, 0.01, 0.042, h, T(dx, yb - 0.021, zc), r=0.002, seg=1)
     # 背面中间：手轮轴的填料函（压盖 + 两颗螺栓）
-    lathe(D["Console"], [(0.0, yb), (0.04, yb), (0.04, yb - 0.012), (0.032, yb - 0.02), (0.0, yb - 0.02)], 32,
+    lathe(P, [(0.0, yb), (0.045, yb), (0.045, yb - 0.012), (0.036, yb - 0.02), (0.0, yb - 0.02)], 32,
           T(dx, 0, dz) @ R(-90, 'X'))
     Mg = T(dx, yb - 0.02, dz)
-    rbox(D["Steel"], 0.1, 0.008, 0.03, Mg @ T(0, -0.004, 0), r=0.004, seg=2)
+    rbox(D["Forged"], 0.11, 0.009, 0.034, Mg @ T(0, -0.0045, 0), r=0.004, seg=2)
     for sx in (-1, 1):
-        cylinder(D["Steel"], 0.0065, 0.012, 6, Mg @ T(sx * 0.04, -0.008, 0) @ R(90, 'X'))
-    # 正面中间：减速箱（铸铁圆壳，盖子一圈螺栓）
+        cylinder(D["Forged"], 0.0075, 0.012, 6, Mg @ T(sx * 0.044, -0.009, 0) @ R(90, 'X'))
+    # 正面中间：铸铁减速箱——底座法兰一圈螺栓，六道加强肋，箱体侧面一个黄油嘴
     Mb = T(dx, yf, dz) @ R(-90, 'X')
-    lathe(D["Console"], [(0.0, 0.0), (0.076, 0.0), (0.076, 0.03), (0.07, 0.036), (0.07, 0.04), (0.0, 0.04)], 40, Mb)
-    for i in range(8):
-        a = 2 * math.pi * (i + 0.5) / 8
-        cylinder(D["Steel"], 0.0055, 0.004, 6, Mb @ T(math.cos(a) * 0.063, math.sin(a) * 0.063, 0.04))
-    # 铰链臂：一头套在销子上，一头用四颗螺栓压在门扇正面的垫块上
+    lathe(P, [(0.0, 0.0), (0.09, 0.0), (0.09, 0.007), (0.086, 0.009), (0.074, 0.01), (0.071, 0.014),
+              (0.071, 0.03), (0.075, 0.032), (0.075, 0.037), (0.0, 0.037)], 48, Mb)
+    for i in range(10):
+        a = 2 * math.pi * (i + 0.5) / 10
+        cylinder(D["Forged"], 0.0062, 0.005, 6, Mb @ T(math.cos(a) * 0.081, math.sin(a) * 0.081, 0.009))
+    for i in range(6):
+        a = 2 * math.pi * i / 6
+        extrude_profile(P, [(0.07, 0.008), (0.084, 0.008), (0.071, 0.03)],
+                        Mb @ R(math.degrees(a), 'Z') @ R(90, 'X') @ T(0, 0, -0.003), 0.006)
+    a = math.radians(-20)
+    Mn = Mb @ T(math.cos(a) * 0.071, math.sin(a) * 0.071, 0.022) @ R(math.degrees(a), 'Z') @ R(90, 'Y')
+    cylinder(D["Brass"], 0.006, 0.008, 6, Mn)
+    cylinder(D["Brass"], 0.0025, 0.006, 8, Mn @ T(0, 0, 0.008))
+    uvsphere(D["Brass"], 0.0038, 8, 6, Mn @ T(0, 0, 0.0145))
+    # 开关指示牌：两根短柱撑着一块黄铜扇形牌，刻着「关」「开」和刻线，曲柄盘上的指针在上面扫过
+    a0, a1 = DOOR_IND
+    yi = yf + 0.031
+    arc = [math.radians(a0 - 14 + (a1 - a0 + 22) * i / 16) for i in range(17)]
+    plate_xz(D["Brass"], [(dx + 0.162 * math.cos(t), dz + 0.162 * math.sin(t)) for t in arc]
+             + [(dx + 0.094 * math.cos(t), dz + 0.094 * math.sin(t)) for t in arc[::-1]], yi, 0.003)
+    for t in (math.radians(a0 + 4), math.radians(a1 - 4)):
+        cylinder(D["Forged"], 0.006, yi - yf, 12, T(dx + 0.15 * math.cos(t), yf, dz + 0.15 * math.sin(t))
+                 @ R(-90, 'X'))
+        cylinder(D["Forged"], 0.0045, 0.002, 6, T(dx + 0.15 * math.cos(t), yi + 0.003, dz + 0.15 * math.sin(t))
+                 @ R(-90, 'X'))
+    for deg, txt, ink in ((a0, "关", "InkRed"), (a1, "开", "Ink")):
+        t = math.radians(deg)
+        cx_, cz_ = math.cos(t), math.sin(t)
+        Mt = frame(V((dx + 0.137 * cx_, yi + 0.0032, dz + 0.137 * cz_)), up, V((cx_, 0, cz_)))
+        rbox(D[ink], 0.003, 0.03, 0.0004, frame(V((dx + 0.114 * cx_, yi + 0.0032, dz + 0.114 * cz_)), up,
+                                                  V((cx_, 0, cz_))), r=0.0, seg=1)
+        text_mesh(txt, D.uid("Door_Leaf_Txt"), K.coll, K.M[ink], Mt @ T(0, 0.012, 0), size=0.02, extrude=0.0,
+                  font_path=FONT_SANS, resolution=2)
+    for i in range(1, 5):
+        t = math.radians(a0 + (a1 - a0) * i / 5)
+        rbox(D["Ink"], 0.0015, 0.012, 0.0004, frame(V((dx + 0.108 * math.cos(t), yi + 0.0032,
+                                                         dz + 0.108 * math.sin(t))), up,
+                                                       V((math.cos(t), 0, math.sin(t)))), r=0.0, seg=1)
+    # 铰链臂：一头套在销子上（侧面黄油嘴），一头用四颗螺栓压在门扇正面焊的垫块上
     for zz in (dz - DOOR_HINGE_Z, dz + DOOR_HINGE_Z):
-        cylinder(D["Steel"], 0.03, 0.068, 24, T(hx, hy, zz - 0.034))
-        rbox(D["Steel"], -0.22 - hx - 0.02, 0.026, 0.064, T((hx + 0.02 - 0.22) / 2, hy + 0.007, zz), r=0.004, seg=2)
-        rbox(D["Steel"], 0.11, 0.027, 0.08, T(-0.27, yf + 0.0135, zz), r=0.003, seg=1)
-        for bx in (-0.3, -0.24):
-            for bz in (-0.022, 0.022):
-                cylinder(D["Steel"], 0.007, 0.006, 6, T(bx, hy + 0.02, zz + bz) @ R(-90, 'X'))
-    # 压紧把手的轴套（门扇的一部分）；把手、曲臂、轴（Door_Dog{k}_*）绕轴套转
+        cylinder(D["Forged"], 0.036, 0.07, 32, T(hx, hy, zz - 0.035))
+        cylinder(D["Brass"], 0.006, 0.008, 6, T(hx, hy + 0.036, zz) @ R(-90, 'X'))
+        uvsphere(D["Brass"], 0.0038, 8, 6, T(hx, hy + 0.047, zz))
+        arm_y0 = hy + 0.007 - 0.015
+        rbox(D["Forged"], -0.225 - hx - 0.02, 0.03, 0.074, T((hx + 0.02 - 0.225) / 2, hy + 0.007, zz), r=0.005,
+             seg=2)
+        rbox(D["Forged"], 0.12, arm_y0 - yf + 0.002, 0.09, T(-0.27, (arm_y0 + yf) / 2, zz), r=0.004, seg=2)
+        for bx in (-0.305, -0.24):
+            for bz in (-0.024, 0.024):
+                cylinder(D["Forged"], 0.0085, 0.007, 6, T(bx, hy + 0.022, zz + bz) @ R(-90, 'X'))
+    # 压紧把手的轴套（门扇的一部分，根上一圈法兰和挤出来的黄油，朝门中间一个黄油嘴）；
+    # 把手、曲臂、轴（Door_Dog{k}_*）绕轴套转
     layout = door_dog_layout()
     for S, n, A0, B0 in layout:
-        lathe(D["Console"], [(0.0, 0.0), (0.021, 0.0), (0.021, 0.024), (0.017, 0.027), (0.0, 0.027)], 24,
-              T(S.x, yf - 0.001, S.z) @ R(-90, 'X'))
-        lathe(D["Console"], [(0.0, 0.0), (0.019, 0.0), (0.019, 0.008), (0.0, 0.008)], 24,
-              T(S.x, yb, S.z) @ R(90, 'X'))
+        lathe(P, [(0.0, 0.0), (0.03, 0.0), (0.03, 0.004), (0.024, 0.007), (0.024, 0.0195), (0.02, 0.0225),
+                  (0.0, 0.0225)], 28, T(S.x, yf - 0.001, S.z) @ R(-90, 'X'))
+        torus(D["Grease"], 0.017, 0.0035, 20, 6, T(S.x, y + 0.1245, S.z) @ R(-90, 'X') @ Matrix.Diagonal((1, 1, 0.6, 1)))
+        Mz = frame(V((S.x, y + 0.115, S.z)) - n * 0.024, -n)
+        cylinder(D["Brass"], 0.0045, 0.007, 6, Mz)
+        uvsphere(D["Brass"], 0.003, 8, 6, Mz @ T(0, 0, 0.0095))
+        lathe(P, [(0.0, 0.0), (0.022, 0.0), (0.022, 0.008), (0.0, 0.008)], 24, T(S.x, yb, S.z) @ R(90, 'X'))
     yc = y + 0.1465                    # 曲柄盘中面
     # 连杆中面：相邻两根错开一层，转动时从彼此上面交叉过去
-    yrs = [y + 0.158 + (0.0125 if k % 2 else 0.0) for k in range(len(layout))]
+    yrs = [y + 0.158 + (0.015 if k % 2 else 0.0) for k in range(len(layout))]
     for k, (S, n, A0, B0) in enumerate(layout):
         yr = yrs[k]
         G = Parts(K.coll, K.M, f"Door_Dog{k}")
@@ -999,27 +1101,33 @@ def door_leaf(K, anchors):
         def P2(u, v, S=S, n=n, pn=pn):
             q = S + n * u + pn * v
             return q.x, q.z
-        # 把手：锻钢扁条，底面贴着楔块顶面滑上去
-        plate_xz(G["Steel"], [P2(0.0, -0.015), P2(0.12, -0.011), P2(0.15, -0.007), P2(0.156, 0.0),
-                              P2(0.15, 0.007), P2(0.12, 0.011), P2(0.0, 0.015)], y + 0.1255, 0.0155)
-        cylinder(G["Steel"], 0.02, 0.0155, 24, T(S.x, y + 0.1255, S.z) @ R(-90, 'X'))
-        # 轴：穿过门扇，背面一颗螺母
-        cylinder(G["Steel"], 0.011, y + 0.147 - (yb - 0.02), 16, T(S.x, yb - 0.02, S.z) @ R(-90, 'X'))
-        cylinder(G["Steel"], 0.014, 0.009, 6, T(S.x, yb - 0.008, S.z) @ R(90, 'X'))
+        # 把手：锻钢，根部粗、往外收窄，底面贴着楔块顶面滑上去；背上一道加强脊，尖上一道红漆对位线
+        plate_xz(G["Forged"], [P2(0.0, -0.021), P2(0.06, -0.017), P2(0.125, -0.0135), P2(0.15, -0.011),
+                               P2(0.158, -0.006), P2(0.16, 0.0), P2(0.158, 0.006), P2(0.15, 0.011),
+                               P2(0.125, 0.0135), P2(0.06, 0.017), P2(0.0, 0.021)], y + 0.1255, 0.016)
+        plate_xz(G["Forged"], [P2(0.034, -0.006), P2(0.12, -0.004), P2(0.128, 0.0), P2(0.12, 0.004),
+                               P2(0.034, 0.006)], y + 0.141, 0.0045)
+        cylinder(G["Forged"], 0.026, 0.016, 28, T(S.x, y + 0.1255, S.z) @ R(-90, 'X'))
+        q = S + n * 0.145
+        rbox(G["InkRed"], 0.022, 0.0045, 0.0004, frame(V((q.x, y + 0.1417, q.z)), up, pn), r=0.0, seg=1)
+        # 轴：穿过门扇，背面垫圈加一颗大螺母
+        cylinder(G["Forged"], 0.012, y + 0.147 - (yb - 0.02), 16, T(S.x, yb - 0.02, S.z) @ R(-90, 'X'))
+        cylinder(G["Forged"], 0.021, 0.003, 20, T(S.x, yb - 0.008, S.z) @ R(90, 'X'))
+        cylinder(G["Forged"], 0.016, 0.011, 6, T(S.x, yb - 0.011, S.z) @ R(90, 'X'))
         # 曲臂 + 销子，轴顶一颗螺母
         d = (B0 - S).normalized()
         dn = V((-d.z, 0, d.x))
-        arm = [S + dn * 0.016, B0 + dn * 0.011, B0 - dn * 0.011, S - dn * 0.016]
-        plate_xz(G["Steel"], [(q.x, q.z) for q in arm], y + 0.1425, 0.008)
-        for q, r_ in ((S, 0.016), (B0, 0.011)):
-            cylinder(G["Steel"], r_, 0.008, 20, T(q.x, y + 0.1425, q.z) @ R(-90, 'X'))
-        cylinder(G["Steel"], 0.0062, yr + 0.0105 - (y + 0.15), 12, T(B0.x, y + 0.15, B0.z) @ R(-90, 'X'))
-        cylinder(G["Steel"], 0.0085, 0.003, 12, T(B0.x, yr + 0.0075, B0.z) @ R(-90, 'X'))
-        cylinder(G["Steel"], 0.014, 0.008, 6, T(S.x, y + 0.1505, S.z) @ R(-90, 'X'))
+        arm = [S + dn * 0.018, B0 + dn * 0.012, B0 - dn * 0.012, S - dn * 0.018]
+        plate_xz(G["Forged"], [(q_.x, q_.z) for q_ in arm], y + 0.1425, 0.008)
+        for q_, r_ in ((S, 0.018), (B0, 0.012)):
+            cylinder(G["Forged"], r_, 0.008, 20, T(q_.x, y + 0.1425, q_.z) @ R(-90, 'X'))
+        cylinder(G["Forged"], 0.007, yr + 0.011 - (y + 0.15), 12, T(B0.x, y + 0.15, B0.z) @ R(-90, 'X'))
+        cylinder(G["Forged"], 0.0095, 0.003, 12, T(B0.x, yr + 0.008, B0.z) @ R(-90, 'X'))
+        cylinder(G["Forged"], 0.015, 0.008, 6, T(S.x, y + 0.1505, S.z) @ R(-90, 'X'))
         G.flush()
         anchors.append(empty(f"Door_DogAxis_{k}", K.coll, anchor_frame(S + V((0, y + 0.13, 0)), up)))
         anchors.append(empty(f"Door_DogPin_{k}", K.coll, anchor_frame(B0 + V((0, yr, 0)), up)))
-        # 连杆：两头叉耳套在销子上，中间一个花篮螺母（调长度用）
+        # 连杆：两头叉耳套在销子上，中间一个花篮螺母（调长度用），两边各一颗锁紧螺母
         u = (B0 - A0)
         L = u.length
         u.normalize()
@@ -1027,35 +1135,48 @@ def door_leaf(K, anchors):
         Mrod = Matrix(((u.x, 0, z_.x, A0.x), (u.y, 1, z_.y, yr), (u.z, 0, z_.z, A0.z), (0, 0, 0, 1)))
 
         def rod(bm, L=L):
-            cylinder(bm, 0.0052, L - 0.02, 12, T(0.01, 0, 0) @ R(90, 'Y'))
+            cylinder(bm, 0.0068, L - 0.024, 12, T(0.012, 0, 0) @ R(90, 'Y'))
             for x in (0.0, L):
-                lathe(bm, [(0.0, -0.0062), (0.0115, -0.0062), (0.0125, -0.005), (0.0125, 0.005),
-                           (0.0115, 0.0062), (0.0, 0.0062)], 16, T(x, 0, 0) @ R(-90, 'X'))
-            cylinder(bm, 0.0085, 0.045, 6, T(L * 0.5 - 0.0225, 0, 0) @ R(90, 'Y'))
-        K.separate(f"Door_Rod_{k}", "Steel", rod).matrix_world = Mrod
-    # 曲柄盘：减速箱输出轴上的一块圆盘，六个连杆销
-    cylinder(Cr["Steel"], 0.08, 0.009, 48, T(dx, yc - 0.0045, dz) @ R(-90, 'X'))
-    lathe(Cr["Steel"], [(0.0, 0.0), (0.03, 0.0), (0.03, 0.006), (0.0, 0.006)], 24, T(dx, yc + 0.0045, dz) @ R(-90, 'X'))
+                lathe(bm, [(0.0, -0.0068), (0.0128, -0.0068), (0.014, -0.0055), (0.014, 0.0055),
+                           (0.0128, 0.0068), (0.0, 0.0068)], 20, T(x, 0, 0) @ R(-90, 'X'))
+            cylinder(bm, 0.0105, 0.05, 6, T(L * 0.5 - 0.025, 0, 0) @ R(90, 'Y'))
+            for sx in (-1, 1):
+                cylinder(bm, 0.0095, 0.007, 6, T(L * 0.5 + sx * 0.0325 - 0.0035, 0, 0) @ R(90, 'Y'))
+        K.separate(f"Door_Rod_{k}", "Forged", rod).matrix_world = Mrod
+    # 曲柄盘：减速箱输出轴上的一块厚圆盘，六个连杆销；伸出一根指针对着开关指示牌
+    F_ = Cr["Forged"]
+    lathe(F_, [(0.0, -0.0045), (0.078, -0.0045), (0.08, -0.0025), (0.08, 0.0025), (0.078, 0.0045), (0.0, 0.0045)],
+          48, T(dx, yc, dz) @ R(-90, 'X'))
+    lathe(F_, [(0.0, 0.0), (0.032, 0.0), (0.032, 0.004), (0.028, 0.007), (0.0, 0.007)], 24,
+          T(dx, yc + 0.0045, dz) @ R(-90, 'X'))
+    cylinder(F_, 0.016, 0.005, 6, T(dx, yc + 0.0115, dz) @ R(-90, 'X'))
+    t = math.radians(DOOR_IND[0])
+    c_, s_ = math.cos(t), math.sin(t)
+    tip = [(0.066, -0.009), (0.11, -0.004), (0.127, 0.0), (0.11, 0.004), (0.066, 0.009)]
+    plate_xz(F_, [(dx + c_ * a - s_ * b, dz + s_ * a + c_ * b) for a, b in tip], yc - 0.0045, 0.004)
+    plate_xz(Cr["PaintText"], [(dx + c_ * a - s_ * b, dz + s_ * a + c_ * b) for a, b in
+                               [(0.108, -0.0035), (0.124, -0.0006), (0.124, 0.0006), (0.108, 0.0035)]],
+             yc - 0.0005, 0.0004)
     for (S, n, A0, B0), yr in zip(layout, yrs):
-        cylinder(Cr["Steel"], 0.0062, yr + 0.0105 - (yc + 0.0045), 12, T(A0.x, yc + 0.0045, A0.z) @ R(-90, 'X'))
-        cylinder(Cr["Steel"], 0.0085, 0.003, 12, T(A0.x, yr + 0.0075, A0.z) @ R(-90, 'X'))
+        cylinder(F_, 0.007, yr + 0.011 - (yc + 0.0045), 12, T(A0.x, yc + 0.0045, A0.z) @ R(-90, 'X'))
+        cylinder(F_, 0.0095, 0.003, 12, T(A0.x, yr + 0.008, A0.z) @ R(-90, 'X'))
     anchors.append(empty("Door_CrankAxis", K.coll, anchor_frame(V((dx, yc, dz)), up)))
     # 手轮：两面各一个，同一根轴
-    door_wheel(W, T(dx, y + 0.168, dz) @ R(-90, 'X'), 0.13)   # 抬高一点，辐条从上层连杆的销子头上面转过去
-    door_wheel(W, T(dx, yb - 0.045, dz) @ R(90, 'X'), 0.11)
-    cylinder(W["Steel"], 0.012, 0.03, 16, T(dx, y + 0.138, dz) @ R(-90, 'X'))
-    cylinder(W["Steel"], 0.012, 0.03, 16, T(dx, yb - 0.048, dz) @ R(-90, 'X'))
+    door_wheel(W, T(dx, y + 0.168, dz) @ R(-90, 'X'), 0.15)   # 抬高一点，辐条从上层连杆的销子头上面转过去
+    door_wheel(W, T(dx, yb - 0.045, dz) @ R(90, 'X'), 0.12)
+    cylinder(W["Forged"], 0.014, 0.03, 16, T(dx, y + 0.138, dz) @ R(-90, 'X'))
+    cylinder(W["Forged"], 0.014, 0.03, 16, T(dx, yb - 0.048, dz) @ R(-90, 'X'))
     anchors.append(empty("Door_WheelAxis", K.coll, anchor_frame(V((dx, y + 0.12, dz)), up)))
 
-    # 门扇两面刷的字（避开连杆）
-    for yy, n, x2, z2, x1, z1 in ((yf + 0.0002, up, dx + 0.13, dz + 0.42, dx - 0.09, dz - 0.45),
-                                  (yb - 0.0002, -up, dx, dz + 0.45, dx, dz - 0.19)):
+    # 门扇两面刷的字（避开连杆、加强筋）
+    for yy, n, x2, z2, x1, z1, s1 in ((yf + 0.0002, up, dx + 0.09, dz + 0.33, dx - 0.09, dz - 0.36, 0.036),
+                                      (yb - 0.0002, -up, dx - 0.14, dz + 0.44, dx + 0.15, dz - 0.21, 0.032)):
         text_mesh("随手关门", D.uid("Door_Leaf_Txt"), K.coll, K.M["InkRed"], frame(V((x1, yy, z1)), n),
-                  size=0.04, extrude=0.0, font_path=FONT_SERIF, resolution=2)
+                  size=s1, extrude=0.0, font_path=FONT_SERIF, resolution=2)
         text_mesh("2", D.uid("Door_Leaf_Txt"), K.coll, K.M["PaintText"], frame(V((x2, yy, z2)), n),
                   size=0.12, extrude=0.0, font_path=FONT_SERIF, resolution=2)
     # 控制舱一面：左上角一块黄铜检验铭牌（四颗铆钉）
-    Pb = frame(V((dx - 0.19, yf + 0.0002, dz + 0.18)), up)
+    Pb = frame(V((dx - 0.14, yf + 0.0002, dz + 0.2)), up)
     rbox(D["Brass"], 0.105, 0.062, 0.0015, Pb @ T(0, 0, 0.00075), r=0.001, seg=1)
     for sx in (-1, 1):
         for sy in (-1, 1):
@@ -1083,20 +1204,30 @@ def door_leaf(K, anchors):
 
 
 def door_wheel(K, M, r):
-    """门上的手轮：碟形（三根辐条从轮毂往外翘）、轮缘上一个转柄。M 的 Z 朝外，原点在轮毂底面。"""
-    lathe(K["Steel"], [(0.0, 0.0), (0.028, 0.0), (0.028, 0.03), (0.022, 0.036), (0.0, 0.036)], 24, M)
-    cylinder(K["Steel"], 0.012, 0.006, 6, M @ T(0, 0, 0.036))
-    zr = 0.044
-    torus(K["BtnRed"], r, r * 0.11, 64, 12, M @ T(0, 0, zr))
+    """门上的手轮：锻钢轮毂（垫圈、大螺母压着），三根粗辐条从轮毂往外翘，轮缘一圈握手的波纹；红漆磨得斑驳，
+    轮缘上一个转柄。M 的 Z 朝外，原点在轮毂底面。"""
+    F = K["Forged"]
+    lathe(F, [(0.0, 0.0), (0.034, 0.0), (0.034, 0.004), (0.03, 0.008), (0.03, 0.03), (0.026, 0.037),
+              (0.0, 0.037)], 32, M)
+    cylinder(F, 0.025, 0.004, 24, M @ T(0, 0, 0.037))
+    cylinder(F, 0.017, 0.012, 6, M @ T(0, 0, 0.041))
+    cylinder(F, 0.009, 0.006, 12, M @ T(0, 0, 0.053))
+    zr = 0.046
+    N, bumps = 192, 20
+    rim = [M @ V((r * math.cos(2 * math.pi * i / N), r * math.sin(2 * math.pi * i / N), zr)) for i in range(N)]
+    sc = [1.0 + 0.06 * math.cos(bumps * 2 * math.pi * i / N) for i in range(N)]
+    sweep(K["WheelRed"], rim, [(x, y_ * 0.85) for x, y_ in circle_profile(r * 0.12, 14)], closed=True,
+          up_hint=M.to_3x3() @ V((0, 0, 1)), scales=sc)
     for i in range(3):
         a = 2 * math.pi * i / 3 + math.pi / 2
         c, s_ = math.cos(a), math.sin(a)
-        pts = [M @ V((c * 0.02, s_ * 0.02, 0.018)), M @ V((c * r * 0.5, s_ * r * 0.5, zr - 0.006)),
+        pts = [M @ V((c * 0.022, s_ * 0.022, 0.018)), M @ V((c * r * 0.5, s_ * r * 0.5, zr - 0.007)),
                M @ V((c * r, s_ * r, zr))]
-        sweep(K["BtnRed"], catmull(pts, 5), [(x * 1.3, y_) for x, y_ in circle_profile(r * 0.065, 10)])
+        sweep(K["WheelRed"], catmull(pts, 6), [(x * 1.35, y_) for x, y_ in circle_profile(r * 0.075, 12)],
+              scales=[1.25, 1.12, 1.04, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.05, 1.12, 1.2, 1.25])
     Mk = M @ T(r * math.cos(math.radians(-35)), r * math.sin(math.radians(-35)), zr)
-    cylinder(K["Steel"], 0.0055, 0.024, 10, Mk)
-    lathe(K["Knob"], [(0.0, 0.016), (0.011, 0.018), (0.0125, 0.05), (0.009, 0.06), (0.0, 0.062)], 16, Mk)
+    cylinder(F, 0.0065, 0.026, 10, Mk)
+    lathe(K["Knob"], [(0.0, 0.016), (0.012, 0.018), (0.0135, 0.055), (0.01, 0.066), (0.0, 0.068)], 16, Mk)
 
 
 def junction_box(K, P, w=0.2, h=0.16, d=0.1):
