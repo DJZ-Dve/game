@@ -21,7 +21,7 @@ done
 
 # 清掉导入缓存，确保导入后处理脚本重新套用材质
 rm -f "$root"/.godot/imported/(submarine_|seabed)*(N)
-"$godot" --headless --path "$root" --import 2>&1 | grep -E "ERROR|SCRIPT ERROR" || true
+"$godot" --headless --audio-driver Dummy --path "$root" --import 2>&1 | grep -E "ERROR|SCRIPT ERROR" || true
 # 舱内模型变了，VoxelGI 要重新烘焙（需要渲染，在后台开一个屏幕外的窗口，见 godot_bg.sh）
 if [[ -z $only || $only == submarine ]]; then
   godot_window --path "$root" --resolution 640x360 -- --bake-gi | grep -E "ERROR|SCRIPT ERROR|saved|baked" || true

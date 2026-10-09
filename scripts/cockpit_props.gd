@@ -30,12 +30,21 @@ const DECALS := {
 	"TextAir": {"tex": "text_air", "alpha": 0.8},
 }
 
+## 漏水的水珠落到地板上（落点，舱内局部坐标），给音效用
+signal drip_landed(pos: Vector3)
+
 var _charm: Node3D
 var _porthole_lights: Array[OmniLight3D] = []
 var _caustic := FastNoiseLite.new()
 var _swing := Vector2.ZERO  # 绕 X、绕 Z 的摆角
 var _swing_v := Vector2.ZERO
 var _last_vel := Vector3.ZERO
+# 漏水：滴的节奏在这边掐（粒子只管画），这样落地的声音能和水花对上
+var _drip: GPUParticles3D
+var _drip_spot := Vector3.ZERO  # 落点
+var _drip_fall := 0.6           # 从法兰底下落到地板要多久
+var _drip_wait := 1.5           # 离下一滴还有多久
+var _drip_land := -1.0          # 这一滴还有多久落地
 
 ## 挂点 -> 素材、缩放、绕 Y 旋转（度）、只保留哪些节点（并把它们移到原点）、子节点额外旋转
 const PROPS := {
@@ -281,7 +290,8 @@ func _add_porthole_lights(sub: Node) -> void:
 		_porthole_lights.append(l)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_update_drip(delta)
 	if _porthole_lights.is_empty():
 		return
 	var lit: bool = owner.get("lights_on")
@@ -289,6 +299,21 @@ func _process(_delta: float) -> void:
 	for i in _porthole_lights.size():
 		var base := 0.22 if lit else 0.04
 		_porthole_lights[i].light_energy = base * (1.0 + 0.3 * _caustic.get_noise_2d(t * 0.8, i * 50.0))
+
+
+## 每隔两三秒滴一滴，算好落地的时刻
+func _update_drip(delta: float) -> void:
+	if _drip == null:
+		return
+	_drip_wait -= delta
+	if _drip_wait <= 0.0:
+		_drip_wait = randf_range(2.0, 3.6)
+		_drip.restart()
+		_drip_land = _drip_fall
+	if _drip_land >= 0.0:
+		_drip_land -= delta
+		if _drip_land < 0.0:
+			drip_landed.emit(_drip_spot)
 
 
 func _add_decals(sub: Node) -> void:
@@ -357,9 +382,10 @@ func _add_drip(sub: Node) -> void:
 	var drip := GPUParticles3D.new()
 	drip.name = "Drip"
 	drip.amount = 1
-	drip.lifetime = 2.7
+	drip.lifetime = 2.0
+	drip.one_shot = true
+	drip.emitting = false
 	drip.local_coords = true
-	drip.randomness = 0.3
 	drip.collision_base_size = 0.004
 	var pm := ParticleProcessMaterial.new()
 	pm.gravity = Vector3(0, -9.8, 0)
@@ -372,6 +398,10 @@ func _add_drip(sub: Node) -> void:
 	drip.draw_pass_1 = drop_mesh
 	drip.visibility_aabb = AABB(Vector3(-0.3, -2.2, -0.3), Vector3(0.6, 2.4, 0.6))
 	a.add_child(drip)
+	_drip = drip
+	var p := to_local(a.global_position)  # Props 就在 Body 的原点上
+	_drip_spot = Vector3(p.x, -0.9, p.z)
+	_drip_fall = sqrt(2.0 * (p.y + 0.9) / 9.8)
 	drip.add_child(splash)
 	drip.sub_emitter = drip.get_path_to(splash)
 	splash.visibility_aabb = AABB(Vector3(-0.5, -2.2, -0.5), Vector3(1.0, 2.6, 1.0))

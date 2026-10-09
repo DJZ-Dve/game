@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://scripts/water_fx.gd" id="8_water"]
 [ext_resource type="Script" path="res://scripts/flicker_light.gd" id="10_flick"]
 [ext_resource type="Script" path="res://scripts/watertight_door.gd" id="11_door"]
+[ext_resource type="Script" path="res://scripts/sub_audio.gd" id="12_audio"]
 
 [sub_resource type="CapsuleShape3D" id="Capsule_hull"]
 radius = 1.55
@@ -107,6 +108,9 @@ far = 400.0
 fov = 72.0
 script = ExtResource("4_cam")
 door_path = NodePath("../Door")
+
+[node name="Audio" type="Node3D" parent="Body"]
+script = ExtResource("12_audio")
 
 [node name="ExternalCamera" type="Camera3D" parent="."]
 unique_name_in_owner = true

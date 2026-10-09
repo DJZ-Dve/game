@@ -15,6 +15,11 @@ func _ready() -> void:
 	_noise.frequency = 0.8
 
 
+## 当前亮度相对基础亮度（坏灯管的电流声跟着它走）
+func level() -> float:
+	return light_energy / _base
+
+
 func _process(delta: float) -> void:
 	var t := Time.get_ticks_msec() / 1000.0
 	if randf() < delta * 0.15:

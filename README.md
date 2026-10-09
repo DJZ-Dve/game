@@ -58,6 +58,28 @@
   - 最后面右舷储物架、左舷洗手池和镜子；后隔壁上是封死的机舱检修门
 - 尺寸都写在 `blender/scripts/cockpit.py` 开头；能站的区域在 `scripts/cockpit_camera.gd` 开头的几个矩形里，改布局时两边要一起改
 
+## 声音（`scripts/sub_audio.gd`）
+音效全部是程序化合成的（`tools/gen_sfx.py`，只用 numpy），写到 `assets/audio/`；`sub_audio.gd` 负责摆位置、按游戏状态调音量音高。
+- **环境声**：艇体低鸣（深水压在耐压壳上的低频）、头顶球形风口的出风、右舷配电柜的变压器嗡声、
+  闪烁的那根坏灯管的电流声（音量跟着灯闪）、漏水滴到地板积水里的“嘀”（和水珠落地的时刻对齐，见 `cockpit_props.gd`）
+- **航行**：推进电机（音高跟转速）、艇外水流（跟航速）、螺旋桨搅水（七叶桨的叶频）、按住上浮/下潜时的压载泵（有起停爬升）
+- **艇壳**：每隔一阵来一声低沉的吱嘎或“嘣”，升降、转向时更勤；撞礁有整个艇壳的嗡鸣和刮擦
+- **主动声呐**：扫描线每转回艏向一圈 ping 一声（从艏部换能器方向传来）：950 Hz 的低沉纯音，后面是海里多径反射的长余音，2 秒后一声远处回波
+- **交互**：水密门（手轮每转过一个齿响一下齿轮、减速箱摩擦、把手离开/压上楔块、铰链吱嘎、门扇撞上门框），
+  走路的脚步（6 mm 花纹钢板搭在龙骨上：板的模态、底下空舱的嗡声、没压实的钢板在龙骨上磕一下；左右脚交替）、探照灯拨杆开关
+- **总线**（`default_bus_layout.tres`）：`Cabin` 舱里的声音（小钢舱的短混响），下面分 `CabinFwd`、`CabinAft` 两个舱，
+  水密门关着时听者不在的那个舱隔着门闷掉；`Sea` 艇外的水声，在舱里只剩隔着艇壳的低频，贴近舷窗亮一点。
+  切到舱外视角时反过来：舱里的声音闷掉，水声全开。Master 上一个 -1 dB 的限幅器
+- 循环音在 Godot 里导入成不压缩的 PCM，循环终点后面接了 16 个循环开头的采样：默认的 QOA 压缩、
+  以及变调时插值读到终点之后，都会让每圈接缝处出一个毛刺（`gen_sfx.py` 里有说明）
+
+### 不用耳朵检查声音
+`tools/record.sh` 用 Godot 的 Movie Maker 离线录一段（固定 60 帧/秒逐帧渲染，音频直接混进文件，**不经过声卡，绝不出声**），
+`--actions` 按帧号自动按键；`tools/audio_report.py` 分析录音：响度（LUFS、真峰值、削波）、每 0.5 秒的响度、
+孤立的咔哒声（接缝、硬起停、断音）、每个音效事件在录音里的起音延迟和显著度（< 6 dB 基本就是被别的声音盖住了），
+可以输出频谱图。`--only-sfx=` / `--mute-sfx=` 只开 / 关掉某几种声音，用来单独查某一路。
+后台跑的 Godot（`godot_bg.sh`）一律用 Dummy 音频驱动，截图、烘焙时也不会出声。
+
 ## 目录
 - `blender/scripts/` 生成潜艇（`gen_submarine.py` 外壳，`cockpit.py` 控制舱，`quarters.py` 生活舱）和海床（`gen_seabed.py`）的脚本；`blender/source/` 是生成的 .blend
 - 铺位上的床单、被子、枕头、布帘、毛巾是用 Blender 布料模拟摆出来的（`blender/scripts/bedding.py`），床垫是带绗缝凹坑的软垫；
@@ -87,4 +109,7 @@ godot --headless --path . --script res://scripts/tools/setup_project.gd   # 重�
 tools/capture.sh shot.png --view=external --orbit=40                      # 截图（后台运行、不弹窗；FOREGROUND=1 前台；其余参数见 scripts/debug_args.gd）
 tools/glb_info.sh assets/models/submarine_cockpit.glb [网格名]            # 查看 glb 里的网格、顶点数
 tools/fetch_polyhaven.sh --models a,b --textures c,d                      # 下载 Poly Haven 素材（ambientCG 用 fetch_ambientcg.sh --ids）
+python3 tools/gen_sfx.py [名字前缀...]                                   # 重新合成音效（之后让 Godot 导入一次：godot --headless --path . --import）
+tools/record.sh .tmp/door 12 --at=0,2.0 --yaw=180 --actions=30:interact   # 离线录一段画面+声音（.mp4/.wav/.log），不出声
+python3 tools/audio_report.py .tmp/door.wav --log .tmp/door.log --png .tmp/door.png   # 分析录音
 ```

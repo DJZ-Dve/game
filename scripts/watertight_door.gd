@@ -6,6 +6,8 @@ extends Node3D
 ## Door_DogAxis_k）上转。门往控制舱一侧开，门轴在左舷。
 
 signal state_changed(open: bool)
+## 给音效的节点：unlatch（开门时把手离开楔块）、slam（关门时门扇撞上门框）、latched（关门最后拧紧）
+signal sound(event: StringName)
 
 const OPEN_DEG := 110.0
 const WHEEL_TURNS := 1.25
@@ -147,6 +149,7 @@ func toggle() -> void:
 		_tween.kill()
 	_tween = create_tween()
 	if not is_open:
+		sound.emit(&"unlatch")
 		# 手轮逆时针转一圈多，压紧把手松开；门扇慢慢荡开
 		_tween.tween_property(_wheel, "rotation:z", TAU * WHEEL_TURNS, WHEEL_TIME) \
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -162,6 +165,7 @@ func toggle() -> void:
 		_tween.tween_property(_hinge, "rotation:y", 0.0, SWING_TIME * 0.8) \
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		_tween.tween_callback(_shake.bind(0.35))
+		_tween.tween_callback(sound.emit.bind(&"slam"))
 		_tween.tween_property(_wheel, "rotation:z", 0.0, WHEEL_TIME) \
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		_tween.parallel().tween_property(self, "unlatch", 0.0, WHEEL_TIME) \
@@ -172,7 +176,23 @@ func toggle() -> void:
 func _finish() -> void:
 	busy = false
 	is_open = not is_open
+	if not is_open:
+		sound.emit(&"latched")
 	state_changed.emit(is_open)
+
+
+## 手轮转过的角度（弧度）、门扇开的角度（弧度），音效按它们的变化快慢出声
+func wheel_angle() -> float:
+	return _wheel.rotation.z if _wheel else 0.0
+
+
+func hinge_angle() -> float:
+	return _hinge.rotation.y if _hinge else 0.0
+
+
+## 手轮中心（世界坐标），门的声音从这里出来
+func wheel_position() -> Vector3:
+	return _wheel.global_position if _wheel else global_position
 
 
 func _shake(strength: float) -> void:

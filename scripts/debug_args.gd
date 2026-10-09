@@ -11,8 +11,14 @@ extends Node
 ##   --cruise=油门     一直推着油门（-1~1），看艇开动起来时颗粒的拖影
 ##   --water=off      关掉水体吸收后处理（对比用，见 water_fx.gd）
 ##   --sub-yaw=度     开场把潜艇转一个角度（检查舱内 GI、贴花是不是跟着艇走）
+##   --actions=帧:动作,...  按帧号自动按键（录音测试用，见 tools/record.sh）。
+##                    `60:interact` 在第 60 帧按一下 E；`90:+move_forward` 按住、`150:-move_forward` 松开
+##   --only-sfx=a,b / --mute-sfx=a,b  只开 / 关掉这几种声音（名字见 sub_audio.gd 的 VOL）
+##   --sfx-log        每触发一个音效打一行 `SFX <帧号> <名字>`（tools/audio_report.py 拿它和录音对时间）
 
 var _args := {}
+var _actions: Array = []  # [帧号, 动作名, 0 按一下 / 1 按住 / -1 松开]，按帧号排好
+var _release: Array[String] = []
 
 
 func _init() -> void:
@@ -33,6 +39,51 @@ func get_arg(key: String, default := "") -> String:
 func _ready() -> void:
 	if has("capture"):
 		_capture.call_deferred()
+	if has("actions"):
+		for item in get_arg("actions").split(",", false):
+			var kv := item.split(":")
+			var act := kv[1]
+			var mode := 0
+			if act.begins_with("+") or act.begins_with("-"):
+				mode = 1 if act[0] == "+" else -1
+				act = act.substr(1)
+			_actions.append([int(kv[0]), act, mode])
+		_actions.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	set_process(not _actions.is_empty())
+
+
+func _process(_delta: float) -> void:
+	for act in _release:
+		Input.action_release(act)
+	_release.clear()
+	var frame := Engine.get_process_frames()
+	while not _actions.is_empty() and _actions[0][0] <= frame:
+		var a: Array = _actions.pop_front()
+		match a[2]:
+			1:
+				Input.action_press(a[1])
+			-1:
+				Input.action_release(a[1])
+			_:
+				var ev := InputEventAction.new()
+				ev.action = a[1]
+				ev.pressed = true
+				Input.parse_input_event(ev)
+				_release.append(a[1])
+	if _actions.is_empty() and _release.is_empty():
+		set_process(false)
+
+
+## 音效日志（--sfx-log）
+func log_sfx(sfx_name: String) -> void:
+	if has("sfx-log"):
+		print("SFX %d %s" % [Engine.get_process_frames(), sfx_name])
+
+
+## 循环音起停（--sfx-log）：`LOOP <帧号> +名字` / `-名字`
+func log_loop(sfx_name: String, on: bool) -> void:
+	if has("sfx-log"):
+		print("LOOP %d %s%s" % [Engine.get_process_frames(), "+" if on else "-", sfx_name])
 
 
 func _capture() -> void:

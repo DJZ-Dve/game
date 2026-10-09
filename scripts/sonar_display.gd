@@ -13,6 +13,9 @@ const FONT := preload("res://assets/fonts/DSEG14Classic-Regular.ttf")
 const PPI := preload("res://assets/shaders/sonar_ppi.gdshader")
 const INK := Color(0.45, 1.0, 0.5, 0.85)
 
+## 扫描线转回艏向（每转一圈一次），这时发一声能听见的 ping
+signal pinged
+
 @export var range_m := 100.0        # 量程（面板上档位开关指在 100）
 @export var period := 8.0           # 转一圈的秒数
 @export var gain := 1.15
@@ -74,7 +77,10 @@ func setup(p_sub: Submarine, screen: MeshInstance3D, lamp: MeshInstance3D) -> vo
 func _process(delta: float) -> void:
 	if sub == null:
 		return
+	var before := _sweep
 	_sweep = fmod(_sweep + delta / period, 1.0)
+	if _sweep < before:
+		pinged.emit()
 	var target := int(_sweep * BEARINGS)
 	var dirty := false
 	while _next_col != target:

@@ -3,6 +3,8 @@ extends Camera3D
 ## 相机挂在 Body 下面，跟着艇身一起晃；走动用的是舱内局部坐标，不走物理引擎（舱里只有一条过道）。
 
 signal seated_changed(seated: bool)
+## 走动时每落一步（脚落地的位置，舱内局部坐标；strength 0~1 按步速）
+signal stepped(foot: Vector3, strength: float)
 
 enum Mode { SEATED, WALKING }
 
@@ -55,7 +57,9 @@ var _leans: Array[Transform3D] = []
 var _lean_target := -1
 var _pos := Vector2.ZERO  # 走动时脚下的位置（x, z）
 var _vel := Vector2.ZERO
-var _bob := 0.0
+var _bob := 0.0  # 走路的相位：每 2π 一步，(_bob + π/2) 是 2π 的整数倍时脚落地
+var _land := 0.0  # 落脚时身体被压下去的量（米，负的），弹簧阻尼弹回
+var _land_v := 0.0
 var _blend := 1.0  # 0→1：从切换前的位置过渡到当前模式
 var _from := Transform3D.IDENTITY
 var _shake := 0.0
@@ -98,7 +102,7 @@ func _ready() -> void:
 	_noise.frequency = 2.0
 	add_to_group("crew")
 	_door = get_node_or_null(door_path)
-	if not DebugArgs.has("capture"):
+	if not DebugArgs.has("capture") and Engine.get_write_movie_path().is_empty():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -202,14 +206,19 @@ func _process(delta: float) -> void:
 			prompt = "E 关门" if _door.is_open else "E 开门"
 		else:
 			prompt = ""
-		var step := sin(_bob) * 0.025 * clampf(_vel.length() / walk_speed, 0.0, 1.0)
+		# 走路的起伏按「倒摆」来：脚踩在身体正下方时头最高，两脚交替落地的瞬间最低（是个尖角，不是正弦波）；
+		# 每两步左右晃一次，重心移到撑地的那只脚上，头也往那边歪一点；落脚时再被压一下、点一下头（_land）
+		var sp := clampf(_vel.length() / walk_speed, 0.0, 1.0)
+		var steps := (_bob + PI / 2.0) / TAU          # 走过的步数，整数时脚落地
+		var arc := sin(PI * fposmod(steps, 1.0)) - 0.64  # 0.64 是弧线的平均值，平均高度不变
+		var side := sin(PI * fposmod(steps, 2.0))       # 正：右脚撑地，负：左脚撑地
 		var duck := 0.0
 		if _door:
 			duck = DOOR_DUCK * (1.0 - smoothstep(0.12, 0.5, absf(_pos.y - DOOR_POS.y)))
-		base = Transform3D(Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch),
-			Vector3(_pos.x, DECK_Y + eye_height - duck + step, _pos.y))
-		base.origin += Vector3(cos(_bob * 0.5) * 0.012, 0, 0).rotated(Vector3.UP, yaw) * clampf(
-			_vel.length() / walk_speed, 0.0, 1.0)
+		base = Transform3D(Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch + _land * 1.2)
+			* Basis(Vector3.BACK, -side * deg_to_rad(0.5) * sp),
+			Vector3(_pos.x, DECK_Y + eye_height - duck + arc * 0.028 * sp + _land, _pos.y))
+		base.origin += Vector3(side * 0.014 * sp, 0, 0).rotated(Vector3.UP, yaw)
 		if lean > 0.0 and _lean_target >= 0:
 			var k := smoothstep(0.0, 1.0, lean)
 			var tgt := _leans[_lean_target]
@@ -234,12 +243,24 @@ func _process(delta: float) -> void:
 
 func _walk(delta: float) -> void:
 	var input := Vector2.ZERO
-	if current and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and lean < 0.1:
+	var scripted := DebugArgs.has("actions")  # 录音测试时由脚本按键，鼠标没被捕获
+	if current and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or scripted) and lean < 0.1:
 		input = Input.get_vector("turn_left", "turn_right", "move_forward", "move_back")
 	var wish := input.rotated(-yaw) * walk_speed
 	_vel = _vel.move_toward(wish, walk_accel * delta)
 	_pos = _clamp_to_walkable(_pos + _vel * delta)
-	_bob += _vel.length() * delta * 7.0
+	var bob0 := _bob
+	_bob += _vel.length() * delta * 8.9  # 全速 1.3 m/s 时每秒 1.85 步（舱里过道窄，步子小）
+	_land_v += (-_land * 400.0 - _land_v * 28.0) * delta
+	_land += _land_v * delta
+	# 两脚交替落地：步数跨过整数的那一帧
+	var k := floorf((_bob + PI / 2.0) / TAU)
+	if k > floorf((bob0 + PI / 2.0) / TAU):
+		var side := 0.11 if int(k) % 2 == 0 else -0.11
+		var foot := Vector3(_pos.x, DECK_Y, _pos.y) + Vector3(side, 0, 0).rotated(Vector3.UP, yaw)
+		var strength := clampf(_vel.length() / walk_speed, 0.0, 1.0)
+		_land_v -= 0.13 * strength
+		stepped.emit(foot, strength)
 
 
 func _walk_areas() -> Array:

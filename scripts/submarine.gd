@@ -3,6 +3,8 @@ extends CharacterBody3D
 ## 潜艇本体：带惯性的推进/转向/升降、碰撞反馈、探照灯、舱内/舱外视角切换。
 
 signal bumped(strength: float)
+## 驾驶员按了探照灯开关（给音效用；调试参数开场关灯不算）
+signal lights_switched(on: bool)
 
 @export_group("航行")
 @export var max_speed := 2.6
@@ -109,6 +111,11 @@ func speed() -> float:
 	return velocity.length()
 
 
+## 螺旋桨转速（任意单位，满速前进约 9）
+func prop_speed() -> float:
+	return _prop_speed
+
+
 func _build_floodlights() -> void:
 	for anchor in find_children("Light_*", "Node3D", true, false):
 		var l := SpotLight3D.new()
@@ -209,6 +216,7 @@ func set_external_view(on: bool) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_lights"):
 		set_lights(not lights_on)
+		lights_switched.emit(lights_on)
 	elif event.is_action_pressed("toggle_view"):
 		set_external_view(not external_view)
 

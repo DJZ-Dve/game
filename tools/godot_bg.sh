@@ -2,6 +2,7 @@
 # godot_window 参数...：运行一个要渲染画面的 Godot（截图、烘焙 GI），输出打到 stdout。
 # 默认在后台运行：注入 tools/nofocus.m 编出来的动态库，Godot 不激活自己、不抢焦点、不出现在 Dock，
 # 窗口完全透明且不接收鼠标，不会打断手上的工作；FOREGROUND=1 时照常在前台开窗口。
+# 一律用 Dummy 音频驱动：后台跑的 Godot 绝不往扬声器/耳机出声（要听声音用 tools/record.sh 录成文件再放）。
 # Godot 不在 /Applications 下时用环境变量 GODOT 指定可执行文件。
 godot=${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}
 
@@ -18,19 +19,19 @@ _nofocus_lib() {
 
 godot_window() {
   if [[ -n ${FOREGROUND:-} ]]; then
-    "$godot" "$@" 2>&1
+    "$godot" --audio-driver Dummy "$@" 2>&1
     return
   fi
   local lib
   if lib=$(_nofocus_lib); then
-    DYLD_INSERT_LIBRARIES=$lib "$godot" --position 20000,20000 "$@" 2>&1
+    DYLD_INSERT_LIBRARIES=$lib "$godot" --audio-driver Dummy --position 20000,20000 "$@" 2>&1
     return
   fi
   # 编不出注入库（比如没装 Xcode 命令行工具）：退回 open -g，窗口放屏幕外，但 Godot 启动时仍会抢一下焦点
   echo "godot_bg: 注入库编译失败，退回 open -g（可能会抢焦点）" >&2
   local app=${godot%/Contents/MacOS/*}
   local log=$(mktemp -t godot_bg)
-  open -g -n -W -a "$app" --stdout "$log" --stderr "$log" --args --position 20000,20000 "$@"
+  open -g -n -W -a "$app" --stdout "$log" --stderr "$log" --args --audio-driver Dummy --position 20000,20000 "$@"
   cat "$log"
   rm -f "$log"
 }
