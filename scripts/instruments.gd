@@ -34,6 +34,7 @@ func _ready() -> void:
 		var key := String(n.name).trim_prefix("Needle_")
 		if GAUGES.has(key):
 			_needles[key] = {"node": n, "basis": n.transform.basis, "sweep": GAUGES[key], "value": 0.0, "vel": 0.0}
+			Submarine.stop_casting(n)
 	for name in ["Depth", "Alt", "Clock", "Log"]:
 		_setup_display(name)
 	for i in 8:
@@ -47,6 +48,7 @@ func _ready() -> void:
 			_warn_state.append(0)
 	for n in sub.find_children("Float_*", "Node3D", true, false):
 		_floats[String(n.name)] = {"node": n, "base": n.position}
+		Submarine.stop_casting(n)
 	var screen := sub.find_child("Screen_Sonar", true, false) as MeshInstance3D
 	if screen:
 		var sonar := SonarDisplay.new()

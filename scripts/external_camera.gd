@@ -25,6 +25,7 @@ func _ready() -> void:
 	_fill.spot_attenuation = 1.0
 	_fill.spot_angle_attenuation = 1.6
 	_fill.shadow_enabled = true
+	_fill.shadow_caster_mask = Submarine.OUTSIDE_SHADOW_CASTERS
 	_fill.top_level = true
 	_target.add_child.call_deferred(_fill)
 	if DebugArgs.has("orbit"):

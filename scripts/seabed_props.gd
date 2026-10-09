@@ -35,6 +35,7 @@ func _populate() -> void:
 			_add_collision(inst, asset in TRIMESH)
 	if not Engine.is_editor_hint():
 		print("seabed props: ", count)
+		Submarine.add_layer(self, Submarine.SEABED_LAYER)
 
 
 func _load(asset: String) -> PackedScene:

@@ -211,6 +211,7 @@ func _add_lights(sub: Node) -> void:
 		l.shadow_normal_bias = 2.0
 		l.light_volumetric_fog_energy = c.get("fog", 0.0)
 		l.light_size = 0.03
+		l.shadow_caster_mask = Submarine.CABIN_SHADOW_CASTERS
 		if c.get("strip", false):
 			l.light_projector = _strip_projector()
 		if c.has("flicker"):
@@ -231,6 +232,7 @@ func _add_lights(sub: Node) -> void:
 		l.shadow_enabled = true
 		l.shadow_bias = 0.3
 		l.shadow_normal_bias = 2.0
+		l.shadow_caster_mask = Submarine.CABIN_SHADOW_CASTERS
 		l.position = Vector3(0, 0.05, 0)
 		l.light_volumetric_fog_energy = 0.0
 		lamp_anchor.add_child(l)
@@ -568,6 +570,7 @@ func _setup_charm(sub: Node) -> void:
 		var c := sub.find_child(n, true, false) as Node3D
 		if c:
 			c.reparent(_charm, true)
+	Submarine.stop_casting(_charm)
 
 
 func _physics_process(delta: float) -> void:
