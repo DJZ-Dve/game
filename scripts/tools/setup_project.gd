@@ -107,6 +107,19 @@ func _paint(name: String, paint: Color, o := {}) -> ShaderMaterial:
 		m.set_shader_parameter("cond_height", o.get("cond_h", 0.2))
 		m.set_shader_parameter("cond_patch_cover", o.get("cond_cover", 0.4))
 	m.set_shader_parameter("wear_metallic", o.get("wear_metal", 0.85))
+	# 厚漆钢件：分层掉漆（漆 → 红丹底漆 → 钢）、大面磕碰、漆层台阶、焊接变形的起伏
+	if o.has("primer"):
+		m.set_shader_parameter("primer_amount", o.primer)
+		m.set_shader_parameter("primer_color", o.get("primer_color", Color(0.32, 0.11, 0.065)))
+	if o.has("chip"):
+		m.set_shader_parameter("chip_tex", _acg("PaintedMetal005", "Opacity"))
+		m.set_shader_parameter("chip_amount", o.chip)
+		m.set_shader_parameter("chip_scale", o.get("chip_scale", 2.0))
+		m.set_shader_parameter("chip_cover", o.get("chip_cover", 0.5))
+	m.set_shader_parameter("bare_rust", o.get("bare_rust", 0.0))
+	m.set_shader_parameter("paint_depth", o.get("depth", 0.0))
+	m.set_shader_parameter("warp_amount", o.get("warp", 0.0))
+	m.set_shader_parameter("warp_scale", o.get("warp_scale", 2.5))
 	if o.has("dust_color"):
 		m.set_shader_parameter("dust_color", o.dust_color)
 	return m
@@ -281,17 +294,29 @@ func _interior_materials(mats: Array[Material]) -> void:
 	mats.append(_paint("M_PanelGray", Color(0.22, 0.23, 0.23), {"rough": 0.52, "edge": 0.8, "smudge": 0.7}))
 	mats.append(_paint("M_Steel", Color(0.55, 0.55, 0.55), {"rough": 0.36, "metal": 0.95, "rust": 0.15,
 		"edge": 0.0, "detail": "Metal016", "smudge": 0.5, "dust": 0.1}))
-	# ---- 水密门：门扇厚漆（棱边、把手周围磨出钢底，手油、锈水流痕），发黑的锻钢件（棱边磨亮），
-	# 手轮的红漆被手磨得斑驳，轴套根上挤出来的黄油
-	mats.append(_paint("M_DoorPaint", Color(0.2, 0.235, 0.22), {"rough": 0.45, "metal": 0.25, "edge": 1.6,
-		"rust": 0.22, "smudge": 0.9, "dust": 0.25, "streak": 0.55, "streak_cover": 0.5, "macro": 0.8,
-		"floor": 0.8, "nstrength": 0.38, "variation": 0.22, "wear": Color(0.58, 0.57, 0.54)}))
-	mats.append(_paint("M_Forged", Color(0.2, 0.2, 0.19), {"rough": 0.4, "metal": 0.9, "edge": 0.8,
-		"wear": Color(0.42, 0.41, 0.39), "wear_metal": 1.0, "rust": 0.16, "detail": "Metal016", "smudge": 0.6,
-		"dust": 0.1, "variation": 0.15, "nstrength": 0.22, "floor": 0.3}))
-	mats.append(_paint("M_WheelRed", Color(0.33, 0.028, 0.016), {"rough": 0.52, "metal": 0.05, "edge": 1.1,
-		"wear": Color(0.3, 0.3, 0.29), "rust": 0.12, "smudge": 1.0, "smudge_scale": 7.0, "dust": 0.08,
-		"macro": 0.6, "floor": 0.0, "nstrength": 0.3}))
+	# ---- 水密门：一层层刷上去的厚瓷漆（哑光、不带金属光泽），磕掉的地方先露红丹底漆再露钢；
+	# 门扇下半截被脚踢、上面被手推，大面上也有成片的磕痕划痕，门板焊过有点起伏。
+	# 锻钢件发黑、带氧化皮，只有把手尖、楔块顶面、铰链这些常磨的地方是亮的
+	mats.append(_paint("M_DoorPaint", Color(0.17, 0.2, 0.185), {"rough": 0.6, "metal": 0.0, "edge": 1.6,
+		"rust": 0.24, "smudge": 0.9, "dust": 0.25, "streak": 0.55, "streak_cover": 0.5, "macro": 0.9,
+		"floor": 0.8, "nstrength": 0.45, "variation": 0.25, "rough_var": 0.4, "wear": Color(0.5, 0.49, 0.47),
+		"primer": 0.6, "chip": 0.6, "chip_scale": 1.6, "chip_cover": 0.35, "bare_rust": 0.8, "depth": 0.0012,
+		"warp": 1.0, "warp_scale": 2.2}))
+	# 门框、补强板：和隔壁同一种舱漆，但门边常被磕碰、踩，掉漆更多
+	mats.append(_paint("M_DoorFrame", Color(0.34, 0.38, 0.34), {"rough": 0.58, "metal": 0.0, "rust": 0.24,
+		"edge": 1.4, "scale": 1.2, "smudge": 0.6, "dust": 0.35, "streak": 0.7, "variation": 0.25,
+		"macro": 0.6, "floor": 0.9, "nstrength": 0.35, "rough_var": 0.35, "streak_cover": 0.5,
+		"wear": Color(0.5, 0.49, 0.47), "primer": 0.6, "chip": 0.6, "chip_scale": 2.2, "chip_cover": 0.4,
+		"bare_rust": 0.8, "depth": 0.0012, "warp": 0.6, "warp_scale": 3.0}))
+	mats.append(_paint("M_Forged", Color(0.085, 0.082, 0.078), {"rough": 0.62, "metal": 0.7, "edge": 1.1,
+		"wear": Color(0.5, 0.49, 0.46), "wear_metal": 1.0, "rust": 0.2, "detail": "Metal016", "smudge": 0.7,
+		"dust": 0.12, "variation": 0.35, "rough_var": 0.5, "nstrength": 0.55, "floor": 0.3, "macro": 0.6,
+		"warp": 0.8, "warp_scale": 9.0}))
+	mats.append(_paint("M_WheelRed", Color(0.3, 0.03, 0.018), {"rough": 0.58, "metal": 0.0, "edge": 1.2,
+		"wear": Color(0.42, 0.41, 0.39), "rust": 0.12, "smudge": 1.0, "smudge_scale": 7.0, "dust": 0.08,
+		"macro": 0.6, "floor": 0.0, "nstrength": 0.35, "rough_var": 0.35, "chip": 0.55, "chip_scale": 4.0,
+		"chip_cover": 0.55, "bare_rust": 0.5, "depth": 0.0008, "primer": 0.3,
+		"primer_color": Color(0.12, 0.11, 0.1)}))
 	var grease := _std("M_Grease", Color(0.035, 0.028, 0.014), 0.12)
 	grease.metallic_specular = 0.6
 	mats.append(grease)

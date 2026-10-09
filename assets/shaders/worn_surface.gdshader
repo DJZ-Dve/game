@@ -61,6 +61,23 @@ uniform float cond_cavity = 1.0;
 // 棱边磨出来的底材是不是金属（漆木家具磨出来的是木头，不是金属）
 uniform float wear_metallic : hint_range(0.0, 1.0) = 0.85;
 
+// ---- 厚漆钢件（军船那种一层层刷上去的漆）。默认全关，不影响别的材质。
+// 掉漆分层：漆面磕掉先露出红丹底漆，再往里才是钢；primer_amount 是底漆那一圈有多宽
+uniform float primer_amount : hint_range(0.0, 1.0) = 0.0;
+uniform vec4 primer_color : source_color = vec4(0.32, 0.11, 0.065, 1.0);
+// 大平面上成片的磕碰掉漆、划痕（不只在棱边）；chip_cover 是大约多少面积有，越靠近地板越多（脚踢的）
+uniform sampler2D chip_tex : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform float chip_amount : hint_range(0.0, 1.0) = 0.0;
+uniform float chip_scale = 2.0;
+uniform float chip_cover : hint_range(0.0, 1.0) = 0.5;
+// 露出来的钢放久了发锈发暗（手常磨的棱边除外，那里是亮的）
+uniform float bare_rust : hint_range(0.0, 1.0) = 0.0;
+// 漆层厚度（米，夸大一些）：掉漆的边上有一道台阶，侧光下看得出来
+uniform float paint_depth = 0.0;
+// 大面的起伏（焊接变形、敲过的凹坑），反光跟着扭，不像冲压出来的平板
+uniform float warp_amount : hint_range(0.0, 2.0) = 0.0;
+uniform float warp_scale = 2.5;
+
 uniform vec4 emission_color : source_color = vec4(0.0, 0.0, 0.0, 1.0);
 uniform float emission_energy = 0.0;
 
@@ -186,10 +203,46 @@ void fragment() {
 
 	// 棱边磨出底下的金属
 	// 阈值偏高：只有真正的棱边（倒角面、曲率大的地方）才掉漆，大平面上不会出现成片的斑
-	float e = smoothstep(0.55, 0.9, edge * edge_wear + (noise - 0.5) * 0.5);
-	col = mix(col, wear_color.rgb, e * (1.0 - rust));
+	float er = edge * edge_wear + (noise - 0.5) * 0.5;
+	float e = smoothstep(0.55, 0.9, er);
+	float height = 1.0;  // 漆面 1，底漆 0.5，钢 0（给 paint_depth 算掉漆边上的台阶）
+	vec3 bare = wear_color.rgb;
+	float old = 0.0;
+	if (primer_amount > 0.0 || chip_amount > 0.0) {
+		float chip = 0.0;
+		if (chip_amount > 0.0) {
+			vec3 cp = obj_pos * chip_scale;
+			float c = texture(chip_tex, cp.zy).r * w.x + texture(chip_tex, cp.xz).r * w.y
+					+ texture(chip_tex, cp.xy).r * w.z;
+			float zn = value_noise(obj_pos * 2.3 + 5.1) * 0.7 + value_noise(obj_pos * 6.1 + 1.7) * 0.3;
+			float region = smoothstep(1.0 - chip_cover - 0.1, 1.0 - chip_cover + 0.15, zn);
+			float low = 1.0 - smoothstep(floor_height, floor_height + 0.45, obj_pos.y);
+			chip = smoothstep(0.08, 0.6, c) * chip_amount * clamp(region + low * 0.9, 0.0, 1.0);
+		}
+		// 棱边掉漆一段一段的：十几厘米一块的噪声把一圈棱边分成磕掉的、没磕掉的，掉漆的边缘形状跟着掉漆遮罩走。
+		// 只往下减（大平面是长三角形，棱边的顶点色会插值进面里，放大会让整面起皮）
+		float brk = value_noise(obj_pos * 7.0 + 2.9) * 0.65 + value_noise(obj_pos * 19.0 + 0.7) * 0.35;
+		vec3 ep = obj_pos * chip_scale * 2.0;
+		float etex = texture(chip_tex, ep.zy).r * w.x + texture(chip_tex, ep.xz).r * w.y + texture(chip_tex, ep.xy).r * w.z;
+		float edge_r = smoothstep(0.5, 0.9, er) * smoothstep(0.35, 0.65, brk + etex * 0.6);
+		float r = max(edge_r, chip);
+		float t0 = 0.45 - primer_amount * 0.3;
+		float aa = max(fwidth(r) * 1.5, 0.03);   // 掉漆边缘按像素宽度抗锯齿，远处不闪
+		float pm = smoothstep(t0 - aa, t0 + aa, r) * (1.0 - rust);
+		e = smoothstep(0.62 - aa, 0.62 + aa, r);
+		col = mix(col, primer_color.rgb * (0.8 + noise * 0.4), pm);
+		rough = mix(rough, 0.72, pm);
+		metal = mix(metal, 0.0, pm);
+		height = 1.0 - pm * 0.5 - e * 0.5;
+		// 磕出来的钢（不是手磨亮的棱边）发锈发暗
+		old = bare_rust * clamp(chip - edge_r * 0.6, 0.0, 1.0) * (0.6 + noise * 0.8);
+		old = clamp(old, 0.0, 1.0);
+		bare = mix(wear_color.rgb, g.rgb * 0.7, old);
+	}
+	col = mix(col, bare, e * (1.0 - rust));
 	metal = mix(metal, wear_metallic, e * (1.0 - rust));
-	rough = mix(rough, 0.35, e * (1.0 - rust));
+	rough = mix(rough, mix(0.35, 0.75, old), e * (1.0 - rust));
+	metal = mix(metal, 0.45, e * old * (1.0 - rust));
 
 	// 凹槽积垢
 	col *= 1.0 - cav * cavity_dirt * 0.35;
@@ -238,6 +291,19 @@ void fragment() {
 
 	vec3 nn = tri_normal(p, n, w);
 
+	if (warp_amount > 0.0) {
+		// 两层值噪声当高度场，取切向梯度把法线拧歪一点
+		vec3 wp = obj_pos * warp_scale;
+		const float H = 0.04;
+		float h0 = value_noise(wp) + value_noise(wp * 2.7 + 3.3) * 0.35;
+		vec3 gr = vec3(value_noise(wp + vec3(H, 0, 0)) + value_noise((wp + vec3(H, 0, 0)) * 2.7 + 3.3) * 0.35,
+				value_noise(wp + vec3(0, H, 0)) + value_noise((wp + vec3(0, H, 0)) * 2.7 + 3.3) * 0.35,
+				value_noise(wp + vec3(0, 0, H)) + value_noise((wp + vec3(0, 0, H)) * 2.7 + 3.3) * 0.35) - h0;
+		gr /= H;
+		gr -= n * dot(gr, n);
+		nn = normalize(nn - gr * warp_amount * 0.02);
+	}
+
 	if (condensation > 0.0) {
 		float hgt = smoothstep(cond_height - 0.6, cond_height + 0.7, obj_pos.y);
 		float up = smoothstep(0.25, 0.7, n.y);
@@ -285,5 +351,15 @@ void fragment() {
 	AO = mix(1.0, arm.r, 0.6) * (1.0 - cav * 0.4);
 	AO_LIGHT_AFFECT = 0.4;
 	NORMAL = normalize((VIEW_MATRIX * MODEL_MATRIX * vec4(nn, 0.0)).xyz);
+	if (paint_depth > 0.0) {
+		// 屏幕空间凹凸（Mikkelsen 2010）：漆层高度场的屏幕导数推出法线偏转
+		vec3 dpdx = dFdx(VERTEX);
+		vec3 dpdy = dFdy(VERTEX);
+		vec3 r1 = cross(dpdy, NORMAL);
+		vec3 r2 = cross(NORMAL, dpdx);
+		float det = dot(dpdx, r1);
+		vec3 grad = sign(det) * (dFdx(height) * r1 + dFdy(height) * r2) * paint_depth;
+		NORMAL = normalize(abs(det) * NORMAL - grad);
+	}
 	EMISSION = emission_color.rgb * emission_energy;
 }

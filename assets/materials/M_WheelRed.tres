@@ -1,31 +1,32 @@
 [gd_resource type="ShaderMaterial" format=3]
 
-[ext_resource type="Shader" path="res://assets/shaders/worn_surface.gdshader" id="1_0ra7g"]
-[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_Color.jpg" id="2_aty3w"]
-[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_Roughness.jpg" id="3_rwtdf"]
-[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_NormalGL.jpg" id="4_31p6k"]
-[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fingerprints001/Fingerprints001_2K-JPG_Opacity.jpg" id="5_xpjit"]
+[ext_resource type="Shader" path="res://assets/shaders/worn_surface.gdshader" id="1_aty3w"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_Opacity.jpg" id="2_rwtdf"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_Color.jpg" id="3_31p6k"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_Roughness.jpg" id="4_xpjit"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_NormalGL.jpg" id="5_fsdvl"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fingerprints001/Fingerprints001_2K-JPG_Opacity.jpg" id="6_pp172"]
 
 [resource]
 resource_name = "M_WheelRed"
 render_priority = 0
-shader = ExtResource("1_0ra7g")
-shader_parameter/paint_color = Color(0.33, 0.028, 0.016, 1)
-shader_parameter/paint_roughness = 0.52
-shader_parameter/paint_metallic = 0.05
+shader = ExtResource("1_aty3w")
+shader_parameter/paint_color = Color(0.3, 0.03, 0.018, 1)
+shader_parameter/paint_roughness = 0.58
+shader_parameter/paint_metallic = 0.0
 shader_parameter/paint_variation = 0.12
-shader_parameter/grime_albedo = ExtResource("2_aty3w")
-shader_parameter/grime_normal = ExtResource("4_31p6k")
-shader_parameter/grime_arm = ExtResource("3_rwtdf")
+shader_parameter/grime_albedo = ExtResource("3_31p6k")
+shader_parameter/grime_normal = ExtResource("5_fsdvl")
+shader_parameter/grime_arm = ExtResource("4_xpjit")
 shader_parameter/arm_packed = false
 shader_parameter/tex_scale = 3.0
-shader_parameter/normal_strength = 0.3
-shader_parameter/rough_variation = 0.25
+shader_parameter/normal_strength = 0.35
+shader_parameter/rough_variation = 0.35
 shader_parameter/rust_amount = 0.12
 shader_parameter/cavity_dirt = 1.0
-shader_parameter/edge_wear = 1.1
-shader_parameter/wear_color = Color(0.3, 0.3, 0.29, 1)
-shader_parameter/smudge_tex = ExtResource("5_xpjit")
+shader_parameter/edge_wear = 1.2
+shader_parameter/wear_color = Color(0.42, 0.41, 0.39, 1)
+shader_parameter/smudge_tex = ExtResource("6_pp172")
 shader_parameter/smudge_amount = 1.0
 shader_parameter/smudge_scale = 7.0
 shader_parameter/dust_amount = 0.08
@@ -47,5 +48,15 @@ shader_parameter/cond_patch_scale = null
 shader_parameter/cond_patch_cover = null
 shader_parameter/cond_cavity = null
 shader_parameter/wear_metallic = 0.85
+shader_parameter/primer_amount = 0.3
+shader_parameter/primer_color = Color(0.12, 0.11, 0.1, 1)
+shader_parameter/chip_tex = ExtResource("2_rwtdf")
+shader_parameter/chip_amount = 0.55
+shader_parameter/chip_scale = 4.0
+shader_parameter/chip_cover = 0.55
+shader_parameter/bare_rust = 0.5
+shader_parameter/paint_depth = 0.0008
+shader_parameter/warp_amount = 0.0
+shader_parameter/warp_scale = 2.5
 shader_parameter/emission_color = null
 shader_parameter/emission_energy = null

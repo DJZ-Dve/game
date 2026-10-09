@@ -1,0 +1,64 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/worn_surface.gdshader" id="1_bn8hu"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_Opacity.jpg" id="2_e0qdg"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_Color.jpg" id="3_hk72i"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_Roughness.jpg" id="4_dcryf"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_NormalGL.jpg" id="5_ohmrn"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fingerprints001/Fingerprints001_2K-JPG_Opacity.jpg" id="6_ntai1"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Leaking004/Leaking004_2K-JPG_Opacity.jpg" id="7_i7kti"]
+
+[resource]
+resource_name = "M_DoorFrame"
+render_priority = 0
+shader = ExtResource("1_bn8hu")
+shader_parameter/paint_color = Color(0.34, 0.38, 0.34, 1)
+shader_parameter/paint_roughness = 0.58
+shader_parameter/paint_metallic = 0.0
+shader_parameter/paint_variation = 0.25
+shader_parameter/grime_albedo = ExtResource("3_hk72i")
+shader_parameter/grime_normal = ExtResource("5_ohmrn")
+shader_parameter/grime_arm = ExtResource("4_dcryf")
+shader_parameter/arm_packed = false
+shader_parameter/tex_scale = 1.2
+shader_parameter/normal_strength = 0.35
+shader_parameter/rough_variation = 0.35
+shader_parameter/rust_amount = 0.24
+shader_parameter/cavity_dirt = 1.0
+shader_parameter/edge_wear = 1.4
+shader_parameter/wear_color = Color(0.5, 0.49, 0.47, 1)
+shader_parameter/smudge_tex = ExtResource("6_ntai1")
+shader_parameter/smudge_amount = 0.6
+shader_parameter/smudge_scale = 5.0
+shader_parameter/dust_amount = 0.35
+shader_parameter/dust_color = null
+shader_parameter/streak_tex = ExtResource("7_i7kti")
+shader_parameter/streak_amount = 0.7
+shader_parameter/streak_scale = 1.2
+shader_parameter/streak_color = null
+shader_parameter/streak_cover = 0.5
+shader_parameter/macro_amount = 0.6
+shader_parameter/macro_scale = null
+shader_parameter/floor_dirt = 0.9
+shader_parameter/floor_height = null
+shader_parameter/floor_fade = null
+shader_parameter/floor_color = null
+shader_parameter/condensation = null
+shader_parameter/droplet_scale = null
+shader_parameter/cond_height = null
+shader_parameter/cond_patch_scale = null
+shader_parameter/cond_patch_cover = null
+shader_parameter/cond_cavity = null
+shader_parameter/wear_metallic = 0.85
+shader_parameter/primer_amount = 0.6
+shader_parameter/primer_color = Color(0.32, 0.11, 0.065, 1)
+shader_parameter/chip_tex = ExtResource("2_e0qdg")
+shader_parameter/chip_amount = 0.6
+shader_parameter/chip_scale = 2.2
+shader_parameter/chip_cover = 0.4
+shader_parameter/bare_rust = 0.8
+shader_parameter/paint_depth = 0.0012
+shader_parameter/warp_amount = 0.6
+shader_parameter/warp_scale = 3.0
+shader_parameter/emission_color = null
+shader_parameter/emission_energy = null

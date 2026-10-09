@@ -39,7 +39,8 @@ HOOD_Z = (0.60, 0.71)           # 灯罩上下沿
 HATCH = (0.0, -3.35)            # 出入舱口中心 (x, y)，在生活舱顶上
 HATCH_R = 0.30
 HATCH_TOP = 1.55                # 舱盖底面高度（再往上就是艇外上层建筑的甲板）
-DOOR = (0.0, 0.05, 0.32, 0.68)  # 水密门：中心 x、中心 z、半宽、半高（门槛离地 27 厘米，过门要低头）
+DOOR = (0.0, 0.05, 0.30, 0.70)  # 水密门门洞：中心 x、中心 z、半宽、半高（60×140 厘米，门槛离地 25 厘米，过门要低头）
+DOOR_CORNER_R = 0.20           # 门洞是圆角矩形，四角的圆角半径
 DOOR_HINGE = (-0.43, Y_AFT + 0.13)  # 门轴 (x, y)：在左舷一侧、门扇正面外，门往控制舱里开
 VP_Y = 1.0                      # 舷窗所在的 y
 LADDER_Y = -3.57
@@ -161,8 +162,9 @@ def materials(M):
     add("O2", "M_O2Blue", (0.33, 0.58, 0.75), 0.1, 0.5)
     add("Rubber", "M_Rubber", (0.02, 0.02, 0.02), 0.0, 0.8)
     # 水密门
-    add("DoorPaint", "M_DoorPaint", (0.2, 0.23, 0.22), 0.3, 0.45)
-    add("Forged", "M_Forged", (0.17, 0.17, 0.16), 0.9, 0.45)
+    add("DoorPaint", "M_DoorPaint", (0.17, 0.2, 0.185), 0.0, 0.6)
+    add("DoorFrame", "M_DoorFrame", (0.34, 0.38, 0.34), 0.0, 0.58)
+    add("Forged", "M_Forged", (0.085, 0.082, 0.078), 0.7, 0.62)
     add("WheelRed", "M_WheelRed", (0.45, 0.04, 0.02), 0.1, 0.4)
     add("Grease", "M_Grease", (0.035, 0.028, 0.015), 0.0, 0.15)
     # 神龛
@@ -755,7 +757,8 @@ def hatch(K):
 # ============================================================================ 中间隔壁和水密门
 # 快速水密门：中间一个手轮，经过减速箱带动曲柄盘，六根连杆同时拨动门扇四周的六个压紧把手（门轴那一侧在两个
 # 铰链中间也有一个）。把手压在门框外圈焊的楔块上，把门扇连同密封胶条压到门框的刀口上。
-DOOR_DOGS = (90, 25, 0, -25, -90, 180)  # 压紧把手的位置（门洞椭圆的参数角，0° 朝右舷、90° 朝上）
+DOOR_DOGS = (90, 45, 0, -45, -90, 180)  # 压紧把手的位置（从门中心看的方向角，0° 朝右舷、90° 朝上；
+                                        # 右舷直边上三个，上下边、门轴那边两个铰链中间各一个）
 DOOR_SPINDLE_K = -0.02  # 把手转轴离门洞边（负数 = 在门洞里面一点，背面的螺母从门洞里看得见）
 DOOR_CRANK_B = 0.06     # 曲柄盘上连杆销的半径
 DOOR_ARM_A = 0.055      # 把手曲臂长
@@ -768,16 +771,73 @@ DOOR_IND = (-140.0, -90.0)  # 开关指示器：指针关门、开门时的方�
 FONT_STENCIL = FONT_SERIF.replace("NotoSerifSC-VF.ttf", "StardosStencil-Bold.ttf")
 
 
+def door_halfwidth(z):
+    """门洞在离门中心 z 高处的半宽（直边部分就是 DOOR 的半宽，到四个圆角处收窄）。"""
+    da, db, rc = DOOR[2], DOOR[3], DOOR_CORNER_R
+    e = abs(z) - (db - rc)
+    return da if e <= 0 else da - rc + math.sqrt(max(rc * rc - e * e, 0.0))
+
+
+def rrect_base(s, a, b, rc):
+    """半宽 a、半高 b、圆角半径 rc 的圆角矩形轮廓上弧长 s 处的点（相对中心的 x、z）和外法线 (nx, nz)；
+    从右边中点起，逆时针（先往上）。"""
+    hx, hz = a - rc, b - rc
+    arc = math.pi * rc / 2
+    segs = [(2 * hz, (a, -hz), (0, 1), (1, 0), None), (arc, (hx, hz), None, None, 0),
+            (2 * hx, (hx, b), (-1, 0), (0, 1), None), (arc, (-hx, hz), None, None, 90),
+            (2 * hz, (-a, hz), (0, -1), (-1, 0), None), (arc, (-hx, -hz), None, None, 180),
+            (2 * hx, (-hx, -b), (1, 0), (0, -1), None), (arc, (hx, -hz), None, None, 270)]
+    s = (s + hz) % sum(g[0] for g in segs)
+    for L, o, d, n, a0 in segs:
+        if s <= L:
+            if a0 is None:
+                return o[0] + d[0] * s, o[1] + d[1] * s, n[0], n[1]
+            t = math.radians(a0) + s / rc
+            return o[0] + rc * math.cos(t), o[1] + rc * math.sin(t), math.cos(t), math.sin(t)
+        s -= L
+    return a, 0.0, 1.0, 0.0
+
+
+def rrect_perimeter(a, b, rc):
+    return 4 * (a - rc) + 4 * (b - rc) + 2 * math.pi * rc
+
+
+def rrect_loop(cx, cz, a, b, rc, k, y, n=128):
+    """圆角矩形轮廓沿法线往外偏 k 的一圈（按弧长均分，n 个点），在 y 处的门平面（xz）里。"""
+    L = rrect_perimeter(a, b, rc)
+    out = []
+    for i in range(n):
+        x, z, nx, nz = rrect_base(L * i / n, a, b, rc)
+        out.append(V((cx + x + nx * k, y, cz + z + nz * k)))
+    return out
+
+
 def door_ring(t_deg, k):
-    """门洞椭圆沿法线往外偏 k 的那一圈上、参数角 t 处的点（世界 x、z，y=0）和外法线。"""
+    """从门中心朝 t 方向（0° 朝右舷、90° 朝上）的射线打到门洞轮廓上的那一点，再沿法线往外偏 k
+    （世界 x、z，y=0），和外法线。"""
     dx, dz, da, db = DOOR
+    rc = DOOR_CORNER_R
     t = math.radians(t_deg)
-    n = V((db * math.cos(t), 0, da * math.sin(t))).normalized()
-    return V((dx + da * math.cos(t), 0, dz + db * math.sin(t))) + n * k, n
+    c, s = math.cos(t), math.sin(t)
+    # 先算打到外接矩形上的点；落在四角的圆角区里就改成和圆角求交
+    r = min(da / abs(c) if abs(c) > 1e-9 else 1e9, db / abs(s) if abs(s) > 1e-9 else 1e9)
+    x, z = c * r, s * r
+    hx, hz = da - rc, db - rc
+    if abs(x) > hx and abs(z) > hz:
+        ox, oz = math.copysign(hx, x), math.copysign(hz, z)
+        b = c * ox + s * oz
+        r = b + math.sqrt(b * b - (ox * ox + oz * oz - rc * rc))
+        x, z = c * r, s * r
+        n = V(((x - ox) / rc, 0, (z - oz) / rc))
+    else:
+        n = V((1 if x > 0 else -1, 0, 0)) if abs(x) >= da - 1e-6 else V((0, 0, 1 if z > 0 else -1))
+    return V((dx + x, 0, dz + z)) + n * k, n
 
 
-def door_loop(k, y, n=96):
-    return [door_ring(360 * i / n, k)[0] + V((0, y, 0)) for i in range(n)]
+def door_loop(k, y, n=128):
+    """门洞轮廓沿法线往外偏 k 的一圈（按弧长均分，n 个点），在隔壁 y 处。"""
+    dx, dz, da, db = DOOR
+    return rrect_loop(dx, dz, da, db, DOOR_CORNER_R, k, y, n)
 
 
 def door_dog_layout():
@@ -806,8 +866,10 @@ def weld(bm, k0, y0, w, su=1, sv=1, h=None, n=576, ripple=0.019):
     path = door_loop(k0, y0, n)
     scales = None
     if ripple:
-        L = sum((path[i] - path[i - 1]).length for i in range(n))
-        scales = [0.9 + 0.16 * ((i * L / n / ripple) % 1.0) ** 0.6 for i in range(n)]
+        acc, scales = 0.0, []
+        for i in range(n):   # 按累计弧长排纹（圆角处外圈的点距比直边上大）
+            acc += (path[i] - path[i - 1]).length if i else 0.0
+            scales.append(0.9 + 0.16 * ((acc / ripple) % 1.0) ** 0.6)
     sweep(bm, path, prof, closed=True, up_hint=V((0, 1, 0)), scales=scales)
 
 
@@ -830,8 +892,11 @@ def bulkhead(K, anchors):
     t_plate = 0.012
     ya = y - t_plate
 
-    def inside_door(x, z, k=1.0):
-        return ((x - dx) / (da * k)) ** 2 + ((z - dz) / (db * k)) ** 2 < 1.0
+    def inside_door(x, z, k=0.0):
+        """在门洞往外扩 k 的那一圈里面。"""
+        qx = abs(x - dx) - (da - DOOR_CORNER_R)
+        qz = abs(z - dz) - (db - DOOR_CORNER_R)
+        return math.hypot(max(qx, 0.0), max(qz, 0.0)) + min(max(qx, qz), 0.0) - DOOR_CORNER_R < k
 
     def plate(bm, yy, back=False):
         """隔壁板（单面），门洞和外圈的锯齿由门框、角焊盖住（门洞挖得比门框内沿大一圈，锯齿才藏得住）。"""
@@ -849,7 +914,7 @@ def bulkhead(K, anchors):
             for j in range(nz):
                 cx = -R_IN - step + (i + 0.5) * step
                 cz = DECK - 0.03 + (j + 0.5) * step
-                if math.hypot(cx, cz) > R_IN + 0.02 or inside_door(cx, cz, 1.08):
+                if math.hypot(cx, cz) > R_IN + 0.02 or inside_door(cx, cz, 0.04):
                     continue
                 bm.faces.new([vtx(i, j), vtx(i, j + 1), vtx(i + 1, j + 1), vtx(i + 1, j)])
         if back:
@@ -872,6 +937,7 @@ def bulkhead(K, anchors):
     # ---- 门框：一圈厚扁钢穿过隔壁（控制舱一面凸出 5 厘米，生活舱一面 6 厘米），里沿倒圆；
     # 控制舱一面有一道刀口，关门时门扇背面的胶条压在上面
     up = V((0, 1, 0))
+    bm = K["DoorFrame"]   # 门框、补强板、两道角焊单独一种漆（门边磕碰多，见 setup_project.gd 的 M_DoorFrame）
     prof = [(0.008, -0.07), (DOOR_FRAME_K, -0.07), (DOOR_FRAME_K, 0.05), (0.042, 0.05), (0.042, 0.06),
             (0.039, 0.064), (0.033, 0.064), (0.03, 0.06), (0.03, 0.05), (0.008, 0.05), (0.0, 0.042),
             (0.0, -0.062)]
@@ -927,7 +993,7 @@ def bulkhead(K, anchors):
     anchors.append(empty("Door_Hinge", K.coll, anchor_frame(V((hx, hy, dz)), up)))
     # 门两边的扶手（低头钻门时抓的），两面都有
     for yy, sg in ((y, 1), (ya, -1)):
-        for x in (-0.52, 0.52):
+        for x in (-0.58, 0.58):
             P = frame(V((x, yy, 0.18)), V((0, sg, 0)))
             handle(K, P, 0, 0, 0.36, axis='Y', key="Steel", standoff=0.055)
             for zz in (-0.18, 0.18):
@@ -1010,7 +1076,7 @@ def door_leaf(K, anchors):
           up_hint=up)
     # 背面：两道 T 型横筋（两头削斜），中间的竖筋分成几段焊在横筋之间；都在门洞里面，开关门时不碰门框
     for zz in (-0.3, 0.3):
-        L = da * math.sqrt(1 - (zz / db) ** 2) - 0.05
+        L = door_halfwidth(zz) - 0.05
         extrude_profile(P, [(-L, yb + 0.0005), (L, yb + 0.0005), (L - 0.03, yb - 0.048),
                             (-L + 0.03, yb - 0.048)], T(0, 0, dz + zz - 0.006), 0.012)
         rbox(P, 2 * L - 0.07, 0.008, 0.045, T(dx, yb - 0.052, dz + zz), r=0.002, seg=1)
@@ -1073,10 +1139,10 @@ def door_leaf(K, anchors):
         cylinder(D["Brass"], 0.006, 0.008, 6, T(hx, hy + 0.036, zz) @ R(-90, 'X'))
         uvsphere(D["Brass"], 0.0038, 8, 6, T(hx, hy + 0.047, zz))
         arm_y0 = hy + 0.007 - 0.015
-        rbox(D["Forged"], -0.225 - hx - 0.02, 0.03, 0.074, T((hx + 0.02 - 0.225) / 2, hy + 0.007, zz), r=0.005,
+        rbox(D["Forged"], -0.24 - hx - 0.02, 0.03, 0.074, T((hx + 0.02 - 0.24) / 2, hy + 0.007, zz), r=0.005,
              seg=2)
-        rbox(D["Forged"], 0.12, arm_y0 - yf + 0.002, 0.09, T(-0.27, (arm_y0 + yf) / 2, zz), r=0.004, seg=2)
-        for bx in (-0.305, -0.24):
+        rbox(D["Forged"], 0.11, arm_y0 - yf + 0.002, 0.09, T(-0.285, (arm_y0 + yf) / 2, zz), r=0.004, seg=2)
+        for bx in (-0.315, -0.255):
             for bz in (-0.024, 0.024):
                 cylinder(D["Forged"], 0.0085, 0.007, 6, T(bx, hy + 0.022, zz + bz) @ R(-90, 'X'))
     # 压紧把手的轴套（门扇的一部分，根上一圈法兰和挤出来的黄油，朝门中间一个黄油嘴）；
@@ -2437,13 +2503,13 @@ def decals(anchors, coll):
     d("Hazard", (DOOR[0], Y_AFT + 0.07, DECK), UP, Z, 0.66, 0.09, 0.03)
     d("Hazard", (DOOR[0], Y_AFT - 0.08, DECK), UP, Z, 0.66, 0.09, 0.03)
     # ---- 中间隔壁：舱段号、严禁烟火、门框楔块底下的锈水、接线盒底下的锈水、门边扶手旁一个手印
-    d("TextC03", (0.6, Y_AFT, 0.62), Z, UP, 0.26, 0.104, 0.05)
-    d("TextFire", (0.65, Y_AFT, 0.12), Z, UP, 0.075, 0.3, 0.05)
-    for deg in (25, -25, 90):
+    d("TextC03", (0.66, Y_AFT, 0.62), Z, UP, 0.26, 0.104, 0.05)
+    d("TextFire", (0.7, Y_AFT, 0.12), Z, UP, 0.075, 0.3, 0.05)
+    for deg in (45, -45, 90):
         q, _ = door_ring(deg, DOOR_FRAME_K + 0.02)
         d("Rust", (q.x, Y_AFT + 0.03, q.z - 0.17), Z, UP, 0.06, 0.28, 0.1)
     d("Rust", (-0.92, Y_AFT + 0.02, 0.1), Z, UP, 0.12, 0.32, 0.06)
-    d("Hand", (-0.62, Y_AFT + 0.01, 0.3), Z, V((-0.2, 0, 0.98)), 0.12, 0.22, 0.04)
+    d("Hand", (-0.68, Y_AFT + 0.01, 0.3), Z, V((-0.2, 0, 0.98)), 0.12, 0.22, 0.04)
     # ---- 壳体：穿舱件下面的锈水
     for s, y in PENETRATORS:
         a = math.radians(PEN_ANG + 9)

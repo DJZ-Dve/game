@@ -40,7 +40,7 @@ const SIT_RANGE := 0.8
 const LEAN_RANGE := 0.95
 const DOOR_POS := Vector2(0.0, 2.6)  # 水密门（x, z），和 cockpit.py 的 DOOR、Y_AFT 对应
 const DOOR_RANGE := 1.1
-## 过门时要低头（门洞上沿离地 1.63 米）
+## 过门时要低头（门洞上沿离地 1.65 米）
 const DOOR_DUCK := 0.26
 ## 开关门时站的地方：控制舱这边拧手轮站在门正前方；门扇往控制舱这边开、扫过门前，所以开门拉门时往右后方让开，
 ## 关门时也先站在右后方伸手去够；生活舱那边门往外推开、往里拉上，一直站在门前

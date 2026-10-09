@@ -724,17 +724,14 @@ def stern_bulkhead(K, anchors):
     ring_sweep(bm, [(R_IN + 0.01, 0.0), (R_IN - 0.035, 0.0), (R_IN + 0.01, 0.045)][::-1], y, -140, 140, 180)
     # 加强筋在机舱那一面；这一面只有管子的套管和电缆穿舱框（在 overhead 里做）
 
-    # 检修门：椭圆围板 + 螺栓压住的盖板（不是门，是拿 20 颗螺栓封死的）
-    hz, ha, hb = 0.0, 0.27, 0.42
-    path = [V((math.cos(t) * (ha + 0.04), y + 0.03, hz + math.sin(t) * (hb + 0.04)))
-            for t in [2 * math.pi * k / 72 for k in range(72)]]
-
-    sweep(K["HullInner"], path, rect_profile(0.08, 0.06, 0.01), closed=True, up_hint=V((0, 1, 0)))
-    Mc = T(0, y + 0.06, hz) @ R(-90, 'X')
-    cylinder(K["EquipGray"], 1.0, 0.025, 64, Mc @ S(ha + 0.06, hb + 0.06, 1))
-    for k in range(20):
-        t = 2 * math.pi * k / 20
-        Mb = T(math.cos(t) * (ha + 0.03), y + 0.085, hz + math.sin(t) * (hb + 0.03)) @ R(-90, 'X')
+    # 检修门：圆角矩形围板 + 螺栓压住的盖板（不是门，是拿 20 颗螺栓封死的）
+    hz, ha, hb, hr = 0.0, 0.26, 0.40, 0.10   # 开口中心高度、半宽、半高、圆角半径
+    sweep(K["HullInner"], C.rrect_loop(0, hz, ha, hb, hr, 0.04, y + 0.03, 96), rect_profile(0.08, 0.06, 0.01),
+          closed=True, up_hint=V((0, 1, 0)))
+    # 厚钢盖板，和水密门同一种漆
+    C.plate_xz(K["DoorPaint"], [(p.x, p.z) for p in C.rrect_loop(0, hz, ha, hb, hr, 0.06, 0.0, 96)], y + 0.06, 0.025)
+    for q in C.rrect_loop(0, hz, ha, hb, hr, 0.03, y + 0.085, 20):
+        Mb = T(*q) @ R(-90, 'X')
         cylinder(K["Steel"], 0.014, 0.012, 6, Mb)
         cylinder(K["Steel"], 0.007, 0.022, 8, Mb)
     for zz in (-0.2, 0.2):

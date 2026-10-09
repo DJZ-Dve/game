@@ -430,6 +430,30 @@ def bake_for_export(objs, curvature=True):
                     lb = np.repeat(fb, ls)
                     c[lb == 1, 0] = 0.0
                     c[lb == 2, 0] = 1.0
+                else:
+                    lb = None
+                # 又大又宽的面（整块门板、补强板这种拉伸/扫掠出来的大多边形）里面一个顶点都没有，
+                # 外圈顶点的棱边值会插值铺满整个面，整面都成了磨亮的钢；这种面不算棱边磨损，
+                # 棱边掉漆交给旁边窄的侧面、倒角面。按内切半径（面积 / 半周长）判断，细长的面不受影响
+                na = len(me.polygons)
+                area = np.empty(na, dtype=np.float32)
+                me.polygons.foreach_get("area", area)
+                ls = np.empty(na, dtype=np.int32)
+                me.polygons.foreach_get("loop_total", ls)
+                co = np.empty(len(me.vertices) * 3, dtype=np.float32)
+                me.vertices.foreach_get("co", co)
+                pv = co.reshape(-1, 3)[lv]
+                ls0 = np.empty(na, dtype=np.int32)
+                me.polygons.foreach_get("loop_start", ls0)
+                nxt = np.arange(len(lv)) + 1
+                ends = ls0 + ls
+                nxt[ends - 1] = ls0
+                seg = np.linalg.norm(pv[nxt] - pv, axis=1)
+                perim = np.add.reduceat(seg, ls0) if na else seg[:0]
+                wide = np.repeat(area / np.maximum(perim * 0.5, 1e-9) > 0.015, ls)
+                if lb is not None:
+                    wide &= lb == 0
+                c[wide, 0] = 0.0
                 attr.data.foreach_set("color", c.flatten())
                 me.color_attributes.active_color = attr
                 me.color_attributes.render_color_index = me.color_attributes.active_color_index
