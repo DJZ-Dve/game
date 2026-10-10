@@ -1,4 +1,4 @@
-[gd_resource type="AudioBusLayout" load_steps=7 format=3]
+[gd_resource type="AudioBusLayout" load_steps=9 format=3]
 
 [sub_resource type="AudioEffectHardLimiter" id="limiter"]
 resource_name = "HardLimiter"
@@ -33,6 +33,22 @@ resonance = 0.5
 [sub_resource type="AudioEffectLowPassFilter" id="sea_muffle"]
 resource_name = "LowPassFilter"
 cutoff_hz = 380.0
+resonance = 0.5
+
+[sub_resource type="AudioEffectReverb" id="room_reverb"]
+resource_name = "Reverb"
+predelay_msec = 12.0
+predelay_feedback = 0.15
+room_size = 0.35
+damping = 0.55
+spread = 0.9
+hipass = 0.1
+dry = 1.0
+wet = 0.12
+
+[sub_resource type="AudioEffectLowPassFilter" id="outdoor_muffle"]
+resource_name = "LowPassFilter"
+cutoff_hz = 5000.0
 resonance = 0.5
 
 [resource]
@@ -73,3 +89,19 @@ bus/4/volume_db = 0.0
 bus/4/send = &"Master"
 bus/4/effect/0/effect = SubResource("sea_muffle")
 bus/4/effect/0/enabled = true
+bus/5/name = &"Room"
+bus/5/solo = false
+bus/5/mute = false
+bus/5/bypass_fx = false
+bus/5/volume_db = 0.0
+bus/5/send = &"Master"
+bus/5/effect/0/effect = SubResource("room_reverb")
+bus/5/effect/0/enabled = true
+bus/6/name = &"Outdoor"
+bus/6/solo = false
+bus/6/mute = false
+bus/6/bypass_fx = false
+bus/6/volume_db = 0.0
+bus/6/send = &"Master"
+bus/6/effect/0/effect = SubResource("outdoor_muffle")
+bus/6/effect/0/enabled = true

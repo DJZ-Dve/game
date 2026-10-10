@@ -4,6 +4,7 @@
 # 不经过声卡，绝不会从扬声器或耳机出声；窗口在后台（见 godot_bg.sh）。
 # 用法: tools/record.sh 输出名 秒数 [游戏参数...]
 #   例: tools/record.sh .tmp/door 8 --at=0,2.0 --yaw=180 --actions=30:interact,330:interact
+# 不给 --scene 就是潜艇（scenes/deep_sea.tscn）；岸上的场景用 --scene=dorm / --scene=office
 # 环境变量 CRF 调 mp4 的画质（默认 26，数字越小越清楚、文件越大；给别人看的用 18~20）
 # 产出: 输出名.mp4（给人看着听）、输出名.wav（给 tools/audio_report.py 分析）、输出名.log（游戏输出，含 SFX 事件）
 set -eu
@@ -18,8 +19,10 @@ root=${0:A:h:h}
 source "$root/tools/godot_bg.sh"
 mkdir -p ${out:h}
 tmp=$(mktemp -d)
+scene=(--scene=deep_sea)
+[[ " $* " == *" --scene="* ]] && scene=()
 godot_window --path "$root" --resolution 960x540 --write-movie "$tmp/movie.avi" --fixed-fps 60 \
-  --quit-after $((secs * 60)) -- --sfx-log "$@" > "$out.log" || true
+  --quit-after $((secs * 60)) -- --sfx-log $scene "$@" > "$out.log" || true
 grep -E "ERROR|SCRIPT ERROR|at: " "$out.log" | head -20 || true
 if [[ ! -s $tmp/movie.avi ]]; then
   echo "没录出来，见 $out.log" >&2

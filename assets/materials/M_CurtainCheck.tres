@@ -1,0 +1,34 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/fabric.gdshader" id="1_ncgw3"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric001/Fabric001_2K-JPG_Color.jpg" id="2_20f5b"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric001/Fabric001_2K-JPG_NormalGL.jpg" id="3_by65c"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric001/Fabric001_2K-JPG_Roughness.jpg" id="4_i7nmf"]
+
+[resource]
+resource_name = "M_CurtainCheck"
+render_priority = 0
+shader = ExtResource("1_ncgw3")
+shader_parameter/tint = Color(0.74, 0.74, 0.7, 1)
+shader_parameter/albedo_tex = ExtResource("2_20f5b")
+shader_parameter/normal_tex = ExtResource("3_by65c")
+shader_parameter/rough_tex = ExtResource("4_i7nmf")
+shader_parameter/tex_scale = 1.6
+shader_parameter/albedo_mix = null
+shader_parameter/tex_mean = 0.55
+shader_parameter/tex_contrast = 2.0
+shader_parameter/normal_strength = 0.6
+shader_parameter/roughness = null
+shader_parameter/sheen = 0.25
+shader_parameter/sheen_tint = null
+shader_parameter/cavity_dirt = null
+shader_parameter/variation = null
+shader_parameter/stain_amount = 0.3
+shader_parameter/stain_scale = null
+shader_parameter/stain_color = null
+shader_parameter/binding_width = null
+shader_parameter/binding_color = null
+shader_parameter/thread_color = null
+shader_parameter/backlight = Color(0.3, 0.3, 0.3, 1)
+shader_parameter/check_size = 0.022
+shader_parameter/check_color = Color(0.32, 0.45, 0.68, 1)

@@ -1,0 +1,13 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/harbor_water.gdshader" id="1_l318o"]
+
+[resource]
+resource_name = "M_HarborWater"
+render_priority = 0
+shader = ExtResource("1_l318o")
+shader_parameter/deep = null
+shader_parameter/shallow = null
+shader_parameter/wave_scale = null
+shader_parameter/wave_speed = null
+shader_parameter/rain = null

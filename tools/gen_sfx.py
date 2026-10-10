@@ -698,6 +698,321 @@ def hull_impact(rng):
     return fade(y, 0.0, 0.8)
 
 
+# ---------------------------------------------------------------------------- 岸上的房间（宿舍、办事处）
+def reverb_ir(rng, rt60, lo=150, hi=6000, pre=0.008):
+    """简单的房间混响冲激响应：指数衰减的有色噪声（高频衰减得快一点）。"""
+    n = int(rt60 * SR)
+    t = taxis(n)
+    x = filt(rng.standard_normal(n), lambda f: bp(f, lo, hi, 1)) * np.exp(-6.9 * t / rt60)
+    x[: int(pre * SR)] = 0.0
+    return x / (np.abs(x).sum() + 1e-9) * 40
+
+
+def rain_window(rng, steel=False):
+    """窗外的雨（循环）：外面一片哗哗的雨声（有一阵一阵的风），雨点一颗颗打在玻璃上「嗒」（玻璃的高频小模态，很短），
+    打在铁防盗窗 / 钢窗框上「叮」（细铁条的模态，余音长一点），窗台上积水往下滴，排水管里哗哗流。
+    steel：办事处的大钢窗——玻璃多、雨更密，没有防盗窗。"""
+    n = 20 * SR
+    gust = np.clip(1 + 0.35 * wobble(n, 0.04, 0.25, rng), 0.4, 1.8)
+    hiss = lambda: noise(n, lambda f: bp(f, 250, 9000, 1) * tilt(f, -2.5, 1500), rng) * gust
+    far_c, far_l, far_r = hiss(), hiss(), hiss()
+    # 打在玻璃上：每秒几十颗，每颗一下极短的冲击
+    rate = 70 if steel else 45
+    k = int(rate * n / SR)
+    glass = np.zeros(n)
+    fg = logu(rng, 1800, 7500, 8)
+    tick = modes(0.03, fg, rng.uniform(0.002, 0.008, 8), rng.uniform(0.4, 1, 8))
+    for at in rng.integers(0, n, k):
+        place(glass, tick * rng.uniform(0.15, 1.0) ** 2 * gust[at], int(at), circular=True)
+    # 打在铁条 / 钢框上
+    metal = np.zeros(n)
+    fm = logu(rng, 1300, 4800, 6)
+    tink = modes(0.25, fm, rng.uniform(0.03, 0.09, 6), rng.uniform(0.4, 1, 6))
+    for at in rng.integers(0, n, int((6 if steel else 9) * n / SR)):
+        place(metal, tink * rng.uniform(0.2, 1.0) ** 2, int(at), circular=True)
+    # 窗台积水滴下去（几秒一滴，落在下面的铁皮托板上）
+    drips = np.zeros(n)
+    fd = logu(rng, 600, 2600, 6)
+    plink = modes(0.35, fd, rng.uniform(0.04, 0.12, 6), rng.uniform(0.4, 1, 6))
+    for at in np.arange(rng.uniform(0, 1.5), n / SR, rng.uniform(1.1, 1.9)):
+        place(drips, plink * rng.uniform(0.5, 1.0), int(at * SR), circular=True)
+    # 排水管：一股水流的咕嘟声
+    gutter = noise(n, lambda f: bp(f, 180, 1400, 2), rng) * np.clip(1 + 0.6 * wobble(n, 1.5, 6, rng), 0.1, 2.5)
+    c = unit(far_c) + unit(glass) * db(-6) + unit(metal) * db(-16 if steel else -11) + unit(drips) * db(-15)
+    return stereo(c, unit(far_l) * db(-3) + unit(gutter) * db(-14), unit(far_r) * db(-3), 0.6)
+
+
+def fan_whir(rng):
+    """三叶吊扇（低速档，一秒转一圈多）：电机 100 Hz 的嗡声，叶片切过空气一下一下的「呼——」（每秒三四下），
+    一片叶子有点松，每转一圈在叶柄上磕一下「嗒」。"""
+    n = 6 * SR
+    t = taxis(n)
+    rev = loopf(1.1, n)
+    hum = sum(k ** -1.3 * np.sin(2 * np.pi * 100 * k * t + rng.uniform(0, 6.3)) for k in range(1, 6))
+    swish = noise(n, lambda f: bp(f, 150, 2500, 1) * tilt(f, -3, 300), rng)
+    swish *= 0.45 + 0.55 * (0.5 + 0.5 * np.cos(2 * np.pi * 3 * rev * t)) ** 2
+    ticks = np.zeros(n)
+    f = logu(rng, 900, 4000, 5)
+    click = modes(0.06, f, rng.uniform(0.005, 0.02, 5), np.ones(5))
+    for k in range(int(rev * n / SR)):
+        place(ticks, click * rng.uniform(0.6, 1.0), int((k / rev + 0.03) * SR), circular=True)
+    return unit(hum) * db(-14) + unit(swish) + unit(ticks) * db(-20)
+
+
+def radio_static(rng):
+    """中波收音机没对准台：带通的沙沙声，一下一下的噼啪（远处在打雷），一个慢慢漂着的口哨音（差拍）。"""
+    n = 8 * SR
+    t = taxis(n)
+    hiss = noise(n, lambda f: bp(f, 250, 4500, 2), rng) * np.clip(1 + 0.3 * wobble(n, 0.5, 4, rng), 0.3, 2)
+    crack = np.zeros(n)
+    for at in rng.integers(0, n, 40):
+        place(crack, burst(rng.uniform(2, 12), lambda f: bp(f, 300, 4000, 1), rng) * rng.uniform(0.3, 1.0), int(at),
+              circular=True)
+    whistle_f = 1200 + 300 * wobble(n, 0.05, 0.2, rng)
+    whistle = np.sin(2 * np.pi * np.cumsum(whistle_f) / SR)
+    whistle *= np.clip(0.5 + 0.5 * wobble(n, 0.1, 0.4, rng), 0, 1)
+    return unit(hiss) + unit(crack) * db(-6) + whistle * db(-22)
+
+
+def pager_beep(rng):
+    """汉显 BP 机来传呼：小喇叭「哔哔哔」三声（两千多赫兹的方波，喇叭小、低频全没了），
+    同时机子在木桌上震——震动马达的嗡嗡传到桌板上，桌子跟着共鸣。"""
+    n = int(1.3 * SR)
+    t = taxis(n)
+    y = np.zeros(n)
+    f0 = 2730.0
+    sq = np.sign(np.sin(2 * np.pi * f0 * t)) * 0.7 + 0.3 * np.sin(2 * np.pi * f0 * t)
+    sq = filt(sq, lambda f: bp(f, 1500, 9000, 2))
+    for k in range(3):
+        a, b = int((0.0 + 0.2 * k) * SR), int((0.12 + 0.2 * k) * SR)
+        seg = sq[a:b] * np.hanning(b - a) ** 0.2
+        place(y, seg, a)
+    buzz = np.sign(np.sin(2 * np.pi * 155 * t)) * np.clip(np.sin(np.pi * t / 1.2), 0, 1) ** 0.3
+    f = logu(rng, 120, 900, 10)
+    desk = fftconv(buzz * 0.02, modes(0.4, f, rng.uniform(0.02, 0.06, 10), np.ones(10)))[:n]
+    return unit(y) + unit(desk) * db(-8)
+
+
+def knock(rng):
+    """有人用指节敲木门「咚、咚、咚」：门板（四块门芯板的三合板）的低频模态 + 指节磕上去的一点脆响，三下间隔差不多、越来越轻。"""
+    n = int(1.6 * SR)
+    y = np.zeros(n)
+    f = plate_modes(rng, rng.uniform(95, 120), 16)
+    door = modes(0.4, f, rng.uniform(0.03, 0.09, 16) * (f[0] / f) ** 0.3, rng.uniform(0.4, 1, 16) * (f / f[0]) ** -0.4)
+    fk = logu(rng, 1200, 3500, 5)
+    knuckle = modes(0.05, fk, rng.uniform(0.004, 0.012, 5), np.ones(5))
+    at = 0.0
+    for k in range(3):
+        hit = mix(unit(fftconv(pulse(rng.uniform(1.0, 1.6)), door)), unit(fftconv(pulse(0.3), knuckle)) * db(-12))
+        place(y, unit(hit) * db(-2.5 * k), int(at * SR))
+        at += rng.uniform(0.36, 0.44)
+    return y
+
+
+def concrete_step(rng, level_db=0.0, gait="walk"):
+    """皮鞋踩水泥地（宿舍、走廊）：实心地面没有共鸣，就是一下闷的「嗒」，鞋跟磕一下、鞋底压着细砂蹭一下。"""
+    n = int(0.3 * SR)
+    y = np.zeros(n)
+    f = logu(rng, 150, 2200, 10)
+    body = modes(0.15, f, rng.uniform(0.004, 0.02, 10), rng.uniform(0.5, 1, 10) * (f / 150) ** -0.2)
+    heel = pulse(rng.uniform(0.5, 0.9) if gait == "run" else rng.uniform(0.8, 1.4))
+    place(y, unit(fftconv(heel, body)), 0)
+    if gait != "settle":
+        place(y, unit(fftconv(pulse(1.8), body)) * rng.uniform(0.25, 0.4), int(rng.uniform(0.05, 0.09) * SR))
+    place(y, scuff(rng, rng.uniform(25, 50), -14, 1500), 0)
+    if gait == "run":
+        place(y, scuff(rng, rng.uniform(40, 70), -13, 900), int(rng.uniform(0.09, 0.13) * SR))
+    place(y, cloth(rng, rng.uniform(120, 200), -24), 0)
+    return unit(y) * db(level_db)
+
+
+def terrazzo_step(rng, gait="walk"):
+    """皮鞋踩水磨石（办事处）：比水泥更硬更亮，鞋跟「咔」的一声清脆，大屋子里有一点回声。"""
+    y = concrete_step(rng, 0.0, gait)
+    f = logu(rng, 1800, 6000, 6)
+    click = fftconv(pulse(0.12), modes(0.04, f, rng.uniform(0.002, 0.008, 6), np.ones(6)))
+    y = mix(y, unit(click) * db(-7))
+    return mix(y, fftconv(y, reverb_ir(rng, 0.7, 300, 5000)) * db(-14))
+
+
+def steps_away(rng):
+    """门外的脚步声走远：七八步，水泥走廊里回声很重，越走越轻、越闷，最后一下在楼梯口。"""
+    n = int(5.0 * SR)
+    y = np.zeros(n)
+    ir = reverb_ir(rng, 1.4, 120, 4000)
+    at = 0.35
+    for k in range(8):
+        s = concrete_step(rng, -2.5 * k)
+        s = filt(s, lambda f, k=k: bp(f, None, 6000 / (1 + 0.5 * k), 1))
+        place(y, s, int(at * SR))
+        at += rng.uniform(0.5, 0.6)
+    wet = fftconv(y, ir)[:n]
+    return fade(y * 0.6 + wet * 1.2, 0.0, 0.5)
+
+
+def envelope(rng):
+    """信从门缝底下塞进来：纸贴着水泥地滑过去的沙沙声（越滑越慢），最后纸角一顿。"""
+    n = int(1.2 * SR)
+    t = taxis(n)
+    env = np.clip(np.sin(np.pi * t / 0.95), 0, 1) ** 0.7 * (t < 0.95) * (1 - 0.5 * t)
+    x = noise(n, lambda f: bp(f, 1200, 9000, 1) * tilt(f, -1.5, 3000), rng) * env
+    x *= np.clip(1 + 0.6 * wobble(n, 5, 30, rng), 0.2, 2.0)
+    stop = burst(25, lambda f: bp(f, 600, 5000, 1), rng)
+    y = unit(x)
+    place(y, unit(stop) * db(-6), int(0.92 * SR))
+    return y
+
+
+def wood_door(rng, opening=True):
+    """木门：开——球形锁的锁舌「咔」地缩回去，合页「吱——」（细销子干摩擦，比水密门尖得多）；
+    关——合页短短一声，门扇拍上门框「嘭」（木板的低频），锁舌弹进锁扣「咔嗒」。"""
+    n = int(1.6 * SR)
+    y = np.zeros(n)
+    fl = logu(rng, 1500, 6000, 6)
+    latch = fftconv(pulse(0.15), modes(0.06, fl, rng.uniform(0.004, 0.015, 6), np.ones(6)))
+    m = int((0.9 if opening else 0.35) * SR)
+    rate = 45 + 20 * wobble(m, 0.5, 3, rng)
+    amp = np.clip(np.sin(np.pi * taxis(m) / (m / SR)), 0, 1) * np.clip(1 + 0.5 * wobble(m, 2, 10, rng), 0.2, 2)
+    ss = np.convolve(stick_slip(m, rate, amp, rng), pulse(0.4))[:m]
+    fh = logu(rng, 700, 3200, 8)
+    creak = fftconv(ss, modes(0.2, fh, rng.uniform(0.01, 0.04, 8), rng.uniform(0.4, 1, 8)))[:m]
+    fdoor = plate_modes(rng, rng.uniform(85, 110), 14)
+    thud = fftconv(pulse(4.0), modes(0.5, fdoor, rng.uniform(0.04, 0.12, 14), np.ones(14)))
+    if opening:
+        place(y, unit(latch), 0)
+        place(y, unit(creak) * db(-6), int(0.12 * SR))
+    else:
+        place(y, unit(creak) * db(-10), 0)
+        place(y, unit(thud), int(0.35 * SR))
+        place(y, unit(latch) * db(-4), int(0.37 * SR))
+    return y
+
+
+def tube_start(rng):
+    """日光灯启动：启辉器里的双金属片「叮、叮」碰几下（每下伴一声镇流器的「嗡」），最后灯管亮起来，嗡声稳住。"""
+    n = int(2.2 * SR)
+    t = taxis(n)
+    y = np.zeros(n)
+    f = logu(rng, 3000, 9000, 5)
+    ping = modes(0.08, f, rng.uniform(0.01, 0.03, 5), np.ones(5))
+    for at in (0.0, 0.3, 0.42, 0.85, 1.05):
+        place(y, unit(fftconv(pulse(0.08), ping)) * rng.uniform(0.5, 1.0), int(at * SR))
+        m = int(0.12 * SR)
+        hum = sum(k ** -1 * np.sin(2 * np.pi * 100 * k * taxis(m)) for k in range(1, 8)) * np.hanning(m)
+        place(y, unit(hum) * db(-10), int(at * SR))
+    steady = sum(k ** -1 * np.sin(2 * np.pi * 100 * k * t) for k in range(1, 8)) * np.clip((t - 1.15) / 0.2, 0, 1)
+    return unit(y) + unit(steady) * db(-16)
+
+
+def paper(rng):
+    """拿起一张纸：纸面一抖的哗啦声（一串很密的小噼啪），起落都快。"""
+    n = int(0.6 * SR)
+    t = taxis(n)
+    env = np.clip(np.sin(np.pi * t / 0.5), 0, 1) * (t < 0.5)
+    x = noise(n, lambda f: bp(f, 800, 10000, 1), rng) * env * np.clip(1 + 1.2 * wobble(n, 20, 120, rng), 0, 3)
+    return unit(x)
+
+
+def pen_write(rng):
+    """钢笔在纸上写字（垫着玻璃板）：一笔一笔的沙沙声，笔画之间抬笔停一下；每一笔落下时笔尖在玻璃上磕一下。"""
+    n = int(4.5 * SR)
+    y = np.zeros(n)
+    at = 0.05
+    f = logu(rng, 2500, 8000, 5)
+    tap = modes(0.03, f, rng.uniform(0.002, 0.006, 5), np.ones(5))
+    while at < 4.3:
+        L = rng.uniform(0.06, 0.22)
+        m = int(L * SR)
+        tt = taxis(m)
+        stroke = noise(m, lambda f: bp(f, 2500, 11000, 2), rng) * np.sin(np.pi * tt / L) ** 0.5
+        place(y, unit(stroke) * rng.uniform(0.4, 1.0), int(at * SR))
+        place(y, unit(fftconv(pulse(0.1), tap)) * db(-14), int(at * SR))
+        at += L + rng.uniform(0.03, 0.15)
+    return y
+
+
+def soft_press(rng, sticky=False):
+    """手指按下去：指肚压在纸上（底下是玻璃板）一声闷闷的「噗」；sticky：按进印泥，抬起来带一点黏的「嘁」。"""
+    n = int(0.5 * SR)
+    y = np.zeros(n)
+    f = logu(rng, 200, 1500, 8)
+    place(y, unit(fftconv(pulse(6.0), modes(0.15, f, rng.uniform(0.01, 0.03, 8), np.ones(8)))), 0)
+    if sticky:
+        place(y, unit(burst(40, lambda f: bp(f, 1500, 8000, 1), rng)) * db(-10), int(0.25 * SR))
+    return y
+
+
+def clock_tick(rng, tock=False):
+    """摆钟走一下：擒纵叉打在擒纵轮上一声脆的「嘀」（tock 低一点），木壳子跟着「嗒」地共鸣。"""
+    n = int(0.25 * SR)
+    y = np.zeros(n)
+    f = logu(rng, 2200 if not tock else 1700, 7000, 6)
+    place(y, unit(fftconv(pulse(0.06), modes(0.05, f, rng.uniform(0.003, 0.01, 6), np.ones(6)))), 0)
+    fc = plate_modes(rng, rng.uniform(260, 320) * (0.85 if tock else 1.0), 10)
+    place(y, unit(fftconv(pulse(0.3), modes(0.2, fc, rng.uniform(0.01, 0.04, 10), np.ones(10)))) * db(-6), 0)
+    return y
+
+
+def clock_stop(rng):
+    """钟停了：最后一下比平时沉（擒纵卡住了），钟摆磕在壳子上一声闷响。"""
+    y = clock_tick(rng, True)
+    f = plate_modes(rng, 180, 12)
+    thump = fftconv(pulse(2.0), modes(0.5, f, rng.uniform(0.03, 0.1, 12), np.ones(12)))
+    return mix(unit(y) * db(-4), unit(thump))
+
+
+def thunder(rng):
+    """远处打雷：先一阵噼噼啪啪的爆裂（高频，很快没了），接着低沉的隆隆声滚好几秒，一阵一阵的。"""
+    n = int(rng.uniform(5, 8) * SR)
+    t = taxis(n)
+    crack = noise(n, lambda f: bp(f, 200, 3000, 1), rng) * np.exp(-t / 0.25) * np.clip(t / 0.02, 0, 1)
+    roll_env = np.clip(t / 0.3, 0, 1) * np.exp(-t / (n / SR / 2.5))
+    roll_env *= np.clip(1 + 0.8 * wobble(n, 0.6, 3.0, rng), 0.1, 2.5)
+    roll = noise(n, lambda f: bp(f, 20, 260, 2) * tilt(f, -4, 40), rng) * roll_env
+    return unit(crack) * db(-8) + unit(roll)
+
+
+def chair_creak(rng):
+    """坐到木椅子上：榫头松了，「嘎吱」一声（木头的粘滑，比铰链低、比门扇高）。"""
+    m = int(rng.uniform(0.25, 0.45) * SR)
+    rate = 60 + 25 * wobble(m, 0.5, 3, rng)
+    amp = np.clip(np.sin(np.pi * taxis(m) / (m / SR)), 0, 1)
+    ss = np.convolve(stick_slip(m, rate, amp, rng), pulse(0.6))[:m]
+    f = logu(rng, 300, 1800, 10)
+    return unit(fftconv(ss, modes(0.2, f, rng.uniform(0.01, 0.05, 10), np.ones(10))))
+
+
+def wall_switch(rng):
+    """墙上的胶木扳把开关「咔」：弹簧过死点一下，没有接触器。"""
+    n = int(0.12 * SR)
+    y = np.zeros(n)
+    f = logu(rng, 1500, 6000, 6)
+    place(y, fftconv(pulse(0.1), modes(0.05, f, rng.uniform(0.003, 0.012, 6), np.ones(6))), 0)
+    place(y, fftconv(pulse(0.6), modes(0.08, logu(rng, 250, 900, 4), [0.01, 0.015, 0.01, 0.02], np.ones(4))) * 0.5, 0)
+    return y
+
+
+def ship_horn(rng):
+    """远处船的汽笛：一声低沉的长鸣（一百多赫兹带一串谐波），隔着雨和港湾，后面拖着回声。"""
+    n = int(6.0 * SR)
+    t = taxis(n)
+    f0 = rng.uniform(110, 140)
+    env = np.clip(t / 0.3, 0, 1) * np.clip((3.2 - t) / 0.5, 0, 1)
+    x = sum(k ** -0.9 * np.sin(2 * np.pi * f0 * k * t + rng.uniform(0, 6.3)) for k in range(1, 10)) * env
+    x = filt(x, lambda f: bp(f, 80, 1500, 2))
+    return fade(x + fftconv(x, reverb_ir(rng, 2.5, 80, 1200))[:n] * 2.0, 0.0, 1.0)
+
+
+def harbor(rng):
+    """港湾的水声（循环，办事处窗外）：码头墙脚的水一下一下拍着（十来秒一个浪），远处一片模糊的水声。"""
+    n = 24 * SR
+    t = taxis(n)
+    waves = 0.5 + 0.5 * np.cos(2 * np.pi * loopf(0.11, n) * t) + 0.3 * wobble(n, 0.05, 0.2, rng)
+    lap = noise(n, lambda f: bp(f, 120, 1500, 2), rng) * np.clip(waves, 0, None) ** 2
+    far = noise(n, lambda f: bp(f, 60, 600, 1) * tilt(f, -3, 100), rng)
+    return unit(lap) + unit(far) * db(-6)
+
+
 # 名字 -> (函数, 是否循环, 变体个数)
 SOUNDS = {
     "hull_bed": (hull_bed, True, 1),
@@ -732,6 +1047,35 @@ SOUNDS = {
     "step_settle": (lambda r: footstep(r, "grate", "settle"), False, 4),
     "switch": (switch, False, 3),
     "hull_impact": (hull_impact, False, 3),
+    # 岸上的房间
+    "rain_window": (rain_window, True, 1),
+    "rain_steel": (lambda r: rain_window(r, steel=True), True, 1),
+    "fan_whir": (fan_whir, True, 1),
+    "radio_static": (radio_static, True, 1),
+    "harbor": (harbor, True, 1),
+    "pager_beep": (pager_beep, False, 1),
+    "knock": (knock, False, 2),
+    "steps_away": (steps_away, False, 1),
+    "envelope": (envelope, False, 1),
+    "door_open": (lambda r: wood_door(r, True), False, 2),
+    "door_close": (lambda r: wood_door(r, False), False, 2),
+    "tube_start": (tube_start, False, 1),
+    "paper": (paper, False, 4),
+    "pen_write": (pen_write, False, 1),
+    "ink_press": (lambda r: soft_press(r, True), False, 1),
+    "thumb_press": (soft_press, False, 1),
+    "clock_tick": (clock_tick, False, 2),
+    "clock_tock": (lambda r: clock_tick(r, True), False, 2),
+    "clock_stop": (clock_stop, False, 1),
+    "thunder": (thunder, False, 3),
+    "chair_creak": (chair_creak, False, 3),
+    "wall_switch": (wall_switch, False, 2),
+    "ship_horn": (ship_horn, False, 1),
+    "step_concrete": (lambda r: concrete_step(r), False, 8),
+    "run_concrete": (lambda r: concrete_step(r, gait="run"), False, 6),
+    "settle_concrete": (lambda r: concrete_step(r, gait="settle"), False, 4),
+    "step_terrazzo": (lambda r: terrazzo_step(r), False, 8),
+    "run_terrazzo": (lambda r: terrazzo_step(r, "run"), False, 6),
 }
 
 

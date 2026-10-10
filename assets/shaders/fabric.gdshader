@@ -34,6 +34,10 @@ uniform vec4 thread_color : source_color = vec4(0.45, 0.4, 0.28, 1.0);
 
 uniform vec4 backlight : source_color = vec4(0.0, 0.0, 0.0, 1.0);
 
+// 格子布（宿舍的蓝白格子窗帘）：check_size 是一格多宽（米），0 = 不画。两个方向的色条叠在一起的地方最深
+uniform float check_size = 0.0;
+uniform vec4 check_color : source_color = vec4(0.25, 0.4, 0.65, 1.0);
+
 varying vec4 wear;
 
 void vertex() {
@@ -70,6 +74,14 @@ void fragment() {
 	float lum = dot(tex, vec3(0.2126, 0.7152, 0.0722));
 	vec3 dyed = tint.rgb * pow(max(lum / tex_mean, 0.0), tex_contrast);
 	vec3 col = mix(dyed, tex * tint.rgb, albedo_mix);
+	if (check_size > 0.0) {
+		vec2 c = fract(UV / check_size);
+		float aa = fwidth(UV.x / check_size) * 1.5 + 0.01;
+		float bu = smoothstep(0.5 - aa, 0.5 + aa, c.x) * (1.0 - smoothstep(1.0 - aa, 1.0, c.x));
+		float bv = smoothstep(0.5 - aa, 0.5 + aa, c.y) * (1.0 - smoothstep(1.0 - aa, 1.0, c.y));
+		float k = (bu + bv) * 0.5;
+		col = mix(col, col * check_color.rgb * 1.6, k);
+	}
 	// 每件东西深浅不一
 	float rnd = wear.b;
 	col *= 1.0 + variation * (rnd * 2.0 - 1.0);

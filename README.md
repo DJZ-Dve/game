@@ -3,7 +3,33 @@
 深海 · 潜艇 · 中式恐怖。Godot 4.7（Forward+）+ Blender 5.2。
 
 ## 运行
-用 Godot 4.7 打开本文件夹，按 F5。主场景是 `scenes/deep_sea.tscn`。
+用 Godot 4.7 打开本文件夹，按 F5。主场景是 `scenes/dorm.tscn`：剧情从序章的宿舍开始，接第一章的办事处，签完合同出门就到潜艇。
+只想开船的话直接打开 `scenes/deep_sea.tscn` 按 F6。
+
+## 剧情（`docs/story.md`）
+一九九八年夏末，浙东渔港白沙门。退伍潜艇兵周海生被一家叫“东溟海洋工程”的公司找上门，二十万，开一条老潜艇下去
+“打捞一只箱子”——舷窗封死、不许问、合同上要写生辰八字。他捞的是一口沉棺。完整的设定、人物、时间线、
+怎么一步步发现是棺材的线索设计、三个结局都在 `docs/story.md`；台词在 `assets/story/*.dlg`（纯文本，格式见文档末尾），
+纸面文字（合同、催款单、信……）在 `assets/story/docs/*.txt`。
+
+| 场景 | 内容 |
+|---|---|
+| 序章「二〇七」`scenes/dorm.tscn` | 船厂单身宿舍，台风前夜。传呼机在桌上响 → 看看屋里（催款单、存折、退伍证、挂历、照镜子看见自己的脸）→ 有人敲门、脚步声走远、门缝底下塞进来一个湿信封 → 开门：楼道里一串湿脚印，只有来、没有回 |
+| 第一章「契」`scenes/office.tscn` | 渔业公司老楼三楼，东溟公司的临时办事处，雨天下午。沈渡坐在红木官帽椅里，背后一整面钢窗对着码头上的潜艇。坐下谈 → 读合同 → 问问题 → 签：写生辰、写名字、按手印——挂钟停了 |
+| 第二章起 `scenes/deep_sea.tscn` | 镇海号（剧情部分还没做，见 docs/story.md 的进度表） |
+
+岸上的操作（和舱里一样的地方不重复）：
+
+| 操作 | 按键 |
+|---|---|
+| 走 / 跑 | W A S D / 按住 Shift |
+| 查看、拿起、开门、坐下 | 准星对着它按 E（屏幕下方有提示） |
+| 站起来 | 坐着时按 E |
+| 读纸 | A / D 翻页，E 或 Esc 放下 |
+| 对白 | 自动往下走；E / 空格 / 左键跳过这一句 |
+| 选项 | 数字键 1~4，或 W / S 选、E 确认 |
+
+## 潜艇
 
 开局坐在驾驶椅上。按 E 起身，就能在舱里走动；走回驾驶椅旁边再按 E 坐下。起身时艇不受操纵，只靠惯性漂。
 
@@ -101,8 +127,34 @@
 可以输出频谱图。`--only-sfx=` / `--mute-sfx=` 只开 / 关掉某几种声音，用来单独查某一路。
 后台跑的 Godot（`godot_bg.sh`）一律用 Dummy 音频驱动，截图、烘焙时也不会出声。
 
+## 岸上的场景（`scripts/story/`）
+- **剧情框架**：`story.gd`（自动加载为 Story：剧情标记、转场黑场和章节字幕、播放对白文件）、`dialogue_script.gd`（对白文件解析）、
+  `story_ui.gd`（字幕逐字出现、心声灰色、选项、读纸的界面、交互提示和准星点）
+- **房间**：`story_room.gd` 是宿舍、办事处共用的部分。房间模型（`gen_dorm.py` / `gen_office.py` 导出）里预留挂点，照着摆：
+  `Walk_*` 能站的矩形、`Seat_*` 坐的地方、`Use_*` 能按 E 的东西、`Anchor_*` Poly Haven 道具、`Light_*` 灯、`Decal_*` 贴花、
+  `Paper_*` 纸面（换成排好版的贴图）、`Spin_*` 吊扇和钟的指针、`Door_Leaf` 门扇；子类（`dorm.gd`、`office.gd`）配参数、写剧情
+- **第一人称**：`room_walker.gd`，和舱里的 `cockpit_camera.gd` 一样不走物理（能站的地方是几块矩形），步伐、起伏照搬；
+  `crew_body.gd` 两边共用，岸上签字时右手拿着笔在合同上写、拇指按进印泥再按到纸上（TwoBoneIK）
+- **纸**：`paper_doc.gd` 在 SubViewport 里排版（宋体正文、钢笔手写、毛笔字、公章、红手印、手画的红圈、竖排拓片、海图），
+  同一张贴图既贴在 3D 的纸上、也在读纸界面里放大——签名、手印写上去两边一起变。纸的发黄、水渍、折痕、泡过水见
+  `assets/shaders/paper.gdshader`、`paper_grime.gdshader`
+- **沈渡**：`npc.gd`。坐着待机，说话时不时插一段手势；头和眼睛跟着玩家转（眼睛先到、头慢慢跟）；按台词对口型
+  （每个字挑一个声母、一个韵母的口型，一秒四五个字，标点处闭嘴）；一直挂着一点客气的笑；故意不眨眼
+- **镜子**：`mirror.gd`，反射相机放在主相机关于镜面的对称点、斜视锥贴着镜面，画到 SubViewport 里贴回镜面。
+  周海生的脸平时不画（相机在头里面），只放在第 20 层，只有反射相机画这一层——宿舍里照镜子才看得见自己
+- **声音**：`room_audio.gd`，雨（窗外）、吊扇、日光灯电流声、收音机沙沙声、港湾的水声；脚步按地面挑（水泥 / 水磨石）；
+  打雷跟着窗外的闪电晚一两秒到。音效都在 `tools/gen_sfx.py` 里合成。总线多了 `Room`（小房间混响）、`Outdoor`（窗外，闷一点）
+- **窗外的雨**：`assets/shaders/rain_glass.gdshader`，雨点按世界坐标排，一颗颗折射背后的画面，攒大了往下淌、拖一串小水珠
+- **导出注意**：对白（`*.dlg`）和纸面文字（`*.txt`）是直接按文件读的，导出时要在导出预设的「资源 → 非资源文件过滤」里加上
+  `assets/story/*.dlg, assets/story/docs/*.txt`，不然导出的游戏里字幕和纸面都是空的
+- **调试**：`--scene=dorm|office|deep_sea` 从这个场景开始；`--flags=a,b` 预设剧情标记；`--read=纸的名字` 开场就拿起这张纸
+  （查排版）；`--tube=on` 宿舍开场日光灯就亮着；`--autoplay` 自动把剧情走一遍（自己走位、看东西、选选项，录演示视频用）
+
 ## 目录
-- `blender/scripts/` 生成潜艇（`gen_submarine.py` 外壳，`cockpit.py` 控制舱，`quarters.py` 生活舱）和海床（`gen_seabed.py`）的脚本；`blender/source/` 是生成的 .blend
+- `blender/scripts/` 生成潜艇（`gen_submarine.py` 外壳，`cockpit.py` 控制舱，`quarters.py` 生活舱）和海床（`gen_seabed.py`）的脚本；
+  岸上的房间（`room_kit.py` 墙地顶、门窗、明线、日光灯、吊扇这些公共零件，`gen_dorm.py` 宿舍，`gen_office.py` 办事处）；
+  人物（`rocketbox.py` 公共处理，`gen_crew.py` 第一人称的身体和脸，`gen_npc.py` 沈渡）；`blender/source/` 是生成的 .blend
+- `assets/story/` 对白（`*.dlg`）和纸面文字（`docs/*.txt`）；`docs/story.md` 剧情设计
 - 铺位上的床单、被子、枕头、布帘、毛巾是用 Blender 布料模拟摆出来的（`blender/scripts/bedding.py`），床垫是带绗缝凹坑的软垫；
   模拟结果缓存在 `blender/cache/`（不进仓库），参数不变就不重算，第一次生成会多花十几秒。布料材质见 `assets/shaders/fabric.gdshader`
 - `assets/models/` 导出的 glb；`assets/materials/` 材质（由 `scripts/tools/setup_project.gd` 生成）；`assets/shaders/` 着色器
@@ -121,16 +173,18 @@
 
 ## 常用命令
 ```
-tools/rebuild_models.sh                       # 重新生成潜艇+海床并导入（潜艇会顺带重新烘焙舱内 VoxelGI）
-tools/rebuild_models.sh submarine
+tools/rebuild_models.sh                       # 重新生成全部自建模型并导入（潜艇、宿舍、办事处会顺带重新烘焙 VoxelGI）
+tools/rebuild_models.sh submarine             # 只生成某几个：submarine seabed dorm office npc
 godot --path . --script res://scripts/tools/gen_decal_text.gd             # 重新画贴花的文字底图（会闪一下窗口）
 godot --headless --path . --script res://scripts/tools/gen_decals.gd      # 重新生成贴花贴图
 godot --path . -- --bake-gi                   # 只重新烘焙舱内 VoxelGI
 godot --headless --path . --script res://scripts/tools/setup_project.gd   # 重写输入映射、重新生成材质
 tools/capture.sh shot.png --view=external --orbit=40                      # 截图（后台运行、不弹窗；FOREGROUND=1 前台；其余参数见 scripts/debug_args.gd）
+tools/capture.sh shot.png --scene=office --at=0.3,-0.26 --yaw=0          # 岸上的场景截图（不给 --scene 就是潜艇）
+tools/record.sh .tmp/story 420 --scene=dorm --autoplay --no-hud           # 自动把序章、第一章走一遍录下来
 tools/glb_info.sh assets/models/submarine_cockpit.glb [网格名]            # 查看 glb 里的网格、顶点数
 tools/fetch_polyhaven.sh --models a,b --textures c,d                      # 下载 Poly Haven 素材（ambientCG 用 fetch_ambientcg.sh --ids）
-tools/fetch_rocketbox.sh && blender -b --factory-startup --python blender/scripts/gen_crew.py   # 重新生成第一人称的身体
+tools/fetch_rocketbox.sh && blender -b --factory-startup --python blender/scripts/gen_crew.py   # 重新生成第一人称的身体（npc 同理：gen_npc.py）
 python3 tools/gen_sfx.py [名字前缀...]                                   # 重新合成音效（之后让 Godot 导入一次：godot --headless --path . --import）
 tools/record.sh .tmp/door 12 --at=0,2.0 --yaw=180 --actions=30:interact   # 离线录一段画面+声音（.mp4/.wav/.log），不出声
 python3 tools/audio_report.py .tmp/door.wav --log .tmp/door.log --png .tmp/door.png   # 分析录音

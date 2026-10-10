@@ -1,6 +1,7 @@
 extends Node3D
 ## 第一人称的身体：低头看得见自己的身子、腿脚和手（assets/models/crew_body.glb，Rocketbox 的角色改成潜艇兵，
-## 见 blender/scripts/gen_crew.py）。挂在 Body 下面，坐标和 cockpit_camera.gd 一样是舱内局部坐标。
+## 见 blender/scripts/gen_crew.py）。和相机挂在同一个父节点下面（艇里是 Body，岸上是房间根节点），
+## 相机是 cockpit_camera.gd 或 room_walker.gd，坐标都是父节点的局部坐标。
 ## - 动画：站着（idle）、走（walk）、跑（run）、坐（sit）四段，走和跑不按时间播，而是按相机的步伐相位（gait_steps）
 ##   直接定位到动画里对应的时刻，左右脚落地和脚步声对得上
 ## - 位置：每帧让模型的头骨落在眼睛（相机）后下方一点；站着时脚踩地板只对齐水平位置，坐着时整个对齐。
@@ -10,7 +11,7 @@ extends Node3D
 ## - 不投影：身体一直有呼吸、走路的动作，要投影的话照得到它的每盏舱内灯都得每帧重画整舱的阴影图
 
 const BODY := preload("res://assets/models/crew_body.glb")
-const DECK_Y := -0.9
+const DECK_Y := -0.9   # 艇里的地板；岸上的相机自己带 deck_y
 ## 走、跑动画里左脚跟落地在循环里的位置（gen_crew.py 算的，见 assets/models/crew_body_gait.json）
 const WALK_L := 0.694
 const RUN_L := 0.348
@@ -19,12 +20,17 @@ const HEAD_BACK := 0.12
 const HEAD_DOWN := 0.07
 ## 低头看脚时身体往后让的距离
 const LOOK_DOWN_BACK := 0.06
+## 镜子才看得见的那一层（和 scripts/story/mirror.gd 的 PlanarMirror.HEAD_LAYER 一样）
+const HEAD_LAYER := 20
 
 @export var camera_path: NodePath
 
 var _cam: Camera3D
 var _skel: Skeleton3D
 var _head := -1
+var _face: MeshInstance3D
+var _blink_wait := 3.0
+var _blink := 0.0
 var _tree: AnimationTree
 var _yaw := 0.0
 var _move := 0.0
@@ -40,19 +46,25 @@ var _hand_w := [0.0, 0.0]
 var _held := 0.0
 var _shoulder := [-1, -1]
 var _arm_len := 0.6
+var _deck_y := DECK_Y
 
 
 func _ready() -> void:
 	_cam = get_node(camera_path)
+	if "deck_y" in _cam:
+		_deck_y = _cam.deck_y
 	var model := BODY.instantiate() as Node3D
 	add_child(model)
 	_skel = model.find_children("*", "Skeleton3D", true, false)[0]
 	_head = _skel.find_bone("Bip01 Head")
 	for g in model.find_children("*", "GeometryInstance3D", true, false):
 		(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var head := model.find_child("Crew_Head", true, false) as Node3D
-	if head:
-		head.visible = false
+	# 头（周海生的脸）：相机在头里面，平时不画；只放在镜子那一层（PlanarMirror.HEAD_LAYER），
+	# 两种相机都不画这一层，只有镜子的反射相机画得出来
+	_face = model.find_child("Crew_Head", true, false) as MeshInstance3D
+	if _face:
+		_face.layers = 1 << (HEAD_LAYER - 1)
+		_cam.cull_mask &= ~(1 << (HEAD_LAYER - 1))
 	var player := model.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
 	for n in ["idle", "walk", "run", "sit"]:
 		player.get_animation(n).loop_mode = Animation.LOOP_LINEAR
@@ -121,6 +133,7 @@ func _build_tree(player: AnimationPlayer) -> AnimationTree:
 
 
 func _process(delta: float) -> void:
+	_update_blink(delta)
 	var sit: float = _cam.sit_amount()
 	var speed: float = _cam.gait_speed
 	var steps: float = _cam.gait_steps
@@ -131,8 +144,9 @@ func _process(delta: float) -> void:
 	_tree.set("parameters/move/blend_amount", _move)
 	_tree.set("parameters/seat/blend_amount", sit)
 
-	# 朝向：走动时身子跟着视线转（略慢半拍），坐着时朝驾驶台，开关门时对着门
-	var want: float = lerp_angle(_cam.door_yaw if _cam.door_op else _cam.yaw, 0.0, sit)
+	# 朝向：走动时身子跟着视线转（略慢半拍），坐着时朝驾驶台（岸上朝椅子的方向），开关门时对着门
+	var want: float = _cam.body_yaw() if _cam.has_method("body_yaw") \
+		else lerp_angle(_cam.door_yaw if _cam.door_op else _cam.yaw, 0.0, sit)
 	_yaw = lerp_angle(_yaw, want, 1.0 - exp(-delta * (10.0 if speed > 0.2 else 6.0)))
 	rotation = Vector3(0.0, _yaw, 0.0)
 
@@ -144,7 +158,7 @@ func _process(delta: float) -> void:
 	var head_world := _skel.global_transform * _skel.get_bone_global_pose(_head).origin
 	var head_rel := get_parent_node_3d().global_transform.affine_inverse() * head_world - position
 	var p := want_head - head_rel
-	p.y = lerpf(DECK_Y, p.y, sit)
+	p.y = lerpf(_deck_y, p.y, sit)
 	position = p
 	_update_hands(delta)
 	if DebugArgs.has("body-preview"):
@@ -152,6 +166,22 @@ func _process(delta: float) -> void:
 		position += look * 1.3
 		rotation.y += PI
 
+
+
+## 眨眼（只有镜子里看得见）：三五秒一次，偶尔连眨两下
+func _update_blink(delta: float) -> void:
+	if _face == null or _face.mesh == null:
+		return
+	_blink_wait -= delta
+	if _blink_wait <= 0.0:
+		_blink = 0.16
+		_blink_wait = randf_range(2.5, 5.5) if randf() > 0.15 else 0.35
+	_blink = maxf(_blink - delta, 0.0)
+	var k := sin(PI * _blink / 0.16) if _blink > 0.0 else 0.0
+	for nm in ["AK_09_EyeBlinkLeft", "AK_10_EyeBlinkRight"]:
+		var i := _face.find_blend_shape_by_name(nm)
+		if i >= 0:
+			_face.set_blend_shape_value(i, k)
 
 
 ## 开关门时两只手的目标：握点（跟着手轮转，换手时沿轮缘滑回去）→ 手腕位置、手掌朝向；够不着就伸过去够
@@ -185,6 +215,21 @@ func _update_hands(delta: float) -> void:
 			_pole[i].global_position = shoulder + side * 0.45 + Vector3.DOWN * 0.35 + toward * 0.15
 			var fingers := (-radial - toward * 0.5).normalized()
 			_grip.set_target(i, fingers, -toward, smoothstep(_arm_len * 1.15, _arm_len * 0.98, d))
+		elif _cam.has_method("hand_goal"):
+			# 岸上：相机给的目标（签字、按手印），坐标是父节点的局部坐标
+			var hg: Dictionary = _cam.hand_goal(i)
+			if not hg.is_empty():
+				var par := get_parent_node_3d().global_transform
+				var wrist: Vector3 = par * (hg.pos as Vector3)
+				var shoulder := _skel.global_transform * _skel.get_bone_global_pose(_shoulder[i]).origin
+				if shoulder.distance_to(wrist) > _arm_len * 0.98:
+					wrist = shoulder + (wrist - shoulder).normalized() * _arm_len * 0.98
+				_target[i].global_position = wrist
+				var side := global_transform.basis.x * (-1.0 if i == 0 else 1.0)
+				_pole[i].global_position = shoulder + side * 0.45 + Vector3.DOWN * 0.45
+				_grip.set_target(i, (par.basis * (hg.fingers as Vector3)).normalized(),
+					(par.basis * (hg.palm as Vector3)).normalized(), hg.get("grasp", 0.0))
+				w = hg.get("weight", 1.0)
 		_hand_w[i] = move_toward(_hand_w[i], w, delta * (4.0 if w > _hand_w[i] else 3.0))
 		_ik[i].influence = smoothstep(0.0, 1.0, _hand_w[i])
 		_grip.weight[i] = _ik[i].influence * _grip.grasp[i]

@@ -61,13 +61,14 @@ class Parts:
         return text_mesh(s, self.uid("Int_Txt"), self.coll, self.M[key], M @ T(0, 0, 0.00012),
                          size=size, extrude=0.0, font_path=font, align=align, resolution=1)
 
-    def flush(self):
+    def flush(self, recalc=True):
+        """recalc=False：面的朝向已经排好了（房间的墙、地、顶朝屋里，自动重算会全翻到外面去）。"""
         out = []
         for key, bm in self.bms.items():
             if not bm.verts:
                 bm.free()
                 continue
-            ob = to_object(bm, f"{self.prefix}_{key}", self.coll, self.M[key], sharp_angle=40.0)
+            ob = to_object(bm, f"{self.prefix}_{key}", self.coll, self.M[key], sharp_angle=40.0, recalc=recalc)
             if key not in self.SOFT:
                 wn = ob.modifiers.new("WeightedNormal", 'WEIGHTED_NORMAL')
                 wn.keep_sharp = True

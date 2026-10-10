@@ -12,6 +12,9 @@ const SEABED := preload("res://assets/shaders/seabed.gdshader")
 const CRT := preload("res://assets/shaders/crt_sonar.gdshader")
 const NET := preload("res://assets/shaders/net_bag.gdshader")
 const FABRIC := preload("res://assets/shaders/fabric.gdshader")
+const RAIN_GLASS := preload("res://assets/shaders/rain_glass.gdshader")
+const NET_SHADER := preload("res://assets/shaders/mosquito_net.gdshader")
+const HARBOR := preload("res://assets/shaders/harbor_water.gdshader")
 
 
 func _init() -> void:
@@ -122,6 +125,14 @@ func _paint(name: String, paint: Color, o := {}) -> ShaderMaterial:
 	m.set_shader_parameter("warp_scale", o.get("warp_scale", 2.5))
 	if o.has("dust_color"):
 		m.set_shader_parameter("dust_color", o.dust_color)
+	if o.has("floor_h"):
+		# 岸上的房间地面在 y = 0（舱里是 -0.9）
+		m.set_shader_parameter("floor_height", o.floor_h)
+		m.set_shader_parameter("floor_fade", o.get("floor_fade", 0.65))
+	if o.has("floor_color"):
+		m.set_shader_parameter("floor_color", o.floor_color)
+	if o.has("wear_color2"):
+		m.set_shader_parameter("streak_color", o.wear_color2)
 	return m
 
 
@@ -228,6 +239,7 @@ func _build_materials() -> void:
 	glass.uv1_scale = Vector3(4, 4, 4)
 	mats.append(glass)
 	_interior_materials(mats)
+	_room_materials(mats)
 	var crt := ShaderMaterial.new()
 	crt.resource_name = "M_CRT"
 	crt.shader = CRT
@@ -461,3 +473,179 @@ func _interior_materials(mats: Array[Material]) -> void:
 	mirror.uv1_triplanar = true
 	mirror.uv1_scale = Vector3(3, 3, 3)
 	mats.append(mirror)
+
+## 岸上场景（宿舍、办事处）的材质（名字和 blender/scripts/room_kit.py、gen_dorm.py、gen_office.py 里的对应）。
+## 房间的地面在 y = 0（floor_h）。
+func _room_materials(mats: Array[Material]) -> void:
+	# ---- 墙、顶：白灰墙（刷过好几遍的石灰，发黄、一块块深浅不一，起皮的地方露出底下的灰），窗下雨水渗出来的流痕
+	mats.append(_paint("M_Plaster", Color(0.74, 0.72, 0.66), {"rough": 0.92, "metal": 0.0, "edge": 0.4,
+		"rust": 0.0, "detail": "Plaster003", "albedo": "Plaster003", "nstrength": 0.25, "scale": 0.6,
+		"variation": 0.14, "macro": 0.9, "smudge": 0.0, "dust": 0.0, "floor": 0.0,
+		"streak": 0.45, "streak_cover": 0.35, "streak_scale": 0.8, "wear": Color(0.55, 0.54, 0.5),
+		"wear_metal": 0.0, "primer": 0.5, "primer_color": Color(0.5, 0.49, 0.45), "chip": 0.2,
+		"chip_scale": 0.6, "chip_cover": 0.08, "depth": 0.0015, "warp": 0.35, "warp_scale": 1.2,
+		"floor_h": 0.0, "cavity": 0.4}))
+	mats.append(_paint("M_Ceiling", Color(0.76, 0.75, 0.7), {"rough": 0.95, "metal": 0.0, "edge": 0.0,
+		"rust": 0.0, "detail": "Plaster003", "albedo": "Plaster003", "nstrength": 0.2, "scale": 0.6,
+		"variation": 0.12, "macro": 0.8, "smudge": 0.0, "dust": 0.0, "floor": 0.0, "floor_h": 0.0}))
+	mats.append(_paint("M_Facade", Color(0.5, 0.5, 0.47), {"rough": 0.9, "metal": 0.0, "edge": 0.3, "rust": 0.0,
+		"detail": "Concrete046", "albedo": "Concrete046", "nstrength": 0.6, "scale": 0.8, "variation": 0.4,
+		"macro": 1.0, "streak": 0.9, "streak_cover": 0.7, "streak_scale": 0.5, "floor_h": -3.6, "floor": 0.5}))
+	# 绿漆墙裙：油漆有光，磕掉的地方露出白灰，靠地面那截被拖把、鞋蹭得发黑
+	mats.append(_paint("M_DadoGreen", Color(0.26, 0.4, 0.33), {"rough": 0.38, "metal": 0.0, "edge": 1.2,
+		"rust": 0.0, "detail": "Plaster003", "albedo": "Plaster003", "nstrength": 0.35, "scale": 1.0,
+		"variation": 0.18, "rough_var": 0.3, "macro": 0.6, "smudge": 0.5, "smudge_scale": 2.0, "dust": 0.0,
+		"floor": 0.7, "floor_h": 0.0, "floor_fade": 0.35, "wear": Color(0.7, 0.69, 0.64), "wear_metal": 0.0,
+		"primer": 0.4, "primer_color": Color(0.72, 0.71, 0.66), "chip": 0.55, "chip_scale": 1.6,
+		"chip_cover": 0.3, "depth": 0.001, "warp": 0.4, "warp_scale": 1.5}))
+	mats.append(_paint("M_DadoLine", Color(0.1, 0.17, 0.13), {"rough": 0.35, "metal": 0.0, "edge": 1.0, "rust": 0.0,
+		"detail": "Plaster003", "nstrength": 0.3, "wear": Color(0.6, 0.6, 0.56), "wear_metal": 0.0, "smudge": 0.3,
+		"floor_h": 0.0}))
+	mats.append(_paint("M_Skirt", Color(0.4, 0.4, 0.38), {"rough": 0.85, "metal": 0.0, "edge": 1.0, "rust": 0.0,
+		"detail": "Concrete046", "albedo": "Concrete046", "nstrength": 0.7, "scale": 1.5, "variation": 0.5,
+		"macro": 0.8, "wear": Color(0.5, 0.5, 0.48), "wear_metal": 0.0, "floor": 0.8, "floor_h": 0.0,
+		"floor_fade": 0.1}))
+	# 水泥地刷紫红地板漆：漆面有光，磨掉的地方露出灰水泥
+	mats.append(_paint("M_FloorPaint", Color(0.3, 0.1, 0.075), {"rough": 0.42, "metal": 0.0, "edge": 0.0,
+		"rust": 0.0, "detail": "Concrete046", "albedo": "Concrete046", "nstrength": 0.5, "scale": 1.0,
+		"variation": 0.3, "rough_var": 0.4, "macro": 0.8, "macro_scale": 0.4, "smudge": 0.0, "dust": 0.12,
+		"dust_color": Color(0.4, 0.37, 0.33), "floor": 0.0, "primer": 0.7, "primer_color": Color(0.42, 0.41, 0.39),
+		"chip": 0.7, "chip_scale": 1.3, "chip_cover": 0.4, "depth": 0.0008, "floor_h": -10.0}))
+	mats.append(_tex_std("M_Concrete", Color(0.55, 0.55, 0.52), "Concrete046", {"albedo_tex": true, "scale": 0.7,
+		"rough": 0.9, "nstrength": 0.8}))
+	# 水磨石：灰底子里嵌着细石子（贴图的明暗压一压，不然像花岗岩），磨得发亮，照得出窗户；靠墙根积灰
+	mats.append(_paint("M_Terrazzo", Color(0.5, 0.5, 0.47), {"rough": 0.3, "metal": 0.0, "edge": 0.0, "rust": 0.0,
+		"detail": "Terrazzo005", "albedo": "Terrazzo005", "nstrength": 0.15, "scale": 3.0, "variation": 0.42,
+		"rough_var": 0.5, "macro": 0.7, "smudge": 0.0, "dust": 0.06, "floor": 0.0, "cavity": 0.0,
+		"floor_h": -10.0}))
+	# ---- 木头
+	mats.append(_tex_std("M_Wainscot", Color(0.5, 0.36, 0.28), "Wood051", {"albedo_tex": true, "scale": 1.2,
+		"rough": 0.55, "nstrength": 0.5}))
+	mats.append(_tex_std("M_WoodDark", Color(0.62, 0.45, 0.36), "Wood051", {"albedo_tex": true, "scale": 1.5,
+		"rough": 0.5, "nstrength": 0.5}))
+	mats.append(_tex_std("M_WoodLight", Color(1.0, 0.86, 0.62), "Wood049", {"albedo_tex": true, "scale": 1.5,
+		"rough": 0.45, "nstrength": 0.5}))
+	mats.append(_tex_std("M_WoodRaw", Color(0.9, 0.82, 0.68), "Wood049", {"albedo_tex": true, "scale": 2.0,
+		"rough": 0.85, "nstrength": 0.8}))
+	mats.append(_tex_std("M_WoodRed", Color(0.75, 0.42, 0.32), "Wood026", {"albedo_tex": true, "scale": 1.4,
+		"rough": 0.32, "nstrength": 0.4}))
+	# 门、窗框：刷了好几层的油漆木头（底下透出以前的颜色）
+	mats.append(_paint("M_DoorBlue", Color(0.42, 0.56, 0.54), {"rough": 0.45, "metal": 0.0, "edge": 1.4, "rust": 0.0,
+		"detail": "PaintedWood009C", "albedo": "PaintedWood009C", "nstrength": 0.7, "scale": 1.5,
+		"variation": 0.3, "macro": 0.5, "smudge": 0.9, "smudge_scale": 2.5, "dust": 0.1, "floor": 0.5,
+		"floor_h": 0.0, "floor_fade": 0.4, "wear": Color(0.45, 0.33, 0.22), "wear_metal": 0.0, "primer": 0.5,
+		"primer_color": Color(0.55, 0.53, 0.45), "chip": 0.25, "chip_scale": 2.5, "chip_cover": 0.18,
+		"depth": 0.0012}))
+	mats.append(_paint("M_WindowWood", Color(0.62, 0.66, 0.6), {"rough": 0.5, "metal": 0.0, "edge": 1.5, "rust": 0.0,
+		"detail": "PaintedWood009C", "albedo": "PaintedWood009C", "nstrength": 0.8, "scale": 2.0,
+		"variation": 0.35, "macro": 0.5, "smudge": 0.4, "dust": 0.3, "wear": Color(0.4, 0.3, 0.2),
+		"wear_metal": 0.0, "primer": 0.5, "primer_color": Color(0.35, 0.4, 0.42), "chip": 0.7, "chip_scale": 3.0,
+		"chip_cover": 0.5, "depth": 0.001, "streak": 0.6, "floor_h": -10.0}))
+	mats.append(_paint("M_WindowSteel", Color(0.3, 0.36, 0.33), {"rough": 0.5, "metal": 0.1, "edge": 1.4, "rust": 0.35,
+		"smudge": 0.4, "dust": 0.3, "wear": Color(0.35, 0.22, 0.14), "wear_metal": 0.3, "primer": 0.5,
+		"chip": 0.5, "chip_scale": 3.0, "chip_cover": 0.4, "bare_rust": 1.0, "streak": 0.5, "floor_h": -10.0}))
+	mats.append(_paint("M_IronBar", Color(0.08, 0.075, 0.07), {"rough": 0.7, "metal": 0.2, "edge": 1.2, "rust": 0.62,
+		"wear": Color(0.32, 0.17, 0.09), "wear_metal": 0.2, "streak": 0.6, "dust": 0.0, "floor_h": -10.0}))
+	mats.append(_tex_std("M_Bamboo", Color(0.78, 0.66, 0.42), "Wood049", {"albedo_tex": true, "scale": 4.0,
+		"rough": 0.5, "nstrength": 0.4}))
+	# ---- 瓷、搪瓷、胶木、灯具
+	var porcelain := _std("M_Porcelain", Color(0.86, 0.85, 0.8), 0.12)
+	porcelain.clearcoat_enabled = true
+	mats.append(porcelain)
+	var enamel := _std("M_Enamel", Color(0.84, 0.84, 0.8), 0.15)
+	enamel.clearcoat_enabled = true
+	mats.append(enamel)
+	mats.append(_tex_std("M_BakeliteBrown", Color(0.12, 0.05, 0.025), "Plastic012B", {"rough": 0.45, "scale": 6.0,
+		"nstrength": 0.3}))
+	mats.append(_paint("M_FixtureWhite", Color(0.72, 0.72, 0.68), {"rough": 0.45, "metal": 0.1, "edge": 1.2,
+		"rust": 0.15, "smudge": 0.4, "dust": 0.6, "dust_color": Color(0.36, 0.34, 0.3), "wear": Color(0.3, 0.2, 0.15),
+		"wear_metal": 0.4, "floor_h": -10.0}))
+	mats.append(_paint("M_FanCream", Color(0.6, 0.56, 0.44), {"rough": 0.62, "metal": 0.0, "edge": 1.0, "rust": 0.1,
+		"smudge": 0.3, "dust": 0.85, "dust_color": Color(0.3, 0.28, 0.25), "wear": Color(0.35, 0.3, 0.25),
+		"floor_h": -10.0}))
+	var tube := _std("M_Tube", Color(0.95, 0.97, 0.95), 0.25, 0.0, Color(0.92, 1.0, 0.96), 3.0)
+	mats.append(tube)
+	mats.append(_tex_std("M_Wire", Color(0.5, 0.42, 0.3), "Fabric045", {"albedo_tex": true, "scale": 30.0,
+		"rough": 0.9, "nstrength": 0.8}))
+	# ---- 玻璃：窗玻璃上挂着雨
+	var rain := ShaderMaterial.new()
+	rain.resource_name = "M_WindowGlass"
+	rain.shader = RAIN_GLASS
+	mats.append(rain)
+	# ---- 纸、布、杂物
+	mats.append(_tex_std("M_PaperWhite", Color(0.82, 0.79, 0.7), "Fabric045", {"rough": 0.95, "scale": 10.0,
+		"nstrength": 0.15}))
+	mats.append(_tex_std("M_Newspaper", Color(0.62, 0.6, 0.52), "Fabric045", {"rough": 0.95, "scale": 10.0,
+		"nstrength": 0.15}))
+	mats.append(_paint("M_ThermosRed", Color(0.45, 0.05, 0.035), {"rough": 0.4, "metal": 0.1, "edge": 1.3,
+		"rust": 0.12, "smudge": 0.7, "dust": 0.2, "wear": Color(0.4, 0.38, 0.35), "wear_metal": 0.8,
+		"floor_h": -10.0}))
+	mats.append(_std("M_Cork", Color(0.42, 0.3, 0.18), 0.9))
+	mats.append(_tex_std("M_Rope", Color(0.55, 0.5, 0.4), "Fabric045", {"albedo_tex": true, "scale": 40.0,
+		"rough": 0.95}))
+	mats.append(_std("M_Candle", Color(0.55, 0.04, 0.03), 0.45))
+	mats.append(_paint("M_Pewter", Color(0.45, 0.45, 0.43), {"rough": 0.5, "metal": 0.85, "edge": 0.0, "rust": 0.1,
+		"detail": "Metal016", "smudge": 0.5, "dust": 0.4, "floor_h": -10.0}))
+	mats.append(_fabric("M_StrawMat", Color(0.62, 0.52, 0.3), "Fabric045", {"tex_scale": 1.2, "tex_mean": 0.4,
+		"tex_contrast": 2.2, "normal_strength": 1.6, "sheen": 0.15, "roughness": 0.7, "stain_amount": 0.35,
+		"stain_color": Color(0.7, 0.55, 0.35)}))
+	mats.append(_fabric("M_TowelBlanket", Color(0.56, 0.4, 0.44), "Fabric045", {"tex_scale": 6.0, "tex_mean": 0.36,
+		"tex_contrast": 1.4, "normal_strength": 1.4, "sheen": 0.5, "stain_amount": 0.2}))
+	var net := ShaderMaterial.new()
+	net.resource_name = "M_MosquitoNet"
+	net.shader = NET_SHADER
+	mats.append(net)
+	mats.append(_fabric("M_Canvas", Color(0.3, 0.37, 0.4), "Fabric036", {"tex_scale": 2.5, "tex_mean": 0.49,
+		"tex_contrast": 1.2, "normal_strength": 1.0, "sheen": 0.2, "stain_amount": 0.3}))
+	mats.append(_fabric("M_CurtainCheck", Color(0.74, 0.74, 0.7), "Fabric001", {"tex_scale": 1.6, "tex_mean": 0.55,
+		"tex_contrast": 2.0, "normal_strength": 0.6, "sheen": 0.25, "check_size": 0.022,
+		"check_color": Color(0.32, 0.45, 0.68), "stain_amount": 0.3, "backlight": Color(0.3, 0.3, 0.3)}))
+	mats.append(_fabric("M_Undershirt", Color(0.78, 0.77, 0.72), "Fabric001", {"tex_scale": 2.0, "tex_mean": 0.55,
+		"tex_contrast": 2.5, "normal_strength": 0.5, "sheen": 0.25, "stain_amount": 0.35,
+		"backlight": Color(0.35, 0.34, 0.3)}))
+	mats.append(_fabric("M_Sock", Color(0.2, 0.2, 0.22), "Fabric034", {"tex_scale": 6.0, "tex_mean": 0.36,
+		"normal_strength": 1.0, "sheen": 0.4}))
+	mats.append(_fabric("M_Sweater", Color(0.38, 0.08, 0.07), "Fabric034", {"tex_scale": 5.0, "tex_mean": 0.36,
+		"tex_contrast": 1.5, "normal_strength": 1.6, "sheen": 0.5}))
+	mats.append(_std("M_PlasticRed", Color(0.52, 0.06, 0.04), 0.35))
+	mats.append(_std("M_PlasticWhite", Color(0.8, 0.79, 0.74), 0.35))
+	mats.append(_tex_std("M_BookletRed", Color(0.42, 0.05, 0.035), "Leather033A", {"scale": 12.0, "rough": 0.55,
+		"nstrength": 0.6}))
+	mats.append(_tex_std("M_BookletGreen", Color(0.13, 0.24, 0.17), "Leather033A", {"scale": 12.0, "rough": 0.55,
+		"nstrength": 0.6}))
+	mats.append(_std("M_Briquette", Color(0.045, 0.045, 0.045), 0.95))
+	var ground := _std("M_WetGround", Color(0.05, 0.05, 0.05), 0.12)
+	ground.metallic_specular = 0.7
+	mats.append(ground)
+	mats.append(_std("M_Brick", Color(0.22, 0.12, 0.09), 0.85))
+	mats.append(_std("M_CraneRust", Color(0.12, 0.07, 0.05), 0.75, 0.3))
+	mats.append(_std("M_ShipHull", Color(0.08, 0.08, 0.085), 0.6, 0.2))
+	mats.append(_std("M_StreetLampGlass", Color(1.0, 0.6, 0.3), 0.3, 0.0, Color(1.0, 0.55, 0.2), 2.5))
+	mats.append(_std("M_NeighborWindow", Color(0.6, 0.45, 0.25), 0.5, 0.0, Color(1.0, 0.62, 0.3), 1.4))
+	mats.append(_std("M_Coil", Color(0.45, 0.4, 0.36), 0.5, 0.7))
+	mats.append(_std("M_Noodle", Color(0.8, 0.7, 0.45), 0.6))
+	mats.append(_std("M_Cigarette", Color(0.82, 0.78, 0.7), 0.85))
+	mats.append(_std("M_CigFilter", Color(0.7, 0.45, 0.22), 0.85))
+	mats.append(_std("M_PagerLcd", Color(0.45, 0.5, 0.4), 0.3))
+	# ---- 办事处
+	var lamp_green := _std("M_LampGreen", Color(0.03, 0.2, 0.08), 0.1)
+	lamp_green.emission_enabled = true
+	lamp_green.emission = Color(0.1, 0.5, 0.2)
+	lamp_green.emission_energy_multiplier = 0.3
+	lamp_green.clearcoat_enabled = true
+	mats.append(lamp_green)
+	mats.append(_paint("M_SafeGreen", Color(0.13, 0.2, 0.15), {"rough": 0.4, "metal": 0.2, "edge": 1.2, "rust": 0.1,
+		"smudge": 0.8, "dust": 0.3, "wear": Color(0.4, 0.4, 0.38), "floor_h": 0.0, "floor": 0.4}))
+	mats.append(_std("M_InkPaste", Color(0.48, 0.025, 0.02), 0.75))
+	var water := ShaderMaterial.new()
+	water.resource_name = "M_HarborWater"
+	water.shader = HARBOR
+	mats.append(water)
+	mats.append(_std("M_ShipWhite", Color(0.55, 0.55, 0.52), 0.7, 0.1))
+	mats.append(_std("M_Hill", Color(0.09, 0.11, 0.1), 0.95))
+	mats.append(_fabric("M_Tarp", Color(0.14, 0.2, 0.17), "Fabric036", {"tex_scale": 0.8, "tex_mean": 0.49,
+		"normal_strength": 1.2, "sheen": 0.1, "roughness": 0.55, "stain_amount": 0.4}))
+	mats.append(_std("M_NavLight", Color(1.0, 0.2, 0.1), 0.3, 0.0, Color(1.0, 0.15, 0.08), 6.0))
+	mats.append(_tex_std("M_ScrollPaper", Color(0.86, 0.82, 0.7), "Fabric045", {"rough": 0.95, "scale": 8.0,
+		"nstrength": 0.2}))
+	mats.append(_std("M_RottenFruit", Color(0.22, 0.13, 0.05), 0.55))

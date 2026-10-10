@@ -1,0 +1,240 @@
+// 第一章「契」：东溟办事处（scenes/office.tscn，脚本 scripts/story/office.gd）。格式见 docs/story.md 末尾。
+// 一九九八年八月二十九日（农历七月初八）下午三点，阴雨。沈渡坐在写字台后面的官帽椅里，背后是一整面钢窗和码头。
+
+# arrive
+沈渡：周先生，请坐。
+@flag greeted
+
+# arrive_again
+沈渡：坐吧，周先生。不急。
+
+# start
+@anim sit_breathe
+沈渡：路上雨大吧。
+沈渡：茶是刚沏的，本地的老白茶，您尝尝。
+（他自己面前那碗，一点热气都没有。）
+沈渡：我姓沈，沈渡。东溟海洋工程的。信您收到了。
+* 你们怎么找到我的？ -> how_found
+* 说正事吧。 -> job
+
+# how_found
+沈渡：船厂的花名册上有您。原海军某部，干了四年轮机、四年操艇。
+沈渡：退伍以后在厂里修了六年船。白沙门会开潜艇的人，不多。
+@anim sit_touch_face
+沈渡：……会开，又肯去的，就更少了。
+-> job
+
+# job
+@anim sit_think
+沈渡：事情不复杂。白沙门往东一百四十海里，海底有一条清朝的沉船。
+沈渡：船上有一件东西，我们东家想要。您开船下去，把吊钩挂上，就算完事。
+沈渡：船是现成的。就在码头上——您往我身后看。
+@look window
+（一条黑色的潜艇靠在码头上，围壳上盖着半截帆布。后面一条工作船，船尾立着一个大吊架。）
+@look shen
+-> menu
+
+# menu
+* 什么东西？ -> what
+* 多深？ -> depth
+* 多少钱？ -> money
++ 合同给我看看。 -> contract
++ （站起来走走） -> stand_up
+
+# what
+沈渡：一只箱子。木头的，外面包着铁。
+沈渡：东家祖上的东西，算是……家传的。
+@flag asked_what
+-> menu
+
+# depth
+沈渡：一千一百米上下。那片海，老辈人叫它归墟。
+@anim sit_shrug
+沈渡：您是开过潜艇的人，不信这些。
+-> menu
+
+# money
+沈渡：二十万。
+（二十万。我在船厂一个月四百八。）
+沈渡：签了合同，先付五万定金。不经您的手——令堂住院的账户，今天上午已经替您交上了。
+* 你们查我？ -> investigated
+* ……谢谢。 -> menu
+
+# investigated
+@anim sit_touch_face
+沈渡：做事总要知道跟谁做。
+沈渡：周桂芳，五十九岁，县医院肾内科十四床。一个礼拜透析三次。
+沈渡：您放心，那边我们会照应。
+-> menu
+
+# contract
+沈渡：您慢慢看。
+@read contract
+@flag read_contract
+-> contract_menu
+
+# contract_menu
+* 为什么要封舷窗？ -> q_window
+* 生辰八字是做什么用的？ -> q_bazi
+* 之前有人开过这条船吗？ -> q_before
+* 艉舱里是什么？ -> q_aft
+* “目标物归位”是什么意思？ -> q_return
++ 我再看看合同。 -> contract_again
++ 我考虑一下。 -> think
++ （站起来走走） -> stand_up
++ 签。 -> sign
+
+# stand_up
+沈渡：您随意。
+@stand
+@end
+
+# contract_again
+@read contract
+-> contract_menu
+
+# q_window
+沈渡：东家的规矩。祖上的东西，不愿意给外人看。
+@anim sit_think
+沈渡：您就当是开夜车，不看路边。声呐比眼睛好使——您是老兵，您知道。
+-> contract_menu
+
+# q_bazi
+沈渡：出海看日子，老规矩。七月十四下水，这个日子是请人看过的。
+@smile
+沈渡：您是七月半的生日吧。
+（……我还没告诉他。）
+@flag shen_knew_birthday
+-> contract_menu
+
+# q_before
+沈渡：有。
+@wait 1.5
+沈渡：……天气不好，没能下到底。
+沈渡：这回是您，一定能成。
+@flag asked_before
+-> contract_menu
+
+# q_aft
+沈渡：东家的东西。祭海用的，老规矩，图个吉利。
+沈渡：您别动它就行。
+-> contract_menu
+
+# q_return
+@anim sit_shrug
+沈渡：东西从哪儿来，就回哪儿去。
+沈渡：落叶归根，周先生。
+-> contract_menu
+
+# think
+沈渡：可以。
+@anim sit_touch_face
+沈渡：只是令堂那边……医院说，透析的钱，撑不过下个礼拜。
+@wait 1.0
+-> contract_menu
+
+# sign
+沈渡：生辰写在这里。
+@sign birth
+（手有点抖。）
+沈渡：名字。
+@sign name
+沈渡：再按个手印。
+@sign thumb
+@clock stop
+@wait 2.0
+@smile big
+沈渡：合作愉快，周先生。
+@give talisman
+沈渡：这个您收着。下水之前，挂在驾驶台上。保平安的。
+沈渡：七月十四，晚上十点，三号码头。别迟了。
+@wait 0.8
+沈渡：……也别跟人说。
+@flag signed
+@end
+
+// ---------------------------------------------------------------- 站起来到处看的时候
+# shen_after
+沈渡：七月十四，晚上十点。
+@smile
+
+# shen_standing
+沈渡：周先生，坐下说。
+
+# tea_mine
+（老白茶，有点涩。）
+
+# tea_shen
+（他那碗一口没动。茶面上落了一层细灰。）
+
+# chart
+@read chart
+（白沙门外海。一个红圈，旁边用毛笔写着两个字：归墟。）
+
+# rubbing
+@read rubbing
+（字缺了一大半。……光绪四年，戊寅，七月望……沈……镇……海不扬波。）
+
+# old_photo
+@read old_photo
+（民国时候的照片，一大家子人站在一条船前头。）
+（前排正中坐着的那个人——）
+@look shen
+（跟对面这位沈先生，像得出奇。）
+沈渡：我祖父。
+@smile
+
+# desk_glass
+@read desk_chart
+（玻璃板底下压着一张海图，红笔在一个地方点了一个点，旁边写着一串数字。）
+
+# screen
+（屏风后面供着东西。）
+
+# altar
+（三根香快烧完了。一对红蜡烛，一盘供果，烂得发黑。）
+（牌位上蒙着红布。）
+?signed -> altar_after
+沈渡：周先生。
+沈渡：那是我们家的祖宗。
+@flag saw_altar
+
+# altar_after
+（……还是别动人家的东西。）
+
+# scroll
+（海不扬波。落款是一个红印：沈氏。）
+
+# clock
+?signed -> clock_stopped
+（北极星挂钟。三点零七分。）
+
+# clock_stopped
+（钟停了。三点十四分。）
+
+# luopan
+（罗盘。看风水用的那种。）
+
+# phone
+（黑色拨盘电话。电话线是从墙上明线接下来的。）
+
+# umbrella
+（一把黑伞，还在往下滴水。）
+（外面在下雨。可他说他一下午都在屋里。）
+
+# window
+（码头。那条潜艇……盖着半截帆布。后面那条是母船，船尾一个大吊架。）
+（雨大了。）
+
+# safe
+（上海出的保险柜。密码盘上的漆磨掉了一圈。）
+
+# lifebuoy
+（救生圈上的字磨得看不清了。）
+
+# door_before
+沈渡：周先生，事情还没说完。
+
+# leave
+（七月十四，晚上十点，三号码头。）
+@leave

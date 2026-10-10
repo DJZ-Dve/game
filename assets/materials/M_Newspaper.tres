@@ -1,0 +1,17 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_NormalGL.jpg" id="1_omvsd"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Roughness.jpg" id="2_k0bwd"]
+
+[resource]
+resource_name = "M_Newspaper"
+albedo_color = Color(0.62, 0.6, 0.52, 1)
+roughness = 0.95
+roughness_texture = ExtResource("2_k0bwd")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.15
+normal_texture = ExtResource("1_omvsd")
+uv1_scale = Vector3(10, 10, 10)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

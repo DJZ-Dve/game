@@ -30,3 +30,5 @@ shader_parameter/binding_width = 0.014
 shader_parameter/binding_color = Color(0.62, 0.62, 0.58, 1)
 shader_parameter/thread_color = null
 shader_parameter/backlight = null
+shader_parameter/check_size = null
+shader_parameter/check_color = null

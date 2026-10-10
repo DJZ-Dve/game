@@ -1,0 +1,34 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/fabric.gdshader" id="1_icjua"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric036/Fabric036_2K-JPG_Color.jpg" id="2_uq7ib"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric036/Fabric036_2K-JPG_NormalGL.jpg" id="3_8j5bh"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric036/Fabric036_2K-JPG_Roughness.jpg" id="4_8bhri"]
+
+[resource]
+resource_name = "M_Tarp"
+render_priority = 0
+shader = ExtResource("1_icjua")
+shader_parameter/tint = Color(0.14, 0.2, 0.17, 1)
+shader_parameter/albedo_tex = ExtResource("2_uq7ib")
+shader_parameter/normal_tex = ExtResource("3_8j5bh")
+shader_parameter/rough_tex = ExtResource("4_8bhri")
+shader_parameter/tex_scale = 0.8
+shader_parameter/albedo_mix = null
+shader_parameter/tex_mean = 0.49
+shader_parameter/tex_contrast = null
+shader_parameter/normal_strength = 1.2
+shader_parameter/roughness = 0.55
+shader_parameter/sheen = 0.1
+shader_parameter/sheen_tint = null
+shader_parameter/cavity_dirt = null
+shader_parameter/variation = null
+shader_parameter/stain_amount = 0.4
+shader_parameter/stain_scale = null
+shader_parameter/stain_color = null
+shader_parameter/binding_width = null
+shader_parameter/binding_color = null
+shader_parameter/thread_color = null
+shader_parameter/backlight = null
+shader_parameter/check_size = null
+shader_parameter/check_color = null

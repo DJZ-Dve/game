@@ -1,0 +1,19 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Wood049/Wood049_2K-JPG_Color.jpg" id="1_psnyn"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Wood049/Wood049_2K-JPG_NormalGL.jpg" id="2_4u8hw"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Wood049/Wood049_2K-JPG_Roughness.jpg" id="3_72fld"]
+
+[resource]
+resource_name = "M_WoodLight"
+albedo_color = Color(1, 0.86, 0.62, 1)
+albedo_texture = ExtResource("1_psnyn")
+roughness = 0.45
+roughness_texture = ExtResource("3_72fld")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.5
+normal_texture = ExtResource("2_4u8hw")
+uv1_scale = Vector3(1.5, 1.5, 1.5)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

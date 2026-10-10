@@ -1,0 +1,18 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Color.jpg" id="1_buum8"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_NormalGL.jpg" id="2_jbmvv"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Roughness.jpg" id="3_ny8wt"]
+
+[resource]
+resource_name = "M_Rope"
+albedo_color = Color(0.55, 0.5, 0.4, 1)
+albedo_texture = ExtResource("1_buum8")
+roughness = 0.95
+roughness_texture = ExtResource("3_ny8wt")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_texture = ExtResource("2_jbmvv")
+uv1_scale = Vector3(40, 40, 40)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

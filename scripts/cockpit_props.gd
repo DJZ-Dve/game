@@ -564,6 +564,8 @@ const GI_VOLUMES := {
 
 
 func _bake_gi(sub: Node) -> void:
+	if not Story.is_target("deep_sea"):
+		return
 	var baking := DebugArgs.has("bake-gi")
 	for nm: String in GI_VOLUMES:
 		var gi := sub.find_child(nm, true, false) as VoxelGI

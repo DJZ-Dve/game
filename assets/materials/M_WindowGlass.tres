@@ -1,0 +1,16 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/rain_glass.gdshader" id="1_80l5u"]
+
+[resource]
+resource_name = "M_WindowGlass"
+render_priority = 0
+shader = ExtResource("1_80l5u")
+shader_parameter/tint = null
+shader_parameter/base_alpha = null
+shader_parameter/rain = null
+shader_parameter/drop_size = null
+shader_parameter/speed = null
+shader_parameter/refraction = null
+shader_parameter/fog = null
+shader_parameter/dirt = null

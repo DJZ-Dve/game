@@ -1,0 +1,17 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_NormalGL.jpg" id="1_278ic"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Roughness.jpg" id="2_mvh8j"]
+
+[resource]
+resource_name = "M_ScrollPaper"
+albedo_color = Color(0.86, 0.82, 0.7, 1)
+roughness = 0.95
+roughness_texture = ExtResource("2_mvh8j")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.2
+normal_texture = ExtResource("1_278ic")
+uv1_scale = Vector3(8, 8, 8)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

@@ -1,0 +1,19 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Color.jpg" id="1_bueg3"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_NormalGL.jpg" id="2_6bc71"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric045/Fabric045_2K-JPG_Roughness.jpg" id="3_8h6cg"]
+
+[resource]
+resource_name = "M_Wire"
+albedo_color = Color(0.5, 0.42, 0.3, 1)
+albedo_texture = ExtResource("1_bueg3")
+roughness = 0.9
+roughness_texture = ExtResource("3_8h6cg")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.8
+normal_texture = ExtResource("2_6bc71")
+uv1_scale = Vector3(30, 30, 30)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

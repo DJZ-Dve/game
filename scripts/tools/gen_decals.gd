@@ -1,5 +1,5 @@
 extends SceneTree
-## 生成舱内贴花贴图（无界面运行）：
+## 生成贴花贴图（舱内、岸上的房间共用；无界面运行）：
 ##   Godot --path . --script res://scripts/tools/gen_decal_text.gd   # 先画文字底图
 ##   Godot --headless --path . --script res://scripts/tools/gen_decals.gd
 ## 输出 assets/textures/decals/<名字>.png（颜色 + 透明度），部分还有 <名字>_orm.png（AO/粗糙度/金属度，
@@ -33,6 +33,10 @@ func _init() -> void:
 	_rust()
 	_streak()
 	_hand()
+	_floor_wear()
+	_damp()
+	_ceil_stain()
+	_mold()
 	_text("c03", Color(0.8, 0.78, 0.7), 0.55)
 	_text("fire", Color(0.58, 0.05, 0.03), 0.4)
 	for t in ["cool", "firewater", "return", "air"]:
@@ -359,3 +363,76 @@ func _text(name: String, color: Color, wear_amt: float) -> void:
 			var c := color.lerp(color * 0.75, _n201(x * 0.8, y * 0.8))
 			img.set_pixel(x, y, Color(c.r, c.g, c.b, al))
 	_save(img, "text_" + name)
+
+
+## 地板漆上走出来的路（宿舍）：一条宽带，中间漆磨掉露出灰水泥、两边渐淡，上面一层鞋底带进来的灰；表面更哑
+func _floor_wear() -> void:
+	var w := 256
+	var h := 512
+	var img := _img(w, h)
+	for y in h:
+		for x in w:
+			var u := float(x) / w - 0.5
+			var v := float(y) / h
+			var lane := 1.0 - _sstep(0.12, 0.48, absf(u + (_n01(0, y * 0.6) - 0.5) * 0.18))
+			lane *= _sstep(0.0, 0.18, v) * (1.0 - _sstep(0.82, 1.0, v))
+			var bare := _sstep(0.45, 0.75, lane * (0.6 + 0.8 * _n01(x * 3.0, y * 3.0)))
+			var dirt := lane * (0.3 + 0.4 * _n201(x * 2.0, y * 2.0))
+			var c := Color(0.32, 0.3, 0.27).lerp(Color(0.45, 0.43, 0.4), bare)
+			img.set_pixel(x, y, Color(c.r, c.g, c.b, clampf(dirt * 0.55 + bare * 0.6, 0.0, 0.85)))
+	_save(img, "floor_wear")
+	_orm_from(img, 0.85, "floor_wear")
+
+
+## 窗下墙面返潮（宿舍）：下面一大片发暗、发黄，上沿一道起伏的水线，墙皮鼓起来的地方颜色更深
+func _damp() -> void:
+	var w := 512
+	var h := 256
+	var img := _img(w, h)
+	for y in h:
+		for x in w:
+			var u := float(x) / w
+			var v := float(y) / h   # 0 在上面
+			var top := 0.35 + (_n01(x * 1.2, 0) - 0.5) * 0.35
+			var wet := _sstep(top - 0.05, top + 0.15, v) * _sstep(0.0, 0.12, u) * (1.0 - _sstep(0.88, 1.0, u))
+			var tide := exp(-pow((v - top) / 0.025, 2.0)) * _sstep(0.0, 0.12, u) * (1.0 - _sstep(0.88, 1.0, u))
+			var blot := _sstep(0.55, 0.75, _n201(x * 2.5, y * 2.5)) * wet
+			var c := Color(0.42, 0.38, 0.28).lerp(Color(0.3, 0.25, 0.17), clampf(tide + blot, 0.0, 1.0))
+			img.set_pixel(x, y, Color(c.r, c.g, c.b, clampf(wet * 0.35 + tide * 0.55 + blot * 0.3, 0.0, 0.9)))
+	_save(img, "damp")
+	_orm_from(img, 0.55, "damp")
+
+
+## 天花板上的水渍：几圈黄褐色的干痕套在一起（漏了好几回），中间发灰
+func _ceil_stain() -> void:
+	var s := 512
+	var img := _img(s, s)
+	for y in s:
+		for x in s:
+			var p := Vector2(x, y) / s - Vector2(0.5, 0.5)
+			var f := p.length() * 2.0 + (_n01(x * 1.3, y * 1.3) - 0.5) * 0.45
+			var al := 0.0
+			var c := Color(0.45, 0.36, 0.22)
+			for k in 3:
+				var r := 0.9 - 0.25 * k
+				al = maxf(al, exp(-pow((f - r) / (0.03 + 0.01 * k), 2.0)) * (0.7 - 0.15 * k))
+			var inside := (1.0 - _sstep(0.85, 0.95, f)) * 0.22
+			al = maxf(al, inside)
+			c = c.lerp(Color(0.35, 0.3, 0.22), inside / maxf(al, 1e-3))
+			img.set_pixel(x, y, Color(c.r, c.g, c.b, clampf(al, 0.0, 1.0)))
+	_save(img, "ceil_stain")
+
+
+## 墙角的霉：一团团黑绿色的斑点，从角上往外散
+func _mold() -> void:
+	var s := 256
+	var img := _img(s, s)
+	for y in s:
+		for x in s:
+			var p := Vector2(x, y) / s
+			var corner := 1.0 - _sstep(0.2, 1.0, (p - Vector2(0.5, 0.0)).length() * 1.4)
+			var speck := _sstep(0.55, 0.7, _n201(x * 6.0, y * 6.0)) * 0.8 + _sstep(0.5, 0.8, _n01(x * 2.0, y * 2.0)) * 0.4
+			var al := clampf(corner * speck, 0.0, 1.0) * 0.85
+			var c := Color(0.08, 0.1, 0.07).lerp(Color(0.2, 0.22, 0.14), _n01(x * 8.0, y * 8.0))
+			img.set_pixel(x, y, Color(c.r, c.g, c.b, al))
+	_save(img, "mold")

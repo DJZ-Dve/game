@@ -1,0 +1,19 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Wood049/Wood049_2K-JPG_Color.jpg" id="1_f2bkj"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Wood049/Wood049_2K-JPG_NormalGL.jpg" id="2_ep8ou"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Wood049/Wood049_2K-JPG_Roughness.jpg" id="3_48e4h"]
+
+[resource]
+resource_name = "M_WoodRaw"
+albedo_color = Color(0.9, 0.82, 0.68, 1)
+albedo_texture = ExtResource("1_f2bkj")
+roughness = 0.85
+roughness_texture = ExtResource("3_48e4h")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.8
+normal_texture = ExtResource("2_ep8ou")
+uv1_scale = Vector3(2, 2, 2)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0

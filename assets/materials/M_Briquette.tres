@@ -1,0 +1,6 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[resource]
+resource_name = "M_Briquette"
+albedo_color = Color(0.045, 0.045, 0.045, 1)
+roughness = 0.95

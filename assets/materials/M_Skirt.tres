@@ -1,0 +1,60 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/worn_surface.gdshader" id="1_6uk0h"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Concrete046/Concrete046_2K-JPG_Color.jpg" id="2_3oapx"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Concrete046/Concrete046_2K-JPG_Roughness.jpg" id="3_x0w8s"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Concrete046/Concrete046_2K-JPG_NormalGL.jpg" id="4_685ts"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fingerprints001/Fingerprints001_2K-JPG_Opacity.jpg" id="5_ayqjr"]
+
+[resource]
+resource_name = "M_Skirt"
+render_priority = 0
+shader = ExtResource("1_6uk0h")
+shader_parameter/paint_color = Color(0.4, 0.4, 0.38, 1)
+shader_parameter/paint_roughness = 0.85
+shader_parameter/paint_metallic = 0.0
+shader_parameter/paint_variation = 0.5
+shader_parameter/grime_albedo = ExtResource("2_3oapx")
+shader_parameter/grime_normal = ExtResource("4_685ts")
+shader_parameter/grime_arm = ExtResource("3_x0w8s")
+shader_parameter/arm_packed = false
+shader_parameter/tex_scale = 1.5
+shader_parameter/normal_strength = 0.7
+shader_parameter/rough_variation = 0.25
+shader_parameter/rust_amount = 0.0
+shader_parameter/cavity_dirt = 1.0
+shader_parameter/edge_wear = 1.0
+shader_parameter/wear_color = Color(0.5, 0.5, 0.48, 1)
+shader_parameter/smudge_tex = ExtResource("5_ayqjr")
+shader_parameter/smudge_amount = 0.5
+shader_parameter/smudge_scale = 5.0
+shader_parameter/dust_amount = 0.3
+shader_parameter/dust_color = null
+shader_parameter/streak_amount = null
+shader_parameter/streak_scale = null
+shader_parameter/streak_color = null
+shader_parameter/streak_cover = null
+shader_parameter/macro_amount = 0.8
+shader_parameter/macro_scale = null
+shader_parameter/floor_dirt = 0.8
+shader_parameter/floor_height = 0.0
+shader_parameter/floor_fade = 0.1
+shader_parameter/floor_color = null
+shader_parameter/condensation = null
+shader_parameter/droplet_scale = null
+shader_parameter/cond_height = null
+shader_parameter/cond_patch_scale = null
+shader_parameter/cond_patch_cover = null
+shader_parameter/cond_cavity = null
+shader_parameter/wear_metallic = 0.0
+shader_parameter/primer_amount = null
+shader_parameter/primer_color = null
+shader_parameter/chip_amount = null
+shader_parameter/chip_scale = null
+shader_parameter/chip_cover = null
+shader_parameter/bare_rust = 0.0
+shader_parameter/paint_depth = 0.0
+shader_parameter/warp_amount = 0.0
+shader_parameter/warp_scale = 2.5
+shader_parameter/emission_color = null
+shader_parameter/emission_energy = null

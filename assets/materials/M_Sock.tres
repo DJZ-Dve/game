@@ -1,0 +1,34 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/fabric.gdshader" id="1_0jrf0"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric034/Fabric034_2K-JPG_Color.jpg" id="2_e4ato"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric034/Fabric034_2K-JPG_NormalGL.jpg" id="3_batas"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fabric034/Fabric034_2K-JPG_Roughness.jpg" id="4_g1csb"]
+
+[resource]
+resource_name = "M_Sock"
+render_priority = 0
+shader = ExtResource("1_0jrf0")
+shader_parameter/tint = Color(0.2, 0.2, 0.22, 1)
+shader_parameter/albedo_tex = ExtResource("2_e4ato")
+shader_parameter/normal_tex = ExtResource("3_batas")
+shader_parameter/rough_tex = ExtResource("4_g1csb")
+shader_parameter/tex_scale = 6.0
+shader_parameter/albedo_mix = null
+shader_parameter/tex_mean = 0.36
+shader_parameter/tex_contrast = null
+shader_parameter/normal_strength = 1.0
+shader_parameter/roughness = null
+shader_parameter/sheen = 0.4
+shader_parameter/sheen_tint = null
+shader_parameter/cavity_dirt = null
+shader_parameter/variation = null
+shader_parameter/stain_amount = null
+shader_parameter/stain_scale = null
+shader_parameter/stain_color = null
+shader_parameter/binding_width = null
+shader_parameter/binding_color = null
+shader_parameter/thread_color = null
+shader_parameter/backlight = null
+shader_parameter/check_size = null
+shader_parameter/check_color = null

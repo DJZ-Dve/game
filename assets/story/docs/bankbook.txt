@@ -1,0 +1,17 @@
+[center][font_size=40][b]中国工商银行
+活期储蓄存折[/b][/font_size]
+[font_size=24]户名：周海生　　账号：1203-0087-6614-52[/font_size][/center]
+
+[font_size=26][table=5]
+[cell][b]日　期[/b][/cell][cell][b]摘要[/b][/cell][cell][b]支　出[/b][/cell][cell][b]存　入[/b][/cell][cell][b]余　额[/b][/cell]
+[cell]98.01.05[/cell][cell]工资[/cell][cell][/cell][cell]480.00[/cell][cell]14,206.30[/cell]
+[cell]98.03.26[/cell][cell]取款[/cell][cell]8,000.00[/cell][cell][/cell][cell]6,206.30[/cell]
+[cell]98.04.05[/cell][cell]工资[/cell][cell][/cell][cell]480.00[/cell][cell]6,686.30[/cell]
+[cell]98.04.20[/cell][cell]取款[/cell][cell]3,000.00[/cell][cell][/cell][cell]3,686.30[/cell]
+[cell]98.05.05[/cell][cell]工资[/cell][cell][/cell][cell]240.00[/cell][cell]3,926.30[/cell]
+[cell]98.05.18[/cell][cell]取款[/cell][cell]2,500.00[/cell][cell][/cell][cell]1,426.30[/cell]
+[cell]98.06.05[/cell][cell]生活费[/cell][cell][/cell][cell]180.00[/cell][cell]1,606.30[/cell]
+[cell]98.06.22[/cell][cell]取款[/cell][cell]1,200.00[/cell][cell][/cell][cell]406.30[/cell]
+[cell]98.07.05[/cell][cell]生活费[/cell][cell][/cell][cell]180.00[/cell][cell]586.30[/cell]
+[cell]98.07.31[/cell][cell]取款[/cell][cell]372.80[/cell][cell][/cell][cell]213.50[/cell]
+[/table][/font_size]

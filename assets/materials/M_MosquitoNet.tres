@@ -1,0 +1,12 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/mosquito_net.gdshader" id="1_v5vbj"]
+
+[resource]
+resource_name = "M_MosquitoNet"
+render_priority = 0
+shader = ExtResource("1_v5vbj")
+shader_parameter/color = null
+shader_parameter/mesh = null
+shader_parameter/thread = null
+shader_parameter/opacity = null

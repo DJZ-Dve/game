@@ -5,83 +5,37 @@
 导出 assets/models/crew_body.glb（骨骼 + 身体、头两块网格 + walk / run / idle / sit 四段原地动画）
 和 assets/models/crew_body_gait.json（走、跑动画里左右脚落地在循环里的位置，Godot 拿它把动画和步伐对齐）。
 
-- 动画：Rocketbox 的动画文件和角色是同一套 3ds Max Biped 骨骼，但动画文件的绑定姿势不一样，不能直接套。
-  这里用世界空间的「复制旋转」约束把每根骨头的朝向抄过来（骨盆再抄位置，按腿长比例缩放），再烘焙成角色自己的动作
+- 动画：按世界空间朝向重定向到角色骨骼上（见 rocketbox.py 的 retarget）
 - 贴图：蓝色工装压成深海军蓝的作业服，磨旧、蹭脏一点；浅黄色劳保鞋改成黑皮靴；手不动
-- 安全帽删掉；头单独一块网格（Godot 里只投影子不渲染，第一人称看不见自己的脸）
+- 头换成 Police_Male_05（东亚面孔、短发——主角周海生的脸，见 docs/story.md），帽子去掉，带眨眼、微笑的形态键；
+  头单独一块网格，Godot 里只有镜子看得见（第一人称看不见自己的脸），手的肤色往这张脸上靠
 - 缩放到眼睛离地 1.62 米（和 cockpit_camera.gd 的 eye_height 一致），脸朝 Blender +Y（Godot 的 -Z）
 """
 import json
 import math
 import os
+import sys
 
 import bpy
 import numpy as np
 from mathutils import Matrix, Vector as V
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SRC = os.path.join(ROOT, "blender", "cache", "rocketbox")
+sys.path.insert(0, os.path.dirname(__file__))
+from rocketbox import ROOT, SRC, import_fbx, bone_world, retarget, push_nla, rest_pose, trim_shapes  # noqa: E402
 OUT = os.path.join(ROOT, "assets", "models", "crew_body.glb")
 GAIT = os.path.join(ROOT, "assets", "models", "crew_body_gait.json")
 EYE = 1.62
+FACE = "Police_Male_05_facial.fbx"
+FACE_TEX = "m169"
+FACE_SHAPES = {"AK_09_EyeBlinkLeft", "AK_10_EyeBlinkRight", "AK_19_EyeSquintLeft", "AK_20_EyeSquintRight",
+               "AK_21_EyeWideLeft", "AK_22_EyeWideRight", "AK_25_JawOpen", "AK_44_MouthSmileLeft",
+               "AK_45_MouthSmileRight", "AK_03_BrowInnerUp", "AK_30_MouthFrownLeft", "AK_31_MouthFrownRight"}
 ANIMS = {
     "walk": "m_walk_neutral_01.max.fbx",
     "run": "m_run_neutral.max.fbx",
     "idle": "m_idle_neutral_01.max.fbx",
     "sit": "m_sit_chair_idle_neutral_01.max.fbx",
 }
-
-
-def import_fbx(name):
-    before = set(bpy.data.objects)
-    bpy.ops.import_scene.fbx(filepath=os.path.join(SRC, name), automatic_bone_orientation=False)
-    return [o for o in bpy.data.objects if o not in before]
-
-
-def leg_length(arm):
-    b = arm.data.bones
-    pts = [arm.matrix_world @ b[n].head_local for n in ("Bip01 L Thigh", "Bip01 L Calf", "Bip01 L Foot")]
-    return (pts[1] - pts[0]).length + (pts[2] - pts[1]).length
-
-
-def bone_world(arm, name):
-    return arm.matrix_world @ arm.pose.bones[name].head
-
-
-def retarget(arm, key, fname):
-    """把动画文件的动作按世界空间朝向抄到角色骨骼上，烘焙成名为 key 的动作。"""
-    new = import_fbx(fname)
-    src = next(o for o in new if o.type == 'ARMATURE')
-    act = src.animation_data.action
-    f0, f1 = (int(round(v)) for v in act.frame_range)
-    # 骨盆位置按腿长比例缩放（两副骨架高矮不一样，不缩脚会悬空或者陷进地里）
-    k = leg_length(arm) / leg_length(src)
-    src.matrix_world = Matrix.Diagonal((k, k, k, 1.0)) @ src.matrix_world
-    names = {b.name for b in src.data.bones}
-    for pb in arm.pose.bones:
-        if pb.name not in names:
-            continue
-        c = pb.constraints.new('COPY_ROTATION')
-        c.target, c.subtarget = src, pb.name
-        c.owner_space = c.target_space = 'WORLD'
-        if pb.name == "Bip01 Pelvis":
-            c = pb.constraints.new('COPY_LOCATION')
-            c.target, c.subtarget = src, pb.name
-            c.owner_space = c.target_space = 'WORLD'
-    bpy.context.view_layer.objects.active = arm
-    arm.select_set(True)
-    bpy.ops.object.mode_set(mode='POSE')
-    bpy.ops.pose.select_all(action='SELECT')
-    bpy.ops.nla.bake(frame_start=f0, frame_end=f1, only_selected=False, visual_keying=True,
-                     clear_constraints=True, use_current_action=False, bake_types={'POSE'})
-    bpy.ops.object.mode_set(mode='OBJECT')
-    baked = arm.animation_data.action
-    baked.name = key
-    baked.use_fake_user = True
-    for o in new:
-        bpy.data.objects.remove(o, do_unlink=True)
-    bpy.data.actions.remove(act)
-    return baked, f0, f1
 
 
 def contacts(arm, act, f0, f1):
@@ -106,7 +60,88 @@ def contacts(arm, act, f0, f1):
     return out
 
 
-def recolor(img_path):
+def swap_head(arm, old_head):
+    """换脸：导入 Police_Male_05 的头（带表情形态键），去掉警帽的几块（帽顶、帽带、扣子、帽徽——都是单独的散件），
+    按两副骨架头骨的位置挪过来，绑到工装身体的骨架上（骨头名字一样，绑定姿势下不变形），替掉原来的头。
+    返回 (新的头, 脸上皮肤的平均颜色)。"""
+    objs = import_fbx(FACE)
+    farm = next(o for o in objs if o.type == 'ARMATURE')
+    fmesh = next(o for o in objs if o.type == 'MESH')
+    for o in objs:
+        if o.type == 'EMPTY':
+            bpy.data.objects.remove(o, do_unlink=True)
+    offset = bone_world(arm, "Bip01 Head") - bone_world(farm, "Bip01 Head")
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = fmesh
+    fmesh.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.separate(type='MATERIAL')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    parts = [o for o in bpy.data.objects if o.type == 'MESH' and o.data.materials
+             and o.data.materials[0].name.startswith(FACE_TEX)]
+    head = next(o for o in parts if "head" in o.data.materials[0].name)
+    for o in parts:
+        if o is not head:
+            bpy.data.objects.remove(o, do_unlink=True)
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = head
+    head.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.separate(type='LOOSE')
+    bpy.ops.object.mode_set(mode='OBJECT')
+    keep = []
+    for o in [o for o in bpy.data.objects if o.type == 'MESH' and o.data.materials
+              and "head" in o.data.materials[0].name and o is not old_head]:
+        uv = np.array([d.uv[:] for d in o.data.uv_layers.active.data])
+        u, v = uv.mean(0)
+        # 帽子的几块在贴图下半截偏右（u > 0.33、v < 0.3）；眼球在左下角（u < 0.33），脸在上半截
+        if v < 0.3 and u > 0.33:
+            bpy.data.objects.remove(o, do_unlink=True)
+        else:
+            keep.append(o)
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in keep:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = keep[0]
+    bpy.ops.object.join()
+    head = keep[0]
+    trim_shapes(head, FACE_SHAPES)
+    # 挪到工装身体的头骨上，改绑到它的骨架
+    mw = head.matrix_world.copy()
+    head.parent = arm
+    head.matrix_world = Matrix.Translation(offset) @ mw
+    for m in head.modifiers:
+        if m.type == 'ARMATURE':
+            m.object = arm
+    bpy.data.objects.remove(farm, do_unlink=True)
+    bpy.data.objects.remove(old_head, do_unlink=True)
+    head.name = head.data.name = "Crew_Head"
+    # 贴图
+    img = bpy.data.images.load(os.path.join(SRC, f"{FACE_TEX}_head_color.tga"))
+    w, h = img.size
+    px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)
+    skin = px[int(h * 0.62):int(h * 0.72), int(w * 0.42):int(w * 0.58), :3].reshape(-1, 3).mean(0)
+    nrm = bpy.data.images.load(os.path.join(SRC, f"{FACE_TEX}_head_normal.tga"))
+    nrm.colorspace_settings.name = 'Non-Color'
+    mat = bpy.data.materials.new("Crew_Head")
+    nt = mat.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    t = nt.nodes.new('ShaderNodeTexImage')
+    t.image = img
+    nt.links.new(t.outputs["Color"], bsdf.inputs["Base Color"])
+    tn = nt.nodes.new('ShaderNodeTexImage')
+    tn.image = nrm
+    nm = nt.nodes.new('ShaderNodeNormalMap')
+    nt.links.new(tn.outputs["Color"], nm.inputs["Color"])
+    nt.links.new(nm.outputs["Normal"], bsdf.inputs["Normal"])
+    bsdf.inputs["Roughness"].default_value = 0.55
+    head.data.materials.clear()
+    head.data.materials.append(mat)
+    print("crew: 换脸 %s，挪了 %s，皮肤 %s" % (FACE, tuple(round(c, 3) for c in offset), skin.round(3)))
+    return head, skin
+
+
+def recolor(img_path, skin=None):
     """工装蓝 → 深海军蓝（按亮度保留褶皱明暗），浅黄劳保鞋 → 黑皮靴；整体叠一层低频的脏旧。"""
     img = bpy.data.images.load(img_path)
     w, h = img.size
@@ -132,6 +167,11 @@ def recolor(img_path):
         low = (low + np.roll(low, 37, 0) + np.roll(low, -53, 1) + np.roll(low, 71, (0, 1))) / 4
     cloth = blue > 0.5
     rgb[cloth] *= (0.82 + 0.3 * low[cloth])[:, None]
+    # 手：肤色往换上的那张脸靠（不然手是白人的、脸是东亚人的）
+    if skin is not None:
+        hand = (r > g) & (g > b) & (r - b > 0.08) & (lum > 0.2) & ~cloth & ~tan & ~region
+        ref = rgb[hand].mean(0)
+        rgb[hand] *= (np.asarray(skin, np.float32) / np.maximum(ref, 1e-3))[None, :] * 0.6 + 0.4
     px[..., :3] = np.clip(rgb, 0, 1)
     img.pixels[:] = px.ravel()
     img.filepath_raw = os.path.join(SRC, "crew_body_color.png")
@@ -167,14 +207,13 @@ def main():
         else:
             o.name = o.data.name = "Crew_Body"
     body = bpy.data.objects["Crew_Body"]
-    head = bpy.data.objects["Crew_Head"]
+    head, skin = swap_head(arm, bpy.data.objects["Crew_Head"])
 
     # 材质：贴图换成改过色的；布料很糙，不反光
-    col = recolor(os.path.join(SRC, "m104_body_color.tga"))
+    col = recolor(os.path.join(SRC, "m104_body_color.tga"), skin)
     nrm = bpy.data.images.load(os.path.join(SRC, "m104_body_normal.tga"))
     nrm.colorspace_settings.name = 'Non-Color'
-    hcol = bpy.data.images.load(os.path.join(SRC, "m104_head_color.tga"))
-    for ob, image, normal, name in ((body, col, nrm, "Crew_Body"), (head, hcol, None, "Crew_Head")):
+    for ob, image, normal, name in ((body, col, nrm, "Crew_Body"),):
         mat = bpy.data.materials.new(name)
         nt = mat.node_tree
         bsdf = nt.nodes["Principled BSDF"]
@@ -205,9 +244,7 @@ def main():
     arm.animation_data.action = None
 
     # 朝向和大小：静止姿势下脚尖朝 +Y，眼睛离地 EYE
-    for pb in arm.pose.bones:
-        pb.matrix_basis = Matrix.Identity(4)
-    bpy.context.view_layer.update()
+    rest_pose(arm)
     # 脚是外八的，按左右髋的连线定朝向：面朝 f 时右髋在 f × 上 的方向
     right = bone_world(arm, "Bip01 R Thigh") - bone_world(arm, "Bip01 L Thigh")
     fwd = V((0, 0, 1)).cross(right)
@@ -218,14 +255,7 @@ def main():
     gait["scale"] = k
     print("crew: 朝向修正 %.1f°，缩放 %.3f" % (math.degrees(-yaw), k))
 
-    # 每段动作放进一条 NLA 轨道，导出时一段一个动画
-    ad = arm.animation_data
-    for key, act in acts.items():
-        tr = ad.nla_tracks.new()
-        tr.name = key
-        st = tr.strips.new(key, int(act.frame_range[0]), act)
-        st.name = key
-        tr.mute = True
+    push_nla(arm, acts)
 
     bpy.ops.object.select_all(action='DESELECT')
     for o in (arm, body, head):
@@ -233,7 +263,7 @@ def main():
     bpy.context.view_layer.objects.active = arm
     bpy.ops.export_scene.gltf(
         filepath=OUT, export_format='GLB', use_selection=True, export_yup=True, export_apply=False,
-        export_animations=True, export_animation_mode='NLA_TRACKS', export_force_sampling=True,
+        export_morph=True, export_morph_normal=False, export_animations=True, export_animation_mode='NLA_TRACKS', export_force_sampling=True,
         export_frame_range=False, export_anim_single_armature=True, export_def_bones=False,
         export_image_format='AUTO', export_materials='EXPORT', export_cameras=False, export_lights=False)
     with open(GAIT, "w") as f:

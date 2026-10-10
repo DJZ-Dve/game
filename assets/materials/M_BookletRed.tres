@@ -1,0 +1,17 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Leather033A/Leather033A_2K-JPG_NormalGL.jpg" id="1_6qkt3"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Leather033A/Leather033A_2K-JPG_Roughness.jpg" id="2_55ixr"]
+
+[resource]
+resource_name = "M_BookletRed"
+albedo_color = Color(0.42, 0.05, 0.035, 1)
+roughness = 0.55
+roughness_texture = ExtResource("2_55ixr")
+roughness_texture_channel = 4
+normal_enabled = true
+normal_scale = 0.6
+normal_texture = ExtResource("1_6qkt3")
+uv1_scale = Vector3(12, 12, 12)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 4.0
