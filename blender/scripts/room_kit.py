@@ -26,6 +26,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # 导出时不合并的对象（Godot 里要单独控制：转的、换贴图的、镜面、玻璃、门）
 KEEP = ("Spin_", "Paper_", "Mirror_", "Glass_", "Door_", "Lamp_", "Hide_", "Tube_")
+# 窗外的零件（Parts(coll, M, "Outside") 生成的、直接建的 Ext_* 对象）：导出时和屋里的分开合并
+OUTSIDE = ("Outside_", "Ext_")
 
 
 # ============================================================================ 材质（只给预览用，正式外观见 setup_project.gd）
@@ -57,7 +59,7 @@ def materials(M):
     add("Enamel", "M_Enamel", (0.88, 0.88, 0.84), 0.0, 0.2)
     add("Bakelite", "M_Bakelite", (0.03, 0.025, 0.022), 0.0, 0.35)
     add("BakeliteBrown", "M_BakeliteBrown", (0.18, 0.08, 0.04), 0.0, 0.35)
-    add("Steel", "M_Steel", (0.55, 0.55, 0.55), 1.0, 0.4)
+    add("Steel", "M_SteelOld", (0.45, 0.44, 0.42), 0.7, 0.6)   # 岸上的五金都是旧的、发乌生锈（潜艇用 M_Steel）
     add("Chrome", "M_Chrome", (0.8, 0.8, 0.8), 1.0, 0.15)
     add("Brass", "M_Brass", (0.72, 0.52, 0.22), 1.0, 0.35)
     add("FixtureWhite", "M_FixtureWhite", (0.8, 0.8, 0.76), 0.2, 0.5)
@@ -182,7 +184,8 @@ class Room:
         self.holes[side].append((u0, u1, v0, v1, reveal, sill, outer))
 
     # ------------------------------------------------------------------ 墙面
-    def walls(self, upper="Plaster", dado=None, dado_h=1.2, line=None, skirt=None, skirt_h=0.14, facade="Facade"):
+    def walls(self, upper="Plaster", dado=None, dado_h=1.2, line=None, skirt=None, skirt_h=0.14, facade="Facade",
+              line_h=0.024, line_d=0.004, skirt_d=0.012):
         K = self.K
         for side in self.SIDES:
             o, du, n, L = self.wall(side)
@@ -198,13 +201,14 @@ class Room:
                     key = dado if (dado and vc < dado_h) else upper
                     self._quad(K[key], o, du, n, us[i], us[i + 1], vs[j], vs[j + 1])
             # 墙裙上沿一道线、踢脚线（凸出来一点），遇到门洞断开
-            for key, z0, z1, d in ((line, dado_h - 0.012, dado_h + 0.012, 0.004),
-                                   (skirt, 0.0, skirt_h, 0.012)):
+            for key, z0, z1, d in ((line, dado_h - line_h / 2, dado_h + line_h / 2, line_d),
+                                   (skirt, 0.0, skirt_h, skirt_d)):
                 if not key or (key == line and not dado):
                     continue
                 for a, b in self._spans(side, L, z0, z1):
                     M = frame(o + du * ((a + b) / 2) + V((0, 0, (z0 + z1) / 2)) + n * (d / 2), n, V((0, 0, 1)))
-                    rbox(K[key], b - a, z1 - z0, d, M, r=min(0.003, d * 0.4), seg=1)
+                    # 粗的压顶线顶面圆角大一些，能接住一条高光
+                    rbox(K[key], b - a, z1 - z0, d, M, r=min(0.01, d * 0.4), seg=1 if d < 0.01 else 3)
             # 洞口：四周的侧壁、窗台，外墙皮
             for (u0, u1, v0, v1, reveal, sill, outer) in holes:
                 t = self.t
@@ -232,6 +236,21 @@ class Room:
                         if b1 <= 0.0:
                             continue
                         self._quad(K[facade], o - n * t, du, -n, a0, a1, max(b0, -0.5), b1)
+
+    def cornice(self, key, profile):
+        """墙顶一圈顶角线（石膏线）：profile 是 [(离墙, 离顶), ...]，从墙面上那一头到天花板那一头。
+        四面墙各拉一段，墙角处两段互相穿插（看着像斜接）。"""
+        bm = self.K[key]
+        up = V((0, 0, 1))
+        for side in self.SIDES:
+            o, du, n, L = self.wall(side)
+            ends = [[bm.verts.new(o + du * u + n * a + up * (self.h - b)) for (a, b) in profile] for u in (0.0, L)]
+            for k in range(len(profile) - 1):
+                f = bm.faces.new([ends[0][k], ends[0][k + 1], ends[1][k + 1], ends[1][k]])
+                f.normal_update()
+                # 朝屋里、朝下（离开墙和顶的那个角）
+                if f.normal.dot(n - up) < 0:
+                    f.normal_flip()
 
     def _spans(self, side, L, z0, z1):
         """沿墙长 0..L，除掉和 [z0, z1] 重叠的洞口，剩下的几段。"""
@@ -284,13 +303,22 @@ class Room:
 
 # ============================================================================ 门
 def wood_door(K, F, w, h, leaf="DoorBlue", jamb="DoorBlue", open_deg=0.0, hinge_right=True, name="Door_Leaf",
-              knob=True, bolt=True, number=None):
-    """老式木门：门框（贴脸）+ 门扇（四块凹进去的门芯板）+ 球形锁 + 插销。
-    F：门洞底边中点的坐标系（Z 朝屋里、Y 朝上）。门扇单独成对象 name（原点在门轴上，Godot 里绕 Y 转）。"""
+              knob=True, bolt=True, number=None, t=None):
+    """老式木门：门框（贴脸）+ 门扇（四块凹进去的门芯板）+ 球形锁 + 插销 + 三副合页。
+    F：门洞底边中点的坐标系（Z 朝屋里、Y 朝上）。门扇单独成对象 name（原点在门轴上，Godot 里绕 Y 转）。
+    t：墙厚。给了就在门洞侧壁上钉一圈木门框（门扇外侧那一截），门扇关上时靠在一圈门挡条上。"""
     # 门框贴脸：门洞三边一圈 6 厘米宽的木条，压在墙面上
     for (cx, cy, sx, sy) in ((-w / 2 - 0.03, h / 2 + 0.03, 0.06, h + 0.06), (w / 2 + 0.03, h / 2 + 0.03, 0.06, h + 0.06),
                              (0, h + 0.03, w + 0.12, 0.06)):
         rbox(K[jamb], sx, sy, 0.02, F @ T(cx, cy, 0.01), r=0.004, seg=2)
+    if t:
+        # 门洞侧壁、上沿：门扇（墙里皮往外 2~6 厘米）外侧那一截包一圈木板；门扇外面一圈门挡条
+        d0, d1 = 0.065, t
+        for sx in (-1, 1):
+            rbox(K[jamb], 0.012, h, d1 - d0, F @ T(sx * (w / 2 - 0.006), h / 2, -(d0 + d1) / 2), r=0.002, seg=1)
+            rbox(K[jamb], 0.016, h - 0.012, 0.03, F @ T(sx * (w / 2 - 0.02), (h - 0.012) / 2, -0.08), r=0.002, seg=1)
+        rbox(K[jamb], w, 0.012, d1 - d0, F @ T(0, h - 0.006, -(d0 + d1) / 2), r=0.002, seg=1)
+        rbox(K[jamb], w - 0.04, 0.016, 0.03, F @ T(0, h - 0.02, -0.08), r=0.002, seg=1)
     # 门扇：放在门洞里，往屋里开（open_deg>0）
     hx = w / 2 - 0.005 if hinge_right else -w / 2 + 0.005
     sgn = -1 if hinge_right else 1
@@ -329,15 +357,38 @@ def wood_door(K, F, w, h, leaf="DoorBlue", jamb="DoorBlue", open_deg=0.0, hinge_
             cylinder(bm, 0.006, 0.16, 12, Mb @ T(0, -0.06, 0.008) @ R(-90, 'X'))
             cylinder(bm, 0.004, 0.02, 8, Mb @ T(0.012, 0.0, 0.01))
         hw.append(K.separate(name + "_Bolt", "Steel", bolt_geo))
+    # 合页：三副，门扇屋里那面贴着门轴一片（跟门扇转），轴管露在门缝里
+    def hinge_geo(bm):
+        for y in (0.22, lh / 2, lh - 0.22):
+            Mh = T(sgn * 0.02, y, 0.0015)
+            rbox(bm, 0.035, 0.1, 0.003, Mh, r=0.001, seg=1)
+            cylinder(bm, 0.0065, 0.1, 10, T(0, y - 0.05, 0.004) @ R(-90, 'X'))
+            for dy in (-0.03, 0.03):
+                cylinder(bm, 0.0035, 0.0015, 8, Mh @ T(sgn * 0.004, dy, 0.0015))
+    hw.append(K.separate(name + "_Hinge", "Steel", hinge_geo))
     for o in hw:
         o.matrix_world = door.matrix_world   # Godot 里挂到门扇下面跟着转
     return door, hw
 
 
 # ============================================================================ 窗
-def wood_window(K, F, w, h, frame_key="WindowWood", glass="WinGlass", transom=0.35, open_deg=(0, 0), name="Window"):
+def tape_x(K, M, pw, ph, rng, key="MaskTape", width=0.03):
+    """台风前在玻璃上贴的「米」字胶带：两条对角线 + 一横一竖，手贴的，每条歪一点、两头短一点。
+    M：玻璃屋里那面中心的坐标系（Z 朝屋里）。"""
+    diag = math.hypot(pw, ph)
+    a = math.degrees(math.atan2(ph, pw))
+    for ang, L in ((a, diag), (-a, diag), (0.0, pw), (90.0, ph)):
+        L *= rng.uniform(0.86, 0.94)
+        rbox(K[key], L, width * rng.uniform(0.9, 1.1), 0.0006,
+             M @ T(rng.uniform(-0.01, 0.01), rng.uniform(-0.01, 0.01), 0.0004) @ R(ang + rng.uniform(-1.5, 1.5), 'Z'),
+             r=0.0, seg=1)
+
+
+def wood_window(K, F, w, h, frame_key="WindowWood", glass="WinGlass", transom=0.35, open_deg=(0, 0), name="Window",
+                tape=False):
     """木窗：外框 + 上亮子（固定）+ 下面两扇对开的窗扇（往外推开，open_deg 是左右两扇开的角度）。
-    F：窗洞中心的坐标系（Z 朝屋里，Y 朝上），窗框装在墙厚中间偏外。"""
+    F：窗洞中心的坐标系（Z 朝屋里，Y 朝上），窗框装在墙厚中间偏外。tape：每块玻璃屋里那面贴米字胶带（台风前夜）。"""
+    rng = random.Random(31)
     fw = 0.05
     for (cx, cy, sx, sy) in ((0, h / 2 - fw / 2, w, fw), (0, -h / 2 + fw / 2, w, fw), (-w / 2 + fw / 2, 0, fw, h),
                              (w / 2 - fw / 2, 0, fw, h), (0, h / 2 - transom, w, 0.05)):
@@ -347,6 +398,8 @@ def wood_window(K, F, w, h, frame_key="WindowWood", glass="WinGlass", transom=0.
     rbox(K[frame_key], 0.035, transom, 0.05, F @ T(0, ty, 0), r=0.003, seg=1)
     for sx in (-1, 1):
         box(K[glass], w / 2 - 0.06, transom - 0.08, 0.003, F @ T(sx * w / 4, ty, 0))
+        if tape:
+            tape_x(K, F @ T(sx * w / 4, ty, 0.0015), w / 2 - 0.06, transom - 0.08, rng, width=0.024)
     # 两扇窗扇
     sh = h - transom - fw
     sw = w / 2 - fw
@@ -369,6 +422,9 @@ def wood_window(K, F, w, h, frame_key="WindowWood", glass="WinGlass", transom=0.
                 box(bm, sw - 0.09, sh / 2 - 0.06, 0.003, L @ T(0, cy, 0))
         go = K.separate(f"Glass_{name}{k}", glass, pane)
         go.matrix_world = so.matrix_world
+        if tape:
+            for cy in (sh / 4 + 0.005, -sh / 4 - 0.01):
+                tape_x(K, so.matrix_world @ T(-sx * sw / 2, cy, 0.0015), sw - 0.09, sh / 2 - 0.06, rng)
         leaves.append((so, go))
     return leaves
 
@@ -528,9 +584,32 @@ def ceiling_fan(K, anchors, coll, p, rod=0.5, name="Fan", blade_len=0.6, seed=1)
             Mb = R(a, 'Z')
             # 叶柄：一根扁铁从电机下壳伸出去，压着叶子根部
             rbox(bm, 0.2, 0.03, 0.006, Mb @ T(0.17, 0, -0.03) @ R(-6, 'Y'), r=0.002, seg=1)
-            # 叶子：根部窄、外头宽，有一点扭角；叶尖往下垂一点（用久了）
-            rbox(bm, blade_len, 0.13, 0.005, Mb @ T(0.25 + blade_len / 2, 0, -0.042 - blade_len * 0.02)
-                 @ R(-2, 'Y') @ R(10, 'X'), r=0.02, seg=2)
+            # 叶子：根部窄（9 厘米）、叶尖宽（14 厘米），从根到尖扭角 12° → 5°；叶尖往下垂一点（用久了）
+            n = 10
+            rows = []
+            for i in range(n + 1):
+                u = i / n
+                x = 0.25 + blade_len * u
+                w = 0.09 + 0.05 * u ** 0.6
+                if i == n:
+                    w *= 0.92
+                tw = math.radians(12 - 7 * u)
+                dz = -0.042 - blade_len * 0.03 * u * u
+                ring = []
+                for py, pz in ((-w / 2, -0.0025), (w / 2, -0.0025), (w / 2, 0.0025), (-w / 2, 0.0025)):
+                    ring.append(bm.verts.new(Mb @ V((x, py * math.cos(tw) - pz * math.sin(tw),
+                                                     dz + py * math.sin(tw) + pz * math.cos(tw)))))
+                rows.append(ring)
+            for i in range(n):
+                for q in range(4):
+                    bm.faces.new([rows[i][q], rows[i][(q + 1) % 4], rows[i + 1][(q + 1) % 4], rows[i + 1][q]])
+            bm.faces.new(list(reversed(rows[0])))
+            bm.faces.new(rows[-1])
+            # 压筋、叶柄上两颗螺丝
+            rbox(bm, blade_len * 0.65, 0.012, 0.003, Mb @ T(0.25 + blade_len * 0.38, 0, -0.04) @ R(10, 'X'), r=0.001,
+                 seg=1)
+            for dx in (0.2, 0.24):
+                cylinder(bm, 0.005, 0.004, 8, Mb @ T(dx, 0, -0.027))
     sp = K.separate(f"Spin_{name}", "FanCream", rotor)
     sp.matrix_world = T(*(hub - V((0, 0, 0.09))))
     return sp
@@ -628,6 +707,10 @@ def export_room(coll, path, anchors):
     groups = {}
     for o in rest:
         key = o.data.materials[0].name if o.data.materials else "none"
+        # 窗外的东西（OUTSIDE 前缀）单独合并成 Body_Out_<材质>：不和屋里同材质的家具并成一个网格，
+        # 光照贴图（LightmapGI）只烘屋里，窗外几百米的水面、山、船不占贴图、不撑大烘焙范围
+        if o.name.startswith(OUTSIDE):
+            key = "Out_" + key.removeprefix("M_")
         groups.setdefault(key, []).append(o)
     bodies = [join(objs_, f"Body_{key.removeprefix('M_')}") for key, objs_ in sorted(groups.items())]
     gl = join(glass, "GaugeGlass") if glass else None

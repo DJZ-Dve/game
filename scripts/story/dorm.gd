@@ -27,7 +27,7 @@ func props() -> Dictionary:
 		"Anchor_AlarmClock": {"asset": "alarm_clock_01"},
 		"Anchor_Radio": {"asset": "cassette_player"},
 		"Anchor_Pears": {"asset": "food_pears_asian_01"},
-		"Anchor_Chair": {"asset": "painted_wooden_chair_02"},
+		"Anchor_Chair": {"asset": "painted_wooden_chair_02", "scale": 0.78},   # 座面 0.45 米（原大 0.58，坐下腿埋进椅面）
 		"Anchor_Bucket": {"asset": "wooden_bucket_01"},
 		"Anchor_Suitcase": {"asset": "cardboard_box_01", "scale": 0.9},
 		"Anchor_Cabinet": {"asset": "painted_wooden_cabinet"},
@@ -40,18 +40,43 @@ func props() -> Dictionary:
 	}
 
 
+## 台风前夜十点五十：主光是台灯的一圈暖光；窗外的钠灯透过防盗窗把栅格投进屋里（西墙、床、蚊帐上）；
+## 夜空的余光只够看清窗边的轮廓；门缝底下漏进来一线楼道的暖光。屋里大部分是暗的——开场要压抑
+const TUBE_COLOR := Color(0.84, 0.95, 0.9)
+const SODIUM := Color(1.0, 0.55, 0.22)
+
+
 func lights() -> Dictionary:
 	return {
-		# 日光灯：偏冷偏绿的白光，灯管是一长条，软阴影；屋里有点潮气，光里看得见浮尘
-		"Light_Tube": {"color": Color(0.8, 0.95, 0.88), "energy": 0.8, "range": 6.0, "atten": 1.3, "size": 0.03,
-			"specular": 0.2,
-			"fog": 0.35, "flicker": 0.05, "flicker_speed": 9.0},
-		# 台灯：暖黄，照亮桌面一圈
-		"Light_DeskLamp": {"spot": true, "color": Color(1.0, 0.76, 0.48), "energy": 2.4, "range": 2.6, "angle": 52.0,
-			"atten": 1.2, "size": 0.03, "fog": 0.5},
+		# 日光灯：一长条面光（1.2 m × 5 cm，沿东西），偏冷偏绿，软阴影；屋里有点潮气，光里看得见浮尘
+		"Light_Tube": {"area": Vector2(0.05, 1.2), "up": Vector3.RIGHT, "offset": Vector3(0, -0.01, 0),
+			"color": TUBE_COLOR, "energy": 0.6, "range": 6.0, "nbias": 1.5, "specular": 0.25, "fog": 0.2,
+			"flicker": 0.05, "flicker_speed": 9.0},
+		# 灯管往上照亮一圈天花板（面光只朝下），跟着日光灯开关
+		"TubeUp": {"at": "Light_Tube_Main", "offset": Vector3(0, 0.05, 0), "with": "Light_Tube_Main",
+			"color": TUBE_COLOR, "energy": 0.08, "range": 1.4, "atten": 1.5, "shadow": false, "specular": 0.0, "fog": 0.0},
+		# 台灯：暖黄，照亮桌面一圈，影子软一点
+		"Light_DeskLamp": {"spot": true, "color": Color(1.0, 0.74, 0.46), "energy": 2.4, "range": 2.6, "angle": 52.0,
+			"soft": 1.2, "atten": 1.2, "size": 0.05, "fog": 0.15, "specular": 0.3},
+		# 灯罩往后、往上漏的一点光（照窗框、窗帘、墙）
+		"LampSpill": {"at": "Light_DeskLamp", "offset": Vector3(-0.03, 0.05, 0), "color": Color(1.0, 0.72, 0.45),
+			"energy": 0.06, "range": 1.4, "atten": 1.4, "shadow": false, "specular": 0.0, "fog": 0.0},
 		# 窗外路灯（钠灯，橙色），往下照着院子；雨丝在光里看得见
 		"Light_Street": {"spot": true, "color": Color(1.0, 0.5, 0.18), "energy": 16.0, "range": 24.0, "angle": 62.0,
 			"atten": 1.3, "size": 0.2, "fog": 0.6},
+		# 同一盏路灯照进屋的那一束：灯头位置一盏 9° 的窄聚光只罩住窗洞，投影——防盗窗、窗框的栅格印在西墙、床和蚊帐上
+		"StreetProj": {"spot": true, "pos": Vector3(3.3, 3.0, -9.5), "aim": Vector3(0.0, 1.5, -2.2), "color": SODIUM,
+			"energy": 9.0, "range": 18.0, "angle": 9.0, "soft": 0.4, "size": 0.2, "blur": 1.0, "specular": 0.3,
+			"fog": 0.5},
+		# 夜空的余光：窗洞里一块很暗的灰色面光（不投影，只给窗边的轮廓）
+		"NightSky": {"area": Vector2(1.5, 1.45), "pos": Vector3(0.0, 1.62, -2.28), "facing": Vector3.BACK,
+			"color": Color(0.55, 0.55, 0.6), "energy": 0.05, "range": 6.0, "shadow": false, "specular": 0.2, "fog": 0.0},
+		# 门缝底下：楼道的灯从门下面漏进来一线（薄薄一条面光贴着地面朝屋里）
+		"DoorGap": {"area": Vector2(0.86, 0.02), "pos": Vector3(1.0, 0.03, 2.16), "facing": Vector3(0, -0.6, -1),
+			"color": Color(1.0, 0.66, 0.36), "energy": 3.0, "range": 1.6, "shadow": false, "specular": 0.0, "fog": 0.0},
+		# 闪电：窗口一整块冷白面光（投影：防盗窗的硬影子一下子打满屋），只在闪的那一下亮
+		"FlashWin": {"area": Vector2(1.5, 1.45), "pos": Vector3(0.0, 1.62, -2.3), "facing": Vector3(0, -0.25, 1),
+			"color": Color(0.78, 0.85, 1.0), "energy": 0.0, "flash": 0.25, "range": 8.0, "specular": 0.6, "fog": 0.4},
 		"Light_Corridor": {"color": Color(1.0, 0.68, 0.38), "energy": 0.9, "range": 5.0, "atten": 1.4, "size": 0.03,
 			"fog": 0.6, "flicker": 0.4, "flicker_speed": 6.0},
 		"Light_CorWindow": {"spot": true, "color": Color(1.0, 0.5, 0.2), "energy": 0.6, "range": 4.0, "angle": 40.0,
@@ -61,6 +86,22 @@ func lights() -> Dictionary:
 		"Light_Yard": {"spot": true, "color": Color(1.0, 0.55, 0.22), "energy": 60.0, "range": 60.0, "angle": 50.0,
 			"atten": 1.0, "shadow": false, "fog": 1.5},
 	}
+
+
+## 台风外围的暴雨：窗外院子上空，风从东北往西南斜着吹；夜里只有被路灯、高杆灯照到的那几片看得见
+func rain_config() -> Dictionary:
+	return {"min": Vector3(-14.0, -3.65, -30.0), "max": Vector3(14.0, 12.0, -2.75), "count": 36000,
+		"wind": Vector2(-3.0, 2.5), "gust": 0.45, "fall_speed": 8.5, "brightness": 1.2}
+
+
+## 光照贴图：日光灯关着（开场）、开着各烘一份，开关灯时换（见 room_lightmap.gd）
+func lightmap_variants() -> Dictionary:
+	return {"tube": "Light_Tube_Main"}
+
+
+## 龙门吊顶上的红色障碍灯一闪一闪的，不烘进光照贴图
+func lightmap_skip_lights() -> Array:
+	return ["Light_CraneRed"]
 
 
 func use_config() -> Dictionary:
@@ -114,8 +155,13 @@ func paper_config() -> Dictionary:
 func _ready() -> void:
 	room_name = "dorm"
 	gi_path = "res://assets/gi/dorm_gi.res"
+	floor_rect = Rect2(-1.65, -2.2, 3.3, 4.4)
+	ceiling_height = 2.9
 	super._ready()
 	setup_lightning(Vector3(0.2, -0.5, 1.0))   # 从北边窗外劈过来
+	lightning_light().light_angular_distance = 0.3
+	lightning_energy = 4.4
+	flash_sky = 16.0   # 闪的那一下夜空亮起来，窗外的吊车、楼成了剪影
 	_pager = model.find_child("Hide_Pager", true, false) as Node3D
 	if _pager:
 		var scr := model.find_child("Paper_Pager", true, false)
@@ -126,13 +172,16 @@ func _ready() -> void:
 	for k in ["Light_CraneRed", "Light_CraneRed2"]:
 		if lights_by_name.has(k):
 			_crane_lights.append(lights_by_name[k])
-	_add_street_glow()
 	if ResourceLoader.exists("res://assets/textures/story/crew_photo.png"):
 		papers.Photo.add_image(load("res://assets/textures/story/crew_photo.png"), Rect2(Vector2(24, 24), Vector2(552, 392)))
 	_connect_uses()
+	for k in ["Light_CraneRed", "Light_CraneRed2"]:
+		add_glow(k, Color(1.0, 0.1, 0.06), 3.0, 3.0)
+	add_glow("Light_Street", Color(1.0, 0.55, 0.22), 1.2, 1.5)
 	# 开场日光灯是关着的，只有台灯和窗外的路灯；门边的开关能开
 	set_light("Light_Tube_Main", DebugArgs.get_arg("tube") == "on")
-	if DebugArgs.has("capture") or DebugArgs.has("at") or DebugArgs.has("bake-gi") or not Story.is_target("dorm"):
+	if DebugArgs.has("capture") or DebugArgs.has("at") or DebugArgs.has("bake-gi") or DebugArgs.has("lm-export") \
+			or not Story.is_target("dorm"):
 		return
 	_intro()
 	if DebugArgs.has("autoplay"):
@@ -341,13 +390,13 @@ func _toggle_tube() -> void:
 		return
 	play("tube_start")
 	for k in [0.15, 0.08, 0.3, 0.06, 0.12]:
-		set_light("Light_Tube_Main", true, 0.25)
+		set_light("Light_Tube_Main", true, 0.3)
 		await get_tree().create_timer(k * 0.6).timeout
 		set_light("Light_Tube_Main", false)
 		await get_tree().create_timer(k).timeout
 		if not _tube_on:
 			return
-	set_light("Light_Tube_Main", true, 0.8)
+	set_light("Light_Tube_Main", true)
 	audio.set_loop("fluoro_buzz", true)
 
 
@@ -378,6 +427,7 @@ func _process(delta: float) -> void:
 	var on := fmod(Time.get_ticks_msec() / 1000.0, 1.5) < 0.2
 	for l in _crane_lights:
 		l.visible = on
+	_update_street(delta)
 	# 走到走廊里：信看过了就出门（转到第一章），没看过就被拦回来
 	if not _leaving and not Story.busy and walker.feet().y > CORRIDOR_Z:
 		if Story.flag("letter_read"):
@@ -387,19 +437,27 @@ func _process(delta: float) -> void:
 			Story.run(DLG, "leave_no_letter", self)
 
 
-## 路灯的余光：一盏不投影的暖光从窗口斜着照进来，打在天花板和对面墙上
-func _add_street_glow() -> void:
-	var l := OmniLight3D.new()
-	l.name = "StreetGlow"
-	l.light_color = Color(1.0, 0.5, 0.2)
-	l.light_energy = 0.35
-	l.omni_range = 9.0
-	l.omni_attenuation = 1.6
-	l.shadow_enabled = true
-	l.shadow_bias = 0.08
-	l.light_volumetric_fog_energy = 0.0
-	add_child(l)
-	l.position = Vector3(2.2, 2.9, -5.5)
+## 路灯（钠灯）快坏了：每隔半分钟到一分钟抽一阵，两秒里忽明忽暗、发红，屋里防盗窗的影子跟着一闪一闪。截图时不抽
+var _street_t := 25.0
+var _street_k := 1.0
+
+
+func _update_street(delta: float) -> void:
+	if DebugArgs.capturing():
+		return
+	_street_t -= delta
+	var k := 1.0
+	if _street_t < 0.0:
+		var t := -_street_t
+		k = 0.3 + 0.7 * absf(sin(t * 17.0) * sin(t * 5.3))
+		if t > 2.0:
+			_street_t = randf_range(30.0, 60.0)
+	_street_k = lerpf(_street_k, k, 1.0 - exp(-delta * 30.0))
+	for nm in ["Light_Street", "StreetProj"]:
+		var l: Light3D = lights_by_name.get(nm)
+		if l:
+			l.light_energy = float(l.get_meta("base_energy")) * _street_k
+			l.light_color = SODIUM.lerp(Color(1.0, 0.3, 0.1), 1.0 - _street_k)
 
 
 func setup_audio(a: RoomAudio) -> void:

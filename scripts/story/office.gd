@@ -37,24 +37,69 @@ func props() -> Dictionary:
 		"Anchor_TeaTable": {"asset": "chinese_tea_table"},
 		"Anchor_Stool1": {"asset": "chinese_stool"},
 		"Anchor_Stool2": {"asset": "chinese_stool"},
+		# 东溟刚搬进来的纸箱
+		"Anchor_MoveBox0": {"asset": "cardboard_box_01"},
+		"Anchor_MoveBox1": {"asset": "cardboard_box_01", "scale": 0.9},
+		"Anchor_MoveBox2": {"asset": "cardboard_box_01", "scale": 0.85},
 	}
+
+
+## 阴雨下午三点：主光是北窗的天光（窗洞里一整块面光），日光灯 A 亮着（有点闪）、B 坏了；绿罩台灯照着合同，
+## 合同、玻璃台面把灯光反到沈渡脸上；窗上沿一束冷光勾出他的头肩；屏风后供桌的烛光只从缝里、顶上漏出来
+const WIN_COLOR := Color(0.78, 0.84, 0.9)
+const TUBE_COLOR := Color(0.84, 0.95, 0.9)
 
 
 func lights() -> Dictionary:
 	return {
-		# 两盏日光灯：一盏亮着（有点闪），一盏坏了不亮
-		"Light_Tube_A": {"color": Color(0.82, 0.95, 0.9), "energy": 0.9, "range": 7.0, "atten": 1.2, "size": 0.03,
-			"specular": 0.2, "fog": 0.2, "flicker": 0.08, "flicker_speed": 10.0},
-		"Light_Tube_B": {"color": Color(0.82, 0.95, 0.9), "energy": 0.9, "range": 7.0, "atten": 1.2, "size": 0.03,
+		# 日光灯：一长条面光（1.2 m × 5 cm，沿南北），软阴影，天花板上不会有灯具的硬黑影
+		"Light_Tube_A": {"area": Vector2(0.05, 1.2), "up": Vector3.BACK, "offset": Vector3(0, -0.01, 0),
+			"color": TUBE_COLOR, "energy": 0.15, "range": 6.0, "nbias": 1.5, "specular": 0.25, "fog": 0.15,
+			"flicker": 0.08, "flicker_speed": 10.0},
+		"Light_Tube_B": {"color": TUBE_COLOR, "energy": 0.9, "range": 7.0, "atten": 1.2, "size": 0.03,
 			"specular": 0.2},
-		# 绿罩台灯：照着沈渡的手和桌上的合同，脸从下面打亮一点
-		"Light_DeskLamp": {"spot": true, "color": Color(1.0, 0.82, 0.55), "energy": 3.0, "range": 1.8, "angle": 60.0,
-			"atten": 1.0, "size": 0.05, "fog": 0.3},
-		"Light_Incense": {"color": Color(1.0, 0.45, 0.15), "energy": 0.12, "range": 0.8, "shadow": false},
+		# 灯管往上照亮一圈天花板（面光只朝下）
+		"TubeUp": {"at": "Light_Tube_A", "offset": Vector3(0, 0.08, 0), "with": "Light_Tube_A", "color": TUBE_COLOR,
+			"energy": 0.06, "range": 1.6, "atten": 1.5, "shadow": false, "specular": 0.0, "fog": 0.0},
+		# 北窗天光：贴着窗洞内侧一整块面光，朝南；阴天的天光偏冷、低饱和。主光，投影
+		"WinSky": {"area": Vector2(3.2, 1.9), "pos": Vector3(0.0, 1.86, -3.06), "facing": Vector3.BACK,
+			"normalize": false, "color": WIN_COLOR, "energy": 0.18, "range": 9.0, "blur": 1.0, "nbias": 1.0,
+			"specular": 0.35, "fog": 0.6},
+		# 绿罩台灯：灯泡往下挪 5 厘米、对准合同（原来几乎垂直往下，光圈落在灯座旁边）；不出高光（玻璃台面上一个刺眼的点）
+		"Light_DeskLamp": {"spot": true, "offset": Vector3(0, -0.05, 0), "aim": Vector3(0.42, 0.77, -1.1),
+			"color": Color(1.0, 0.78, 0.5), "energy": 1.2, "range": 1.4, "angle": 58.0, "soft": 1.6, "atten": 0.6,
+			"size": 0.08, "fog": 0.0, "specular": 0.0},
+		# 灯罩里往回漏的一点光：照亮灯罩下沿、黄铜灯杆和后面的墙裙
+		"LampSpill": {"at": "Light_DeskLamp", "offset": Vector3(0, -0.02, 0), "color": Color(1.0, 0.8, 0.5),
+			"energy": 0.12, "range": 0.9, "atten": 1.6, "shadow": false, "specular": 0.0, "fog": 0.0},
+		# 沈渡脸上的光：合同、玻璃板把台灯光反上来（面光躺在桌面纸上，朝上偏北）。人不进光照贴图，只有探针那点间接光，
+		# 这盏补上；不进贴图（桌面的反弹已经烘了）
+		"PaperBounce": {"area": Vector2(0.55, 0.4), "pos": Vector3(0.35, 0.83, -1.25), "facing": Vector3(0, 1.0, -0.55),
+			"color": Color(1.0, 0.86, 0.68), "energy": 0.15, "range": 1.4, "shadow": false, "specular": 0.0, "fog": 0.0,
+			"bake": "off"},
+		# 沈渡的逆光轮廓：窗上沿往下打的一束冷光，只照头肩
+		"Rim": {"spot": true, "pos": Vector3(0.3, 2.6, -2.9), "aim": Vector3(0.3, 1.25, -1.85), "color": WIN_COLOR,
+			"energy": 1.5, "range": 3.0, "angle": 16.0, "soft": 0.8, "shadow": false, "specular": 0.8, "fog": 0.0,
+			"bake": "off"},
+		# 屏风后供桌：烛火（投影：只从屏风的缝和顶上漏出来），一跳一跳
+		"AltarFlame": {"pos": Vector3(-2.2, 0.9, -2.05), "color": Color(1.0, 0.5, 0.2), "energy": 0.7, "range": 2.6,
+			"atten": 1.3, "size": 0.03, "fog": 0.8, "flicker": 0.12, "flicker_speed": 7.0},
 		"Light_Lighthouse": {"color": Color(1.0, 0.15, 0.08), "energy": 30.0, "range": 25.0, "shadow": false,
 			"fog": 1.0},
 		"Light_ShipMast": {"color": Color(1.0, 0.95, 0.85), "energy": 8.0, "range": 10.0, "shadow": false},
 	}
+
+
+## 坐在来客椅上：焦点在沈渡脸上，窗外、远处的柜子虚一点
+func focus_target() -> Variant:
+	return shen.head_position() if shen else null
+
+
+## 阴雨天的雨：码头、水面上空，风不大。白天衬着亮天，靠天光（ambient）看得见
+func rain_config() -> Dictionary:
+	return {"min": Vector3(-20.0, -8.6, -45.0), "max": Vector3(20.0, 14.0, -3.6), "count": 30000,
+		"wind": Vector2(0.6, 1.0), "gust": 0.25, "fall_speed": 7.0, "ambient": Vector3(0.05, 0.055, 0.06),
+		"brightness": 1.0}
 
 
 func use_config() -> Dictionary:
@@ -107,6 +152,8 @@ func paper_config() -> Dictionary:
 func _ready() -> void:
 	room_name = "office"
 	gi_path = "res://assets/gi/office_gi.res"
+	floor_rect = Rect2(-2.5, -3.0, 5.0, 6.0)
+	ceiling_height = 3.3
 	super._ready()
 	set_light("Light_Tube_B", false)
 	setup_lightning(Vector3(-0.3, -0.6, 1.0))
@@ -119,8 +166,9 @@ func _ready() -> void:
 	if _talisman:
 		_talisman.visible = false
 	_connect_uses()
+	add_glow("Light_Lighthouse", Color(1.0, 0.2, 0.1), 7.0, 3.0)
 	walker.seated_changed.connect(_on_seated)
-	if DebugArgs.has("capture") or DebugArgs.has("at") or DebugArgs.has("bake-gi"):
+	if DebugArgs.has("capture") or DebugArgs.has("at") or DebugArgs.has("bake-gi") or DebugArgs.has("lm-export"):
 		return
 	if not Story.is_target("office") and not Story.flag("chapter0_done"):
 		return
@@ -463,6 +511,10 @@ var _last_tick := 0
 func _process(delta: float) -> void:
 	super._process(delta)
 	_update_clock(delta)
+	# 灯塔：红光四秒闪一次（亮半秒）；截图时一直亮着
+	var lh: Light3D = lights_by_name.get("Light_Lighthouse")
+	if lh and not DebugArgs.capturing():
+		lh.visible = fmod(Time.get_ticks_msec() / 1000.0, 4.0) < 0.5
 	if _clock_running and int(_clock_t) != _last_tick:
 		_last_tick = int(_clock_t)
 		audio.tick()

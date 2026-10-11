@@ -57,8 +57,12 @@ func _ready() -> void:
 	add_child(model)
 	_skel = model.find_children("*", "Skeleton3D", true, false)[0]
 	_head = _skel.find_bone("Bip01 Head")
+	# 潜艇舱里灯多，身体投影每帧要重画好几张阴影图，不投；岸上的房间只有两三盏投影的灯，站在灯下脚边有自己的影子、
+	# 签字时手在合同上有影子
+	var shadows := _cam is RoomWalker
 	for g in model.find_children("*", "GeometryInstance3D", true, false):
-		(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows \
+			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# 头（周海生的脸）：相机在头里面，平时不画；只放在镜子那一层（PlanarMirror.HEAD_LAYER），
 	# 两种相机都不画这一层，只有镜子的反射相机画得出来
 	_face = model.find_child("Crew_Head", true, false) as MeshInstance3D

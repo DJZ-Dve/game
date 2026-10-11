@@ -16,7 +16,9 @@ signal seated_changed(seated: bool)
 @export var run_accel := 5.0
 @export var eye_height := 1.62
 @export var deck_y := 0.0
-@export var normal_fov := 68.0
+@export var normal_fov := 64.0
+## 坐下来谈事、看桌上的东西时视野收窄（对面的人不那么小，画面边上不拉伸）
+@export var seated_fov := 54.0
 ## 能站的地方：房间局部坐标（x, z）的几块矩形，取并集
 @export var walk_areas: Array[Rect2] = []
 ## 开场站在哪、朝哪（度，0 = 朝 -Z）
@@ -42,6 +44,9 @@ var door_aft := false
 var door_yaw := 0.0
 var door_lean := 0.0
 var _door = null
+## 截图（--capture、--shots）：坐着不晃（呼吸的那点起伏），不限制在能站的地方（free 机位）
+var still := false
+var free_walk := false
 
 var _pos := Vector2.ZERO
 var _vel := Vector2.ZERO
@@ -119,6 +124,36 @@ func sit_at(seat: Node3D, instant := false) -> void:
 	pitch = 0.0
 	_vel = Vector2.ZERO
 	seated_changed.emit(true)
+
+
+## 截图摆机位（--shots、--sit，见 story_room.gd 的 shot_pose）：直接站到 / 坐到位，不过渡，
+## 也不发 seated_changed（办事处一坐下就开谈）。seat 不为空就坐在这张椅子上（和 sit_at 坐好以后一样），
+## yaw_deg 是相对椅子朝向的偏移；否则站在 p，free 时不限制在能站的地方
+func place_for_shot(p: Vector2, yaw_deg: float, pitch_deg: float, seat: Node3D = null, free := false) -> void:
+	free_walk = free
+	_seat = seat
+	_sit = 1.0 if seat else 0.0
+	_blend = 1.0
+	_vel = Vector2.ZERO
+	_goal = null
+	_look_at = null
+	_stepping = false
+	gait_speed = 0.0
+	gait_run = 0.0
+	_land = 0.0
+	_land_v = 0.0
+	if seat:
+		var f := -seat.global_basis.z
+		_seat_yaw = atan2(-f.x, -f.z)
+		yaw = _seat_yaw + deg_to_rad(yaw_deg)
+		var stand := seat.get_node_or_null("Stand") as Node3D
+		if stand:
+			_pos = Vector2(stand.global_position.x, stand.global_position.z)
+	else:
+		_pos = _clamp_to_walkable(p)
+		yaw = deg_to_rad(yaw_deg)
+	pitch = deg_to_rad(pitch_deg)
+	_process(0.0)
 
 
 func stand_up() -> void:
@@ -202,7 +237,9 @@ func _process(delta: float) -> void:
 	var t := Time.get_ticks_msec() / 1000.0
 	if _seat:
 		var p := get_parent_node_3d().global_transform.affine_inverse() * _seat.global_position
-		base = Transform3D(look, p + Vector3(sin(t * 0.9) * 0.004, sin(t * 1.7) * 0.003, 0.0))
+		if not still:
+			p += Vector3(sin(t * 0.9) * 0.004, sin(t * 1.7) * 0.003, 0.0)
+		base = Transform3D(look, p)
 	else:
 		# 走路的起伏（同 cockpit_camera.gd）：脚踩在身体正下方时头最高，两脚交替落地的瞬间最低；
 		# 每两步左右晃一次；落脚时被压一下、点一下头
@@ -214,7 +251,7 @@ func _process(delta: float) -> void:
 			* Basis(Vector3.BACK, -side * deg_to_rad(0.5) * sp),
 			Vector3(_pos.x, deck_y + eye_height + arc * amp * sp + _land, _pos.y))
 		base.origin += Vector3(side * lerpf(0.014, 0.01, gait_run) * sp, 0, 0).rotated(Vector3.UP, yaw)
-	fov = normal_fov + 4.0 * gait_run
+	fov = lerpf(normal_fov + 4.0 * gait_run, seated_fov, sit_amount())
 	if _blend < 1.0:
 		_blend = minf(_blend + delta * 1.4, 1.0)
 		var k := smoothstep(0.0, 1.0, _blend)
@@ -316,7 +353,7 @@ func _step(k: int, strength: float, kind: StringName) -> void:
 
 
 func _clamp_to_walkable(p: Vector2) -> Vector2:
-	if walk_areas.is_empty():
+	if walk_areas.is_empty() or free_walk:
 		return p
 	var best := p
 	var best_d := INF

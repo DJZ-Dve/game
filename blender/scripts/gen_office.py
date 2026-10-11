@@ -72,6 +72,11 @@ def materials(M):
     add("Fruit", "M_RottenFruit", (0.3, 0.2, 0.08), 0.0, 0.6)
     add("Bottle", "M_Bottle", (0.3, 0.2, 0.1), 0.0, 0.25)
     add("Plastic", "M_PlasticRed", (0.6, 0.08, 0.06), 0.0, 0.4)
+    add("Canvas", "M_Canvas", (0.3, 0.38, 0.42), 0.0, 0.85)
+    add("Booklet", "M_BookletRed", (0.4, 0.04, 0.03), 0.0, 0.6)
+    add("Bamboo", "M_Bamboo", (0.6, 0.5, 0.3), 0.0, 0.6)
+    add("CableBlue", "M_CableBlue", (0.05, 0.12, 0.35), 0.0, 0.4)
+    add("FileCab", "M_FileCab", (0.2, 0.28, 0.24), 0.0, 0.5)
     return M
 
 
@@ -86,9 +91,13 @@ def shell(S_, A, coll):
     room.opening("S", X1 - DOOR[1], X1 - DOOR[0], 0.0, DOOR[2], outer=False)
     # 门上方的玻璃亮子
     room.opening("S", X1 - DOOR[1] - 0.06, X1 - DOOR[0] + 0.06, DOOR[2] + 0.05, DOOR[2] + 0.45, outer=False)
-    room.walls(upper="Plaster", dado="Wainscot", dado_h=DADO, line="WoodDark", skirt="WoodDark", skirt_h=0.12)
+    room.walls(upper="Plaster", dado="Wainscot", dado_h=DADO, line="WoodDark", skirt="WoodDark", skirt_h=0.15,
+               line_h=0.05, line_d=0.028, skirt_d=0.02)
     room.floor("Terrazzo")
     room.ceiling("Ceiling")
+    # 五十年代老楼：墙顶一圈石膏顶角线（离墙、离顶各十来厘米，中间一道凹弧）
+    room.cornice("Plaster", [(0.0, 0.13), (0.012, 0.13), (0.012, 0.115), (0.03, 0.1), (0.045, 0.07), (0.07, 0.045),
+                             (0.1, 0.03), (0.115, 0.012), (0.13, 0.012), (0.13, 0.0)])
     # 门外：一小段走廊（开着门时看得见），暗的
     abox(S_["Terrazzo"], DOOR[0] - 0.6, DOOR[1] + 0.6, Y0 - WT - 1.6, Y0 - WT, -0.02, 0.0)
     abox(S_["Plaster"], DOOR[0] - 0.6, DOOR[1] + 0.6, Y0 - WT - 1.62, Y0 - WT - 1.6, 0.0, H)
@@ -131,7 +140,7 @@ def door(K, A, coll, room):
     F = room.frame("S", uc, 0.0)
     w = DOOR[1] - DOOR[0]
     leaf, hw = RK.wood_door(K, F, w, DOOR[2], leaf="WoodDark", jamb="WoodDark", hinge_right=True, name="Door_Leaf",
-                            bolt=False)
+                            bolt=False, t=WT)
     # 门上方一块玻璃亮子
     Ft = room.frame("S", uc, DOOR[2] + 0.25, -WT * 0.5)
     rbox(K["WoodDark"], w + 0.12, 0.05, 0.06, Ft @ T(0, -0.2, 0), r=0.004, seg=1)
@@ -249,8 +258,17 @@ def desk(K, A, coll):
     use(A, coll, "Luopan", (cx - 0.62, cy + 0.2, z + 0.03))
     banker_lamp(K, A, coll, T(cx + 0.55, cy + 0.32, z) @ R(170, 'Z'))
     for k in range(4):
-        rbox(K["Cardboard"], 0.24, 0.32, 0.012, T(cx - 0.62, cy - 0.15, z + 0.006 + 0.013 * k) @ R(5 * k - 4, 'Z'),
-             r=0.002, seg=1)
+        dossier(K, T(cx - 0.62, cy - 0.15, z + 0.014 * k) @ R(5 * k - 4, 'Z'), k)
+    # 电话线、台灯线：从桌子后沿垂下去，顺着地走到东墙的插座
+    sock = V((X1 - 0.01, 1.85, 0.32))
+    RK.socket(K, frame(sock, V((-1, 0, 0))))
+    for k, (p0, dx) in enumerate(((V((cx + 0.7, cy + 0.08, z + 0.02)), 0.0), (V((cx + 0.58, cy + 0.4, z + 0.01)), 0.03))):
+        ex = cx + w / 2 - 0.12 + dx
+        pts = [p0, V((ex, cy + d / 2 - 0.02, z + 0.004)), V((ex, cy + d / 2 + 0.02, z - 0.03)),
+               V((ex + 0.01, cy + d / 2 + 0.05, z * 0.5)), V((ex + 0.02, cy + d / 2 + 0.06, 0.006)),
+               V((X1 - 0.3, 1.82 + 0.02 * k, 0.004)), V((X1 - 0.03, 1.84 + 0.02 * k, 0.006)),
+               sock + V((-0.01, -0.01 + 0.02 * k, -0.02))]
+        sweep(K["WireBlack"], catmull(pts, 6), circle_profile(0.0028, 6))
     # 平安符：红布小袋，签完合同以后沈渡推过来（Hide_Talisman，Godot 里先藏着）
     def talisman(bm):
         rbox(bm, 0.045, 0.012, 0.06, T(0, 0, 0.006) @ R(90, 'X') @ R(0, 'Y'), r=0.005, seg=2)
@@ -267,12 +285,26 @@ def desk(K, A, coll):
          (VISITOR[0] - 0.45, VISITOR[1] - 0.35, 0.0))
 
 
+def dossier(K, M, seed):
+    """一份卷宗：牛皮纸封皮上下两片夹着一沓纸，一根布带扎着，封面贴一张写着字的纸签。M：底面中心。"""
+    rng = random.Random(40 + seed)
+    rbox(K["Cardboard"], 0.24, 0.32, 0.002, M @ T(0, 0, 0.001), r=0.001, seg=1)
+    rbox(K["PaperWhite"], 0.232, 0.31, 0.009, M @ T(0.003, 0.002, 0.0065) @ R(rng.uniform(-1, 1), 'Z'), r=0.001, seg=1)
+    rbox(K["Cardboard"], 0.24, 0.32, 0.002, M @ T(rng.uniform(-0.004, 0.004), 0, 0.012) @ R(rng.uniform(-1.5, 1.5), 'Z'),
+         r=0.001, seg=1)
+    sweep(K["Rope"], [M @ V((0.122, -0.06, -0.001)), M @ V((0.122, -0.06, 0.0135)), M @ V((-0.122, -0.06, 0.0135)),
+                      M @ V((-0.122, -0.06, -0.001))], rect_profile(0.012, 0.0012, 0.0))
+    rbox(K["PaperWhite"], 0.1, 0.05, 0.0005, M @ T(0.02, 0.07, 0.0133), r=0.0, seg=1)
+    K.text(["归墟 一九五六", "渔业 契约", "镇海号", "航海日志"][seed % 4], M @ T(0.02, 0.07, 0.0137), 0.012, key="Ink",
+           font=FONT_HAND)
+
+
 def inkpad(K, M):
     """印泥：圆铁盒（盒盖印着花，掀开放在旁边），里面一层红印泥，有几个指头按过的坑。"""
     lathe(K["Steel"], [(0.0, 0.0), (0.042, 0.0), (0.044, 0.02), (0.04, 0.02), (0.04, 0.004), (0.0, 0.004)], 32, M)
     lathe(K["InkPad"], [(0.0, 0.012), (0.039, 0.012), (0.039, 0.016), (0.0, 0.017)], 32, M)
     for k, (dx, dy) in enumerate(((0.01, 0.005), (-0.012, -0.008))):
-        uvsphere(K["Dark"], 0.008, 10, 6, M @ T(dx, dy, 0.02) @ S(1.2, 1.5, 0.3))
+        uvsphere(K["BrushRed"], 0.008, 10, 6, M @ T(dx, dy, 0.0166) @ R(30 * k, 'Z') @ S(1.1, 1.4, 0.05))
     lathe(K["Steel"], [(0.0, 0.0), (0.045, 0.0), (0.047, 0.014), (0.0, 0.014)], 32, M @ T(0.075, 0.03, 0.0))
     cylinder(K["InkRed"], 0.03, 0.0005, 24, M @ T(0.075, 0.03, 0.0145))
 
@@ -315,6 +347,15 @@ def luopan(K, M):
         a = 2 * math.pi * k / 24
         rbox(K["Dark"], 0.07, 0.0008, 0.0008, M @ T(math.cos(a) * 0.075, math.sin(a) * 0.075, 0.042) @ R(math.degrees(a), 'Z'),
              r=0.0, seg=1)
+    # 每圈刻字，字头朝外
+    rings = [(0.046, "乾坎艮震巽离坤兑", 0.007), (0.07, "甲乙丙丁戊己庚辛壬癸子丑", 0.0065),
+             (0.094, "壬子癸丑艮寅甲卯乙辰巽巳丙午丁未坤申庚酉辛戌乾亥", 0.0055)]
+    for r, chars, size in rings:
+        n = len(chars)
+        for k, ch in enumerate(chars):
+            a = 2 * math.pi * (k + 0.5) / n
+            K.text(ch, M @ T(math.cos(a) * r, math.sin(a) * r, 0.0425) @ R(math.degrees(a) - 90, 'Z'), size,
+                   key="Ink", font=FONT_SERIF)
     cylinder(K["Glass"], 0.024, 0.004, 32, M @ T(0, 0, 0.042))
     rbox(K["InkRed"], 0.04, 0.003, 0.002, M @ T(0, 0, 0.043) @ R(31, 'Z'), r=0.0, seg=1)
     # 十字红线
@@ -366,19 +407,83 @@ def west_wall(K, A, coll, room):
     # 两只顶天立地的红木顶箱柜（沈家搬来的，Poly Haven chinese_cabinet），中间一张条案上摞着账本
     for k, y in enumerate((-1.55, 0.05)):
         anchor(A, coll, f"Anchor_Cabinet{k}", (X0 + 0.3, y, 0.0), (1, 0, 0))
+        cabinet_contents(K, y, k)
     abox(K["WoodRed"], X0 + 0.05, X0 + 0.45, -0.9, -0.62, 0.0, 0.82, r=0.006)
     for k in range(5):
         rbox(K["Cardboard"], 0.26, 0.2, 0.035, T(X0 + 0.25, -0.76, 0.84 + 0.036 * k) @ R(4 * k - 6, 'Z'), r=0.003,
              seg=1)
-    # 西北角：屏风（斜着挡住墙角），后面一张供桌
-    anchor(A, coll, "Anchor_Screen", (X0 + 0.72, Y1 - 0.62, 0.0), (0.7, -0.7, 0))
-    anchor(A, coll, "Anchor_Altar", (X0 + 0.42, Y1 - 0.25, 0.0), (0.0, -1, 0))
-    altar(K, A, coll, T(X0 + 0.42, Y1 - 0.25, 0.632))
-    use(A, coll, "Screen", (X0 + 0.75, Y1 - 0.65, 1.2))
-    use(A, coll, "Altar", (X0 + 0.42, Y1 - 0.3, 0.85))
+    # 西北角：供桌靠西墙、朝东（条案长 1.72 米，原来朝南摆有 0.44 米插进西墙）；屏风斜着挡住北半截，
+    # 从写字台西边能看见南半截桌面：香炉、一支蜡烛、蒙红布的牌位一角
+    anchor(A, coll, "Anchor_Screen", (X0 + 0.8, Y1 - 0.75, 0.0), (1.0, -0.35, 0))
+    anchor(A, coll, "Anchor_Altar", (X0 + 0.19, Y1 - 0.95, 0.0), (1, 0, 0))
+    altar(K, A, coll, T(X0 + 0.19, Y1 - 0.95, 0.632) @ R(90, 'Z'))
+    use(A, coll, "Screen", (X0 + 0.85, Y1 - 0.8, 1.2))
+    use(A, coll, "Altar", (X0 + 0.25, Y1 - 0.95, 0.85))
     # 北墙窗户左边：一幅「海不扬波」的条幅
     scroll(K, room.frame("N", 0.42, 2.55), "海不扬波")
     use(A, coll, "Scroll", room.at("N", 0.42, 1.8, 0.05))
+
+
+def cabinet_contents(K, yc, seed):
+    """顶箱柜的两层开格（Poly Haven chinese_cabinet：搁板在 1.49、2.15 米，内宽约 1.15、进深约 0.45）。
+    下层：一排竖着的档案盒（盒脊贴手写纸签）、两摞蓝布函套的线装书、一捆卷起来的海图；
+    上层：一只青花瓷坛、一摞账本、几轴卷起来的字画、一张斜靠着的老照片。"""
+    rng = random.Random(60 + seed)
+    xf = X0 + 0.5            # 开格前沿（朝屋里，+X）
+    xb = X0 + 0.1            # 后板
+    # ---- 下层
+    z = 1.49
+    y = yc - 0.52
+    labels = ["渔业生产", "捕捞日志", "船舶登记", "气象记录", "人事档案", "海图目录", "财务账册"]
+    nbox = rng.randint(7, 9)
+    for k in range(nbox):
+        th = rng.uniform(0.07, 0.09)
+        tilt = rng.uniform(-4, 4) if k < nbox - 1 else 14
+        M = T(xf - 0.13, y + th / 2, z) @ R(tilt, 'X') @ T(0, 0, 0.155)
+        rbox(K["Cardboard"], 0.24, th, 0.31, M, r=0.003, seg=1)
+        # 盒脊：一张纸签，竖着写四个字、一个年份
+        Fs = M @ T(0.1205, 0, 0.02) @ R(90, 'Y') @ R(-90, 'Z')
+        rbox(K["PaperWhite"], 0.14, th * 0.7, 0.0005, Fs, r=0.0, seg=1)
+        lab = labels[(k + seed * 3) % len(labels)]
+        for i, ch in enumerate(lab):
+            K.text(ch, Fs @ T(0.05 - i * 0.022, 0, 0.0004) @ R(90, 'Z'), 0.017, key="Ink", font=FONT_HAND)
+        K.text(str(1952 + (k * 3 + seed * 5) % 40), Fs @ T(-0.055, 0, 0.0004) @ R(90, 'Z'), 0.011, key="Ink",
+               font=FONT_HAND)
+        y += th + rng.uniform(0.002, 0.01)
+    # 两摞函套书
+    for j in range(2):
+        yy = yc + 0.22 + 0.24 * j
+        for k in range(rng.randint(3, 5)):
+            M = T(xf - 0.17, yy, z + 0.03 + 0.055 * k) @ R(rng.uniform(-4, 4), 'Z')
+            rbox(K["Canvas"], 0.28, 0.2, 0.05, M, r=0.004, seg=2)
+            rbox(K["Bamboo"], 0.006, 0.012, 0.02, M @ T(0.142, 0.06, 0.0), r=0.001, seg=1)   # 骨签
+            rbox(K["PaperWhite"], 0.05, 0.12, 0.0006, M @ T(0.02, -0.03, 0.0252), r=0.0, seg=1)
+    # ---- 上层
+    z = 2.15
+    # 青花瓷坛（盖着）
+    jar = T(xb + 0.2, yc - 0.32, z)
+    lathe(K["Porcelain"], [(0.0, 0.0), (0.07, 0.0), (0.11, 0.08), (0.12, 0.15), (0.09, 0.24), (0.06, 0.26),
+                           (0.06, 0.28), (0.0, 0.28)], 40, jar)
+    lathe(K["Porcelain"], [(0.0, 0.0), (0.075, 0.0), (0.07, 0.025), (0.02, 0.04), (0.015, 0.06), (0.0, 0.062)], 32,
+          jar @ T(0, 0, 0.28))
+    for k in range(3):
+        torus(K["CableBlue"], 0.115 - 0.01 * abs(k - 1), 0.003, 40, 4, jar @ T(0, 0, 0.11 + 0.035 * k))
+    # 一摞账本
+    for k in range(rng.randint(5, 7)):
+        rbox(K["Booklet" if k % 3 else "Cardboard"], 0.26, 0.19, rng.uniform(0.025, 0.04),
+             T(xf - 0.17, yc + 0.02, z + 0.015 + 0.036 * k) @ R(rng.uniform(-6, 6), 'Z'), r=0.003, seg=1)
+    # 几轴卷着的字画，用绳扎着
+    for k in range(4):
+        a = rng.uniform(-8, 8)
+        M = T(xf - 0.2, yc + 0.32 + 0.055 * k, z + 0.03) @ R(a, 'Z') @ R(90, 'Y')
+        cylinder(K["ScrollPaper"], 0.026, 0.5, 20, M @ T(0, 0, -0.25))
+        for e in (-0.27, 0.25):
+            cylinder(K["WoodDark"], 0.012, 0.02, 12, M @ T(0, 0, e))
+    # 斜靠着的老照片
+    Mp = frame(V((xb + 0.05, yc - 0.06, z + 0.13)), V((1, 0, 0.3)).normalized(), V((0, 0, 1)))
+    for (ox, oy, sx, sy) in ((0, 0.12, 0.2, 0.02), (0, -0.12, 0.2, 0.02), (-0.09, 0, 0.02, 0.26), (0.09, 0, 0.02, 0.26)):
+        rbox(K["WoodDark"], sx, sy, 0.015, Mp @ T(ox, oy, 0), r=0.003, seg=2)
+    box(K["Newspaper"], 0.17, 0.23, 0.002, Mp @ T(0, 0, -0.004))
 
 
 def altar(K, A, coll, M):
@@ -441,9 +546,29 @@ def east_wall(K, A, coll, room):
     # 大海图：东墙中间，木框玻璃
     RK.picture_frame(K, room.frame("E", 2.35, 2.5), 1.5, 1.0, paper="Chart", frame_key="WoodDark", tilt=2)
     use(A, coll, "Chart", room.at("E", 2.35, 1.95, 0.06))
-    # 下面两个卡片抽屉柜
+    # 下面两个卡片抽屉柜，架在一个矮木架上（原来贴着地，像两只矮箱子），顶上摞着卷宗、一本台历、一个铜笔筒
+    sz = 0.35
+    x0, x1, y0, y1 = X1 - 0.5, X1 - 0.02, -0.5, 1.3
+    abox(K["WoodDark"], x0, x1, y0, y1, sz - 0.03, sz, r=0.004)
+    for x in (x0 + 0.03, x1 - 0.03):
+        for y in (y0 + 0.03, (y0 + y1) / 2, y1 - 0.03):
+            abox(K["WoodDark"], x - 0.022, x + 0.022, y - 0.022, y + 0.022, 0.0, sz - 0.03, r=0.003)
+    abox(K["WoodDark"], x0 + 0.01, x0 + 0.03, y0 + 0.03, y1 - 0.03, 0.06, 0.1, r=0.003)   # 横撑
     for y in (0.85, -0.05):
-        anchor(A, coll, f"Anchor_Drawers{int(y * 10)}", (X1 - 0.24, y, 0.0), (-1, 0, 0))
+        anchor(A, coll, f"Anchor_Drawers{int(y * 10)}", (X1 - 0.24, y, sz), (-1, 0, 0))
+    top = sz + 0.545
+    for k in range(3):
+        dossier(K, T(X1 - 0.26, 1.0, top + 0.014 * k) @ R(88 + 4 * k, 'Z'), k + 5)
+    # 台历：两块硬纸板支成三角，上面一页一页的
+    Mc = T(X1 - 0.25, 0.3, top) @ R(90, 'Z')
+    for a in (-18, 18):
+        rbox(K["Cardboard"], 0.16, 0.002, 0.12, Mc @ R(a, 'X') @ T(0, 0, 0.058), r=0.0, seg=1)
+    rbox(K["PaperWhite"], 0.15, 0.004, 0.105, Mc @ R(-18, 'X') @ T(0, -0.004, 0.056), r=0.0, seg=1)
+    lathe(K["Brass"], [(0.0, 0.0), (0.035, 0.0), (0.035, 0.11), (0.032, 0.11), (0.032, 0.004), (0.0, 0.004)], 24,
+          T(X1 - 0.22, -0.3, top))
+    for k in range(3):
+        cylinder(K["Bakelite" if k else "Bamboo"], 0.005, 0.16, 8, T(X1 - 0.22, -0.3, top + 0.01) @ R(8 - 6 * k, 'X')
+                 @ R(5 * k, 'Y'))
     # 拓片（东墙偏南）、民国老照片（拓片下面）
     RK.picture_frame(K, room.frame("E", 4.2, 2.35), 0.5, 0.75, paper="Rubbing", frame_key="WoodDark", tilt=3)
     use(A, coll, "Rubbing", room.at("E", 4.2, 1.95, 0.06))
@@ -476,6 +601,36 @@ def safe(K, M):
         for sy in (-1, 1):
             cylinder(K["Dark"], 0.03, 0.04, 16, M @ T(sx * (w / 2 - 0.05), sy * (d / 2 - 0.05), 0.0))
     K.text("上海　安全牌", M @ T(0, -d / 2 - 0.0162, 1.0) @ R(90, 'X'), 0.025, key="Gold", font=FONT_SERIF)
+    rbox(K["Brass"], 0.17, 0.004, 0.045, M @ T(0, -d / 2 - 0.016, 0.93), r=0.001, seg=1)
+    K.text("一九五四年造", M @ T(0, -d / 2 - 0.0185, 0.93) @ R(90, 'X'), 0.014, key="Dark", font=FONT_SERIF)
+    for z in (0.3, 0.85):
+        cylinder(K["Steel"], 0.018, 0.13, 16, M @ T(w / 2 - 0.035, -d / 2 - 0.02, z))
+    rbox(K["Dark"], w + 0.04, d + 0.04, 0.05, M @ T(0, 0, 0.065), r=0.006, seg=2)
+    zt = h + 0.04
+    RK.thermos(K, M @ T(-0.17, 0.1, zt), seed=8)
+    for k in range(2):
+        rbox(K["Booklet"], 0.22, 0.3, 0.03, M @ T(0.1, 0.05, zt + 0.015 + 0.031 * k) @ R(4 - 9 * k, 'Z'), r=0.003, seg=1)
+    abacus(K, M @ T(0.08, -0.12, zt + 0.062) @ R(-6, 'Z'))
+
+
+def abacus(K, M):
+    """算盘：木框、一道横梁、十三档，上两珠下五珠（平放）。"""
+    w, d = 0.36, 0.17
+    for (cx, cy, sx, sy) in ((0, d / 2 - 0.008, w, 0.016), (0, -d / 2 + 0.008, w, 0.016), (-w / 2 + 0.008, 0, 0.016, d),
+                             (w / 2 - 0.008, 0, 0.016, d), (0, d / 2 - 0.05, w - 0.02, 0.008)):
+        rbox(K["WoodRed"], sx, sy, 0.02, M @ T(cx, cy, 0.01), r=0.002, seg=1)
+    rng = random.Random(5)
+    for i in range(13):
+        x = -w / 2 + 0.028 + i * (w - 0.056) / 12
+        cylinder(K["Bamboo"], 0.0015, d - 0.02, 6, M @ T(x, -d / 2 + 0.01, 0.01) @ R(-90, 'X'))
+        up = rng.randint(0, 1)
+        for k in range(2):
+            y = d / 2 - 0.022 - k * 0.013 - (0.012 if (k < up) else 0.0)
+            uvsphere(K["WoodDark"], 0.009, 8, 6, M @ T(x, y, 0.01) @ S(1.0, 0.6, 0.9))
+        dn = rng.randint(0, 3)
+        for k in range(5):
+            y = -d / 2 + 0.02 + k * 0.013 + (0.022 if k >= 5 - dn else 0.0)
+            uvsphere(K["WoodDark"], 0.009, 8, 6, M @ T(x, y, 0.01) @ S(1.0, 0.6, 0.9))
 
 
 def wall_clock(K, F):
@@ -529,15 +684,66 @@ def tea_corner(K, A, coll):
     RK.thermos(K, T(cx - 0.25, cy + 0.2, z), seed=4)
 
 
+# ============================================================================ 南墙：刚搬进来的、前一家留下的
+def south_wall(K, A, coll, room):
+    # 东溟搬家的纸箱：两层摞着
+    rng = random.Random(9)
+    k = 0
+    for (x, y, z, a) in ((-0.25, Y0 + 0.28, 0.0, 3), (0.2, Y0 + 0.3, 0.0, -5), (-0.05, Y0 + 0.3, 0.335, 12)):
+        anchor(A, coll, f"Anchor_MoveBox{k}", (x, y, z), (math.sin(math.radians(a)), 1, 0))
+        k += 1
+    # 渔业公司留下的两门铁皮文件柜（墨绿漆，掉漆）：靠南墙，门上一个插卡片的铜框、一把锁
+    cx, cy, w, d, h = 0.95, Y0 + 0.24, 0.9, 0.44, 1.8
+    rbox(K["FileCab"], w, d, h, T(cx, cy, h / 2 + 0.03), r=0.006, seg=2)
+    rbox(K["Dark"], w - 0.02, d - 0.02, 0.03, T(cx, cy, 0.015), r=0.0, seg=1)
+    for sx in (-1, 1):
+        F = frame(V((cx + sx * w / 4, cy + d / 2, 0.0)), V((0, 1, 0)))
+        rbox(K["FileCab"], w / 2 - 0.012, h - 0.06, 0.012, F @ T(0, h / 2 + 0.03, 0.006), r=0.004, seg=2)
+        for z in (0.5, 1.4):
+            rbox(K["FileCab"], w / 2 - 0.1, 0.006, 0.003, F @ T(0, z, 0.014), r=0.001, seg=1)   # 冲压加强筋
+        sweep(K["Chrome"], [F @ V((-sx * 0.04, 1.0, 0.012)), F @ V((-sx * 0.04, 1.0, 0.04)),
+                            F @ V((-sx * 0.04, 0.85, 0.04)), F @ V((-sx * 0.04, 0.85, 0.012))], circle_profile(0.006, 8))
+        rbox(K["Brass"], 0.09, 0.055, 0.003, F @ T(0, 1.55, 0.0135), r=0.001, seg=1)
+        rbox(K["PaperWhite"], 0.08, 0.045, 0.001, F @ T(0, 1.55, 0.0152), r=0.0, seg=1)
+        K.text(["捕捞", "财务"][(sx + 1) // 2], F @ T(0, 1.55, 0.016), 0.02, key="Ink", font=FONT_HAND)
+    cylinder(K["Chrome"], 0.012, 0.01, 16, frame(V((cx, cy + d / 2 + 0.012, 1.1)), V((0, 1, 0))))
+    # 文件柜上方墙上：一面旧锦旗（燕尾形红绸，金字），挂在一根细竹竿上
+    F = room.frame("S", X1 - cx, 2.45, 0.012)
+    pen = [(-0.24, 0.0), (0.24, 0.0), (0.24, -0.72), (0.0, -0.6), (-0.24, -0.72)]
+    extrude_profile(K["ClothRed"], pen, F @ R(3, 'Z'), 0.002)
+    cylinder(K["Bamboo"], 0.006, 0.6, 8, F @ T(-0.3, 0.01, 0.005) @ R(90, 'Y'))
+    for t_, ch in enumerate("赠白沙门渔业公司"):
+        K.text(ch, F @ R(3, 'Z') @ T(0.17, -0.08 - t_ * 0.034, 0.0025), 0.026, key="Gold", font=FONT_SERIF)
+    for t_, ch in enumerate("生产先进"):
+        K.text(ch, F @ R(3, 'Z') @ T(0.0, -0.12 - t_ * 0.085, 0.0025), 0.075, key="Gold", font=FONT_BRUSH)
+    for t_, ch in enumerate("一九七九年"):
+        K.text(ch, F @ R(3, 'Z') @ T(-0.17, -0.25 - t_ * 0.034, 0.0025), 0.026, key="Gold", font=FONT_SERIF)
+    nail = F @ V((0.0, 0.18, 0.0))
+    RK.nail(K, frame(nail, V((0, 1, 0))))
+    for sx in (-0.28, 0.28):
+        sweep(K["Rope"], [nail, F @ V((sx, 0.01, 0.006))], circle_profile(0.0012, 5))
+
+
 # ============================================================================ 头顶
 def overhead(K, A, coll):
     RK.fluorescent(K, A, coll, (-0.9, 0.3, H - 0.5), (0, 1, 0), "A", chain=0.5)
     RK.fluorescent(K, A, coll, (1.5, 0.3, H - 0.5), (0, 1, 0), "B", chain=0.5)
     RK.ceiling_fan(K, A, coll, (0.3, -0.9, H), rod=0.55, name="Fan", blade_len=0.6, seed=3)
+    sw_x = -2.25   # 门边开关（door() 里 room.frame("S", uc + w / 2 + 0.2)：南墙 u 从东往西量）
     for x in (-0.9, 1.5):
-        RK.wire_run(K, [V((x, 0.3, H)), V((x, -1.6, H)), V((-1.4, -1.6, H)), V((-1.4, Y0 + 0.02, H))],
+        RK.wire_run(K, [V((x, 0.3, H)), V((x, -1.6, H)), V((sw_x, -1.6, H)), V((sw_x, Y0 + 0.02, H))],
                     normal=(0, 0, -1))
-    RK.wire_run(K, [V((-1.4, Y0, H - 0.04)), V((-1.4, Y0, 1.43))], normal=(0, 1, 0))
+    RK.wire_run(K, [V((sw_x, Y0, H - 0.04)), V((sw_x, Y0, 1.43))], normal=(0, 1, 0))
+    # 天花板灯盘：吊扇三级台阶的一个，两盏日光灯吊链顶上各一个小的
+    def rosette(x, y, rings):
+        prof = []
+        for k, (r, dz) in enumerate(rings):
+            prof += [(r, dz), (r, dz + 0.015)]
+        prof += [(0.0, rings[-1][1] + 0.015)]
+        lathe(K["Ceiling"], prof, 48, T(x, y, H) @ R(180, 'X'))
+    rosette(0.3, -0.9, [(0.28, 0.0), (0.22, 0.015), (0.12, 0.03)])
+    for x in (-0.9, 1.5):
+        rosette(x, 0.3, [(0.12, 0.0), (0.08, 0.015)])
 
 
 # ============================================================================ 窗外：码头、母船、港湾
@@ -623,7 +829,9 @@ def ship(K, A, coll, M):
     sweep(K["CraneRust"], [M @ V((-1.4, -L / 2 - 1.5, D + 9.0)), M @ V((1.4, -L / 2 - 1.5, D + 9.0))],
           rect_profile(0.6, 0.6, 0.05))
     sweep(K["Steel"], [M @ V((0, -L / 2 - 1.5, D + 8.6)), M @ V((0, -L / 2 - 1.6, -0.5))], circle_profile(0.04, 6))
-    K.text("东溟", M @ T(4.52, 10.0, D - 1.0) @ R(90, 'Z') @ R(90, 'X'), 1.2, key="Silk", font=FONT_SERIF)
+    # 文字对象默认叫 Int_Txt_*，改成 Ext_ 开头，导出时归到窗外那一组
+    K.text("东溟", M @ T(4.52, 10.0, D - 1.0) @ R(90, 'Z') @ R(90, 'X'), 1.2, key="Silk",
+           font=FONT_SERIF).name = "Ext_ShipName"
     light(A, coll, "Light_ShipMast", M @ V((0, 5.0, D + 13.1)), (0, 0, -1))
 
 
@@ -635,27 +843,34 @@ def fishing_boat(K, M, rng):
 
 
 def hills(K):
-    """远处的山：几座起伏的山包，雨雾里只剩一层灰影。"""
+    """远处的山：三道山脊，由近到远一道比一道高，雨雾里只剩层层的灰影。每道山脊前面一面竖着的前幕（朝窗户），
+    顶上往后坡下去；脊线三层噪声。"""
     rng = random.Random(7)
     bm = K["Hill"]
-    for k in range(5):
-        cx = rng.uniform(-320, 320)
-        cy = Y1 + rng.uniform(650, 850)
-        w = rng.uniform(260, 420)
-        h = rng.uniform(18, 45)
-        rows = []
-        for j in range(9):
-            row = []
-            for i in range(33):
-                u = i / 32 - 0.5
-                v = j / 8
-                bump = math.cos(math.pi * u) ** 2 * (0.85 + 0.15 * math.sin(u * 7 + k * 2.1))
-                z = GROUND + h * bump * (1 - v * 0.3)
-                row.append(bm.verts.new((cx + u * w, cy + v * 80, z)))
-            rows.append(row)
-        for j in range(8):
-            for i in range(32):
-                bm.faces.new([rows[j][i], rows[j][i + 1], rows[j + 1][i + 1], rows[j + 1][i]])
+
+    def ridge(dist, height, span, seed):
+        ph = [rng.uniform(0, 6.28) for _ in range(3)]
+        nx = 80
+        xs = [-span / 2 + span * i / nx for i in range(nx + 1)]
+        top = []
+        for x in xs:
+            env = math.cos(math.pi * x / span) ** 0.5   # 两头落到水面
+            hz = height * env * (0.75 + 0.25 * math.sin(x / 80 + ph[0]) + 0.12 * math.sin(x / 30 + ph[1])
+                                 + 0.05 * math.sin(x / 10 + ph[2]))
+            top.append(max(hz, 0.0))
+        y0 = Y1 + dist
+        front = [bm.verts.new((x, y0, GROUND - 2)) for x in xs]
+        crest = [bm.verts.new((x, y0 + 15 + 10 * math.sin(x / 50 + seed), GROUND + t)) for x, t in zip(xs, top)]
+        back = [bm.verts.new((x, y0 + 60, GROUND + t * 0.6)) for x, t in zip(xs, top)]
+        for row0, row1, axis in ((front, crest, 1), (crest, back, 2)):
+            for i in range(nx):
+                f = bm.faces.new([row0[i], row1[i], row1[i + 1], row0[i + 1]])
+                f.normal_update()
+                # 前幕朝窗户（-Y），后坡朝上
+                if (f.normal.y > 0) if axis == 1 else (f.normal.z < 0):
+                    f.normal_flip()
+    for k, (dist, height, span) in enumerate(((450, 50, 1300), (700, 90, 1700), (1000, 140, 2300))):
+        ridge(dist, height, span, k)
 
 
 # ============================================================================ 贴花
@@ -683,14 +898,15 @@ def decals(A, coll):
     d("CeilStain", (-1.6, 2.2, H), V((0, 0, -1)), NORTH, 1.1, 0.8, 0.05)
     d("Mold", (X1 * 0.99, Y1 * 0.99, H - 0.2), V((-1, -1, 0)).normalized(), UP, 0.6, 0.5, 0.4)
     # 门把手、开关周围的手印；桌沿被胳膊肘磨亮
-    d("Grime", (DOOR[1] + 0.2, Y0, 1.4), V((0, 1, 0)), UP, 0.18, 0.25, 0.05)
-    d("FloorWear", ((DOOR[0] + DOOR[1]) / 2, -1.6, 0.0), UP, V((0.3, 1, 0)).normalized(), 0.8, 2.2, 0.04)
+    d("Grime", (-2.25, Y0, 1.4), V((0, 1, 0)), UP, 0.18, 0.25, 0.05)
+    d("FloorDull", ((DOOR[0] + DOOR[1]) / 2, -1.6, 0.0), UP, V((0.3, 1, 0)).normalized(), 0.8, 2.2, 0.04)
     d("Ring", (DESK[0] + 0.35, DESK[1] + 0.25, DESK_Z), UP, NORTH, 0.09, 0.09, 0.03)
 
 
 # ============================================================================ 能站的地方
 def layout(A, coll):
-    walk(A, coll, -1.75, 1.0, -2.7, 0.55)        # 屋子南半边
+    walk(A, coll, -1.75, 1.0, -2.4, 0.55)        # 屋子南半边（南墙边摞着纸箱、文件柜）
+    walk(A, coll, -1.75, -0.55, -2.7, -2.4)      # 门里
     walk(A, coll, 1.0, 2.1, -1.0, 0.55)          # 茶几北边
     walk(A, coll, -1.75, -0.6, 0.55, 2.0)        # 写字台西边
     walk(A, coll, -1.35, -0.6, 2.0, 2.6)         # 屏风旁边（探头能看见供桌）
@@ -719,12 +935,16 @@ def main():
     west_wall(K, A, coll, room)
     east_wall(K, A, coll, room)
     tea_corner(K, A, coll)
+    south_wall(K, A, coll, room)
     overhead(K, A, coll)
-    outside(K, A, coll)
+    # 窗外的零件单独一组（Outside_*），导出时不和屋里同材质的东西合并（见 room_kit.OUTSIDE）
+    out_k = Parts(coll, M, "Outside")
+    outside(out_k, A, coll)
     decals(A, coll)
     layout(A, coll)
     shell_k.flush(recalc=False)
     K.flush()
+    out_k.flush()
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(ROOT, "blender", "source", "office.blend"))
     if preview_dir:
         os.makedirs(preview_dir, exist_ok=True)

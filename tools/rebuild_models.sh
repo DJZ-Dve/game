@@ -3,8 +3,8 @@
 # 用法: tools/rebuild_models.sh [submarine|seabed|dorm|office|npc ...]   不给参数就全部重新生成
 #   submarine  潜艇（外壳 + 舱内），顺带重新烘焙舱内 VoxelGI
 #   seabed     海床
-#   dorm       序章的宿舍（gen_dorm.py），顺带烘焙宿舍的 VoxelGI
-#   office     第一章的东溟办事处（gen_office.py），顺带烘焙办事处的 VoxelGI
+#   dorm       序章的宿舍（gen_dorm.py），顺带烘焙宿舍的 VoxelGI 和光照贴图
+#   office     第一章的东溟办事处（gen_office.py），顺带烘焙办事处的 VoxelGI 和光照贴图
 #   npc        沈渡（gen_npc.py，要先跑 tools/fetch_rocketbox.sh）
 # Blender / Godot 默认在 /Applications 下，装在别处时用环境变量 BLENDER / GODOT 指定。
 set -eu
@@ -40,4 +40,15 @@ for k in $want; do
   esac
   godot_window --path "$root" --resolution 640x360 $args | grep -E "ERROR|SCRIPT ERROR|saved|baked" || true
 done
+# 岸上的房间用光照贴图（assets/gi/<房间>.lmbake）：模型一变，导入时重新展的 UV2 跟着变，旧的光照贴图就对不上了，
+# 接着重新烘（tools/bake_lightmap.sh，宿舍连日光灯开着的那份一起，两个房间一共约 6 分钟）
+lm=()
+for k in $want; do
+  if [[ ($k == dorm || $k == office) && -f $root/assets/gi/$k.lmbake ]]; then
+    lm+=$k
+  fi
+done
+if (( ${#lm} )); then
+  "$root/tools/bake_lightmap.sh" $lm
+fi
 echo "rebuild done"

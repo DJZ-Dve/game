@@ -24,3 +24,7 @@
 
 # Godot 二进制资源（烘焙的 GI 等）
 *.res filter=lfs diff=lfs merge=lfs -text
+
+# 光照贴图（tools/bake_lightmap.sh 烘的数据）和导入时展 UV2 的缓存（不提交的话别的机器导入会重新展，UV2 对不上贴图）
+*.lmbake filter=lfs diff=lfs merge=lfs -text
+*.unwrap_cache filter=lfs diff=lfs merge=lfs -text

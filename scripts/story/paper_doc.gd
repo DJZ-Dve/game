@@ -35,6 +35,12 @@ var _text: RichTextLabel
 var _marks: Control
 var _top: ColorRect
 var _live := 0
+## 3D 场景里的纸用的贴图：SubViewport 的贴图没有 mipmap，斜着、远着看字会闪、断。每画完一次（UPDATE_ONCE 用掉）
+## 读回来生成 mipmap 存进这里；动画期间（begin_live）一直重画，用回 SubViewport 的贴图。换了发 display_changed
+signal display_changed
+var mip_tex: ImageTexture
+var _prev_mode := -1
+var _mip_busy := false
 
 
 func _ready() -> void:
@@ -212,6 +218,40 @@ func add_image(tex: Texture2D, rect: Rect2, white_border := 0.0) -> Control:
 	_marks.add_child(r)
 	refresh()
 	return r
+
+
+## 3D 场景里现在该用哪张贴图（见 mip_tex）
+func display_texture() -> Texture2D:
+	return mip_tex if mip_tex and _live == 0 else get_texture()
+
+
+func _process(_delta: float) -> void:
+	var m := render_target_update_mode
+	if m != _prev_mode:
+		if _prev_mode == SubViewport.UPDATE_ONCE and m == SubViewport.UPDATE_DISABLED:
+			_update_mips()
+		elif m == SubViewport.UPDATE_ALWAYS:
+			display_changed.emit()
+		_prev_mode = m
+
+
+func _update_mips() -> void:
+	if _mip_busy:
+		return
+	_mip_busy = true
+	await RenderingServer.frame_post_draw
+	_mip_busy = false
+	if _live > 0 or not is_inside_tree():
+		return
+	var img := get_texture().get_image()
+	if img == null or img.is_empty():
+		return
+	img.generate_mipmaps()
+	if mip_tex == null or Vector2i(mip_tex.get_size()) != img.get_size():
+		mip_tex = ImageTexture.create_from_image(img)
+	else:
+		mip_tex.update(img)
+	display_changed.emit()
 
 
 ## 动画期间一直重画（begin_live / end_live 成对调用）

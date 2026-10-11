@@ -101,7 +101,8 @@ def pallor(rgb, amount):
 
 
 def body_textures():
-    """西装、衬衫、领带、手、鞋。返回 (颜色图, ORM 图)。ORM：R 不用、G 粗糙度、B 金属度。"""
+    """西装、衬衫、领带、手、鞋。返回 (颜色图, ORM 图, 每个像素属于哪一块)。ORM：R 不用、G 粗糙度、B 金属度。
+    分块（BODY_PARTS 的下标）用来把身体按面拆成几个材质，Godot 里西装、手能单独调。"""
     _, px = load_px(f"{TEX}_body_color.tga")
     h, w = px.shape[:2]
     u, v = uv_grid(h, w)
@@ -115,16 +116,18 @@ def body_textures():
     shirt = (sat < 0.12) & (lum > 0.3) & ~hands & ~tie
     suit = ~(hands | shoes | tie | shirt)
     # 西装：藏青压成发旧的炭灰（微微偏暖），按原来的明暗保留褶子
-    k = np.clip(lum / max(float(lum[suit].mean()), 1e-3), 0.25, 2.6)[..., None]
+    # （这里的数值是写进 8 位贴图的 sRGB 编码值：原来的 0.072 换成线性只有 0.006，比黑丝绒还黑，主画面里成了一团黑影；
+    # 现在约线性 0.03，旧款炭灰。k 的下限也放宽，褶子留着但暗处不压死）
+    k = np.clip(lum / max(float(lum[suit].mean()), 1e-3), 0.5, 1.8)[..., None]
     wear = low_noise(h, w, 96, 3)[..., None]
-    rgb[suit] = (np.array([0.072, 0.068, 0.062], np.float32) * k * (0.9 + 0.22 * wear))[suit]
+    rgb[suit] = (np.array([0.16, 0.152, 0.14], np.float32) * k * (0.9 + 0.22 * wear))[suit]
     # 衬衫：洗得发黄，领口、袖口发暗
     ks = np.clip(lum / 0.82, 0.3, 1.2)[..., None]
     shirt_col = np.array([0.74, 0.71, 0.6], np.float32) * ks * (0.92 + 0.12 * wear)
     rgb[shirt] = shirt_col[shirt]
     # 领带：素色深酒红
     kt = np.clip(lum / max(float(lum[tie].mean()), 1e-3), 0.4, 1.8)[..., None]
-    rgb[tie] = (np.array([0.1, 0.018, 0.022], np.float32) * kt)[tie]
+    rgb[tie] = (np.array([0.24, 0.05, 0.06], np.float32) * kt)[tie]
     # 手：褪血色
     rgb[hands] = pallor(rgb, 0.2)[hands]
     # 鞋：更黑一点（湿的）
@@ -140,7 +143,10 @@ def body_textures():
     rough[suit] = 0.78 + 0.08 * (wear[..., 0][suit] - 0.5)
     orm[..., 0] = 1.0
     orm[..., 1] = rough
-    return save_png(px, "npc_shen_body_color"), save_png(orm, "npc_shen_body_orm", 'Non-Color')
+    label = np.zeros((h, w), np.uint8)
+    for i, m in enumerate((suit, shirt, tie, hands, shoes)):
+        label[m] = i
+    return save_png(px, "npc_shen_body_color"), save_png(orm, "npc_shen_body_orm", 'Non-Color'), label
 
 
 def head_textures():
@@ -175,6 +181,27 @@ def head_textures():
     rough[atlas & ~eye] = 0.3
     orm[..., 1] = np.clip(rough, 0.03, 1)
     return save_png(px, "npc_shen_head_color"), save_png(orm, "npc_shen_head_orm", 'Non-Color')
+
+
+BODY_PARTS = ("Suit", "Shirt", "Tie", "Hands", "Shoes")
+
+
+def split_body(obj, label, mats):
+    """身体按每个面的 UV 中心落在哪一块（label）分到 Shen_Suit / Shirt / Tie / Hands / Shoes 几个材质槽（共用一套贴图）。"""
+    h, w = label.shape
+    me = obj.data
+    me.materials.clear()
+    for m in mats:
+        me.materials.append(m)
+    uvl = me.uv_layers.active.data
+    count = [0] * len(mats)
+    for poly in me.polygons:
+        u = sum(uvl[i].uv[0] for i in poly.loop_indices) / poly.loop_total
+        v = sum(uvl[i].uv[1] for i in poly.loop_indices) / poly.loop_total
+        k = int(label[min(int((v % 1.0) * h), h - 1), min(int((u % 1.0) * w), w - 1)])
+        poly.material_index = k
+        count[k] += 1
+    print("shen: 身体分块", dict(zip(BODY_PARTS, count)))
 
 
 def pbr(name, color, orm=None, normal=None, alpha=False):
@@ -314,15 +341,15 @@ def main():
         print(f"shen: {key} 形态键 {len(sk.key_blocks) - 1 if sk else 0} 个")
 
     # 材质
-    bc, bo = body_textures()
+    bc, bo, blab = body_textures()
     hc, ho = head_textures()
     bn = bpy.data.images.load(os.path.join(SRC, f"{TEX}_body_normal.tga"))
     hn = bpy.data.images.load(os.path.join(SRC, f"{TEX}_head_normal.tga"))
     hair = bpy.data.images.load(os.path.join(SRC, f"{TEX}_opacity_color.tga"))
-    for key, mat in (("Body", pbr("Shen_Body", bc, bo, bn)), ("Head", pbr("Shen_Head", hc, ho, hn)),
-                     ("Hair", pbr("Shen_Hair", hair, alpha=True))):
+    for key, mat in (("Head", pbr("Shen_Head", hc, ho, hn)), ("Hair", pbr("Shen_Hair", hair, alpha=True))):
         parts[key].data.materials.clear()
         parts[key].data.materials.append(mat)
+    split_body(parts["Body"], blab, [pbr(f"Shen_{p}", bc, bo, bn) for p in BODY_PARTS])
 
     # 动画
     gl = glasses(arm)

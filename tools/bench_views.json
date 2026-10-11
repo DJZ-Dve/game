@@ -1,0 +1,27 @@
+{
+  "dorm": [
+    {"name": "opening", "desc": "开场：坐在床边醒过来（Seat_Bed）", "sit": "Bed", "yaw": 25, "pitch": -6},
+    {"name": "desk", "desc": "坐在桌前（Seat_Desk）：传呼机、催款单、台灯", "sit": "Desk", "pitch": -28},
+    {"name": "window_back", "desc": "窗边回看门口", "at": [0.7, -1.4], "yaw": -175, "pitch": -8},
+    {"name": "bed_net", "desc": "床和蚊帐", "at": [0.6, 0.6], "yaw": 67, "pitch": -15},
+    {"name": "washstand", "desc": "照镜子（日光灯开着才看得见脸）：脸盆架、镜子", "at": [0.5, -1.05], "yaw": -90, "pitch": -16, "tube": true},
+    {"name": "window_out", "desc": "窗外特写：玻璃上的雨、防盗窗、院子、路灯、龙门吊", "at": [-0.3, -1.25], "yaw": -18, "pitch": 3},
+    {"name": "tube_on", "desc": "日光灯开着（--tube=on）的全景，从门边看", "at": [0.5, 1.9], "yaw": 22, "pitch": -8, "tube": true},
+    {"name": "door_open", "desc": "开门：楼道里一串湿脚印", "at": [1.0, 1.15], "yaw": 180, "pitch": -25, "door": 1.0},
+    {"name": "lightning", "desc": "窗外打闪电的一下", "at": [0.0, 0.3], "yaw": 0, "pitch": 0, "flash": 0.9}
+  ],
+  "office": [
+    {"name": "entrance", "desc": "门口开场（Spawn）"},
+    {"name": "visitor", "desc": "坐在来客椅上看沈渡（Seat_Visitor，第一章最主要的画面）", "sit": "Visitor", "pitch": -5},
+    {"name": "window_back", "desc": "窗边回看门口", "at": [1.4, -2.1], "yaw": 150, "pitch": -8},
+    {"name": "east_wall", "desc": "东墙：海图、卡片抽屉柜", "at": [0.2, 0.4], "yaw": -68, "pitch": -7},
+    {"name": "altar", "desc": "西北角：屏风、条幅（供桌在屏风后面，缝里透出烛光）", "at": [-1.0, -1.2], "yaw": 50, "pitch": -15},
+    {"name": "window_out", "desc": "窗外特写：码头、镇海号、母船", "at": [-0.6, -2.55], "yaw": -12, "pitch": -3},
+    {"name": "ceiling", "desc": "抬头：日光灯（一盏坏的）、吊扇", "at": [0.0, 2.2], "yaw": 0, "pitch": 35},
+    {"name": "shen_close", "desc": "沈渡近景", "at": [-0.6, -1.0], "yaw": -42, "pitch": -15}
+  ],
+  "cabin": [
+    {"name": "console", "desc": "潜艇控制舱：坐在驾驶椅上看驾驶台（质感标杆）", "args": []},
+    {"name": "aft", "desc": "潜艇控制舱往后看：水密门开着、生活舱（质感标杆）", "args": ["--at=0,0.8", "--yaw=180", "--pitch=-5", "--door=open"]}
+  ]
+}

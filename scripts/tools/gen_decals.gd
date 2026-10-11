@@ -34,6 +34,7 @@ func _init() -> void:
 	_streak()
 	_hand()
 	_floor_wear()
+	_floor_dull()
 	_damp()
 	_ceil_stain()
 	_mold()
@@ -376,12 +377,33 @@ func _floor_wear() -> void:
 			var v := float(y) / h
 			var lane := 1.0 - _sstep(0.12, 0.48, absf(u + (_n01(0, y * 0.6) - 0.5) * 0.18))
 			lane *= _sstep(0.0, 0.18, v) * (1.0 - _sstep(0.82, 1.0, v))
-			var bare := _sstep(0.45, 0.75, lane * (0.6 + 0.8 * _n01(x * 3.0, y * 3.0)))
-			var dirt := lane * (0.3 + 0.4 * _n201(x * 2.0, y * 2.0))
-			var c := Color(0.32, 0.3, 0.27).lerp(Color(0.45, 0.43, 0.4), bare)
-			img.set_pixel(x, y, Color(c.r, c.g, c.b, clampf(dirt * 0.55 + bare * 0.6, 0.0, 0.85)))
+			# 四边淡出（原来透明度一直到盒子边上都不是 0，有直切边）
+			var edge := _sstep(0.0, 0.2, minf(u + 0.5, 0.5 - u)) * _sstep(0.0, 0.2, minf(v, 1.0 - v))
+			lane *= edge
+			# 漆磨薄了：发浅、发灰的地板漆色；只有零星几点磨穿露出水泥（原来是一大片灰白，像铺了几块羊毛毯）
+			var bare := _sstep(0.8, 0.95, lane * (0.6 + 0.8 * _n01(x * 3.0, y * 3.0)))
+			var dirt := lane * (0.5 + 0.5 * _n201(x * 2.0, y * 2.0))
+			var c := Color(0.4, 0.22, 0.17).lerp(Color(0.42, 0.41, 0.39), bare)
+			img.set_pixel(x, y, Color(c.r, c.g, c.b, clampf(dirt * 0.35 + bare * 0.5, 0.0, 0.6)))
 	_save(img, "floor_wear")
-	_orm_from(img, 0.85, "floor_wear")
+	_orm_from(img, 0.75, "floor_wear")
+
+
+## 水磨石上走出来的路：颜色几乎不变，只是磨哑了（只改粗糙度）、带一点灰
+func _floor_dull() -> void:
+	var w := 256
+	var h := 512
+	var img := _img(w, h)
+	for y in h:
+		for x in w:
+			var u := float(x) / w - 0.5
+			var v := float(y) / h
+			var lane := 1.0 - _sstep(0.12, 0.48, absf(u + (_n01(0, y * 0.6) - 0.5) * 0.18))
+			lane *= _sstep(0.0, 0.2, minf(u + 0.5, 0.5 - u)) * _sstep(0.0, 0.2, minf(v, 1.0 - v))
+			var a := lane * (0.5 + 0.5 * _n201(x * 2.0, y * 2.0))
+			img.set_pixel(x, y, Color(0.42, 0.41, 0.38, clampf(a * 0.25, 0.0, 0.25)))
+	_save(img, "floor_dull")
+	_orm_from(img, 0.8, "floor_dull")
 
 
 ## 窗下墙面返潮（宿舍）：下面一大片发暗、发黄，上沿一道起伏的水线，墙皮鼓起来的地方颜色更深

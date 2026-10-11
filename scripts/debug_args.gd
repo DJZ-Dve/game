@@ -17,6 +17,32 @@ extends Node
 ##   --no-hud         不显示操作提示（录给别人看的视频用）
 ##   --body-preview   把第一人称的身体摆到视线前方 1.3 米、面朝相机（看身体的姿势、朝向，见 crew_body.gd）
 ##   --sfx-log        每触发一个音效打一行 `SFX <帧号> <名字>`（tools/audio_report.py 拿它和录音对时间）
+## 岸上的场景（--scene=dorm|office，scripts/story/）截图：
+##   --at=x,z / --yaw / --pitch  站在房间局部坐标（x 东、-z 北）这一点，yaw 0 朝北、90 朝西、-90 朝东、180 朝南
+##   --sit=座位名      坐到 Seat_<名字> 上（Desk、Bed、Visitor……），用坐着时的眼睛位置；--yaw/--pitch 变成相对椅子朝向的偏移
+##   --shots=json      基准截图：一次启动挨个摆机位、等画面稳定、存 PNG，拍完退出（tools/bench.sh、tools/bench_views.json）。
+##                    json 是机位数组，或者 {组名: 机位数组}（--shot-set 挑哪组，默认 --scene 的名字）。一个机位：
+##                    {"name", "desc", "at": [x, z], "yaw", "pitch", "sit": 座位名（yaw/pitch 是相对偏移）,
+##                     "tube": 宿舍日光灯开不开（默认跟 --tube）, "door": 门开多少 0~1, "fov": 视野（默认 64，坐着 54）,
+##                     "free": 不限制在能站的地方, "flash": 窗外闪电的亮度（打到最亮那一下拍）, "settle": 等多少帧（默认 90）,
+##                     "gi": "lightmap" / "voxel" 就地切换间接光（同一个进程里轮流比两套 GI 的帧率）}
+##   --shot-dir=目录   --shots 存到哪（<组名>_<name>.png，另写一份 <组名>_shots.json：每张的帧率、GPU 时间）
+##   --shot-only=a,b   只拍这几个机位（按 name）
+##   --gi=voxel|both   岸上房间的间接光：默认有烘好的光照贴图（assets/gi/<房间>.lmbake）就用 LightmapGI，
+##                    voxel 强制用原来的 VoxelGI，both 两个都开（见 story_room.gd）
+##   --lm-export       把房间导出成烘焙光照贴图用的场景后退出（tools/bake_lightmap.sh 第一步）；--lm-<属性>=值 改 LightmapGI 参数
+##   截图（--capture、--shots）时为了每次拍出来一样：不打闪电（--lightning=on 照常随机打）、
+##   闪的灯停在基础亮度（--flicker=on 照常闪）、窗外按墙上时间闪的障碍灯灭着、坐着不晃、镜子里不眨眼（见 story_room.gd）。
+##   --shots 也算截图：凡是看 --capture 的地方（不放开场演出、不显示提示、不抓鼠标）一样生效。
+##   bench.sh 还加了 --fixed-fps 60：游戏时间按帧走（吊扇、钟、人的动作停在同一个位置），和机器快慢无关
+
+## --shots 第一张多等这些帧（加载、编译着色器）
+const SHOT_WARMUP := 60
+## 每张最后这些帧量帧时间、GPU 时间
+const SHOT_MEASURE := 30
+
+## 截图时的岸上房间（StoryRoom 就位后自己报到，--shots 等它）
+var room: Node
 
 var _args := {}
 var _actions: Array = []  # [帧号, 动作名, 0 按一下 / 1 按住 / -1 松开]，按帧号排好
@@ -28,6 +54,9 @@ func _init() -> void:
 		if a.begins_with("--"):
 			var kv := a.substr(2).split("=", true, 1)
 			_args[kv[0]] = kv[1] if kv.size() > 1 else "1"
+	# --shots 也是截图：各处按 --capture 判断的（跳过开场演出、不显示提示、不抓鼠标）一样生效
+	if _args.has("shots") and not _args.has("capture"):
+		_args["capture"] = ""
 
 
 func has(key: String) -> bool:
@@ -38,8 +67,15 @@ func get_arg(key: String, default := "") -> String:
 	return _args.get(key, default)
 
 
+## 截图模式（--capture、--shots）
+func capturing() -> bool:
+	return has("capture")
+
+
 func _ready() -> void:
-	if has("capture"):
+	if has("shots"):
+		_shots.call_deferred()
+	elif has("capture"):
 		_capture.call_deferred()
 	if has("actions"):
 		for item in get_arg("actions").split(",", false):
@@ -96,3 +132,96 @@ func _capture() -> void:
 	img.save_png(get_arg("capture"))
 	print("captured ", get_arg("capture"), "  fps ", Engine.get_frames_per_second())
 	get_tree().quit()
+
+
+## --shots：等房间就位 → 每个机位摆好、等 settle 帧、（打闪电）、存 PNG → 写清单 → 退出
+func _shots() -> void:
+	var list := _load_shots()
+	if list.is_empty():
+		push_error("--shots: %s 里没有机位（组 %s）" % [get_arg("shots"), _shot_set()])
+		get_tree().quit(1)
+		return
+	var dir := get_arg("shot-dir", ProjectSettings.globalize_path("res://.tmp/shots"))
+	DirAccess.make_dir_recursive_absolute(dir)
+	# 主场景是宿舍：--scene=office 时宿舍先加载一下再换掉，等 --scene 要的那个房间报到
+	var waited := 0
+	while not is_instance_valid(room):
+		await get_tree().process_frame
+		waited += 1
+		if waited > 1200:
+			push_error("--shots: 没等到岸上的房间（只支持 --scene=dorm|office）")
+			get_tree().quit(1)
+			return
+	seed(1998)
+	var vp := get_viewport().get_viewport_rid()
+	RenderingServer.viewport_set_measure_render_time(vp, true)
+	var out := []
+	var res := Vector2i.ZERO
+	for i in list.size():
+		var s: Dictionary = list[i]
+		var shot_name := String(s.get("name", "%02d" % i))
+		room.shot_pose(s)
+		# "debug_draw": 2 只看光照（反照率全白），查间接光、光照贴图用
+		get_viewport().debug_draw = int(s.get("debug_draw", 0)) as Viewport.DebugDraw
+		var settle := maxi(int(s.get("settle", 90)), 2) + (SHOT_WARMUP if i == 0 else 0)
+		var measure := mini(SHOT_MEASURE, settle - 1)
+		var gpu := 0.0
+		var cpu := 0.0
+		var t_first := 0
+		for k in settle:
+			await get_tree().process_frame
+			if k == settle - measure - 1:
+				t_first = Time.get_ticks_usec()
+			elif k >= settle - measure:
+				gpu += RenderingServer.viewport_get_measured_render_time_gpu(vp)
+				cpu += RenderingServer.viewport_get_measured_render_time_cpu(vp)
+		var t_last := Time.get_ticks_usec()
+		if s.has("flash"):
+			await room.shot_flash(float(s.flash))
+		await RenderingServer.frame_post_draw
+		var file := "%s_%s.png" % [_shot_set(), shot_name]
+		var img := get_viewport().get_texture().get_image()
+		img.save_png(dir.path_join(file))
+		res = img.get_size()
+		var frame_ms := (t_last - t_first) / 1000.0 / measure
+		var rec := {"name": shot_name, "file": file, "desc": s.get("desc", ""),
+			"fps": snappedf(1000.0 / maxf(frame_ms, 0.001), 0.1), "frame_ms": snappedf(frame_ms, 0.01),
+			"gpu_ms": snappedf(gpu / measure, 0.01), "cpu_ms": snappedf(cpu / measure, 0.01)}
+		out.append(rec)
+		# GPU 时间：Mac（Metal）上量不出来，是 0 就不打
+		print("shot %s  fps %.1f  frame %.1f ms%s" % [file, rec.fps, rec.frame_ms,
+			"  gpu %.1f ms" % rec.gpu_ms if rec.gpu_ms > 0.0 else ""])
+	var path := dir.path_join(_shot_set() + "_shots.json")
+	if has("shot-only") and FileAccess.file_exists(path):
+		# 只重拍了几张：清单里别的几张照旧留着，按 json 里的顺序排
+		var old: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+		var taken := out.map(func(r: Dictionary) -> String: return r.name)
+		var order := _load_shots(false).map(func(v: Dictionary) -> String: return String(v.get("name", "")))
+		if old is Dictionary:
+			for r: Dictionary in old.get("shots", []):
+				if r.get("name") in order and not r.get("name") in taken:
+					out.append(r)
+		out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return order.find(a.name) < order.find(b.name))
+	var manifest := {"set": _shot_set(), "scene": get_arg("scene"), "resolution": [res.x, res.y], "shots": out}
+	var fa := FileAccess.open(path, FileAccess.WRITE)
+	fa.store_string(JSON.stringify(manifest, "  ", false))
+	fa.close()
+	get_tree().quit()
+
+
+func _shot_set() -> String:
+	return get_arg("shot-set", get_arg("scene", "dorm"))
+
+
+## 读 --shots 的 json：机位数组，或者 {组名: 机位数组}；only_some：按 --shot-only 过滤
+func _load_shots(only_some := true) -> Array:
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(get_arg("shots")))
+	if data is Dictionary:
+		data = data.get(_shot_set(), [])
+	if not data is Array:
+		return []
+	var only := get_arg("shot-only").split(",", false)
+	var list: Array = data
+	if only_some and not only.is_empty():
+		list = list.filter(func(s: Dictionary) -> bool: return String(s.get("name", "")) in only)
+	return list

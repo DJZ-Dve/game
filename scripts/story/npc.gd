@@ -70,14 +70,25 @@ func _setup_materials(root: Node) -> void:
 			if n.contains("Hair"):
 				# 发片：透明度裁切 + MSAA 的 alpha to coverage，双面
 				mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-				mat.alpha_scissor_threshold = 0.35
+				mat.alpha_scissor_threshold = 0.5
 				mat.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE
 				mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-				mat.roughness = 0.6
+				# 发丝贴图偏棕，台灯一照发橙：压掉棕色，头发有一点光泽
+				mat.albedo_color = Color(0.55, 0.55, 0.6)
+				mat.roughness = 0.38
 			elif n.contains("Head"):
 				mat.subsurf_scatter_enabled = true
 				mat.subsurf_scatter_skin_mode = true
 				mat.subsurf_scatter_strength = 0.35
+			elif mat.resource_name.ends_with("Suit"):
+				# 呢子西装：掠射角一层很淡的绒光（逆光、窗光下肩膀和袖子的轮廓出来）
+				mat.rim_enabled = true
+				mat.rim = 0.25
+				mat.rim_tint = 0.6
+			elif mat.resource_name.ends_with("Hands"):
+				mat.subsurf_scatter_enabled = true
+				mat.subsurf_scatter_skin_mode = true
+				mat.subsurf_scatter_strength = 0.3
 			mi.set_surface_override_material(i, mat)
 
 
@@ -96,7 +107,18 @@ func _build_tree(player: AnimationPlayer) -> AnimationTree:
 	shot.fadein_curve = _ease_curve()
 	shot.fadeout_curve = _ease_curve()
 	bt.add_node("shot", shot)
-	bt.connect_node("shot", 0, "base")
+	# 坐姿底子里混进一点呼吸（胸口、肩膀一起一伏）
+	var breathing := base_anim == "sit" and player.has_animation("sit_breathe")
+	if breathing:
+		var br := AnimationNodeAnimation.new()
+		br.animation = "sit_breathe"
+		bt.add_node("breathe_anim", br)
+		bt.add_node("breathe", AnimationNodeBlend2.new())
+		bt.connect_node("breathe", 0, "base")
+		bt.connect_node("breathe", 1, "breathe_anim")
+		bt.connect_node("shot", 0, "breathe")
+	else:
+		bt.connect_node("shot", 0, "base")
 	bt.connect_node("shot", 1, "gesture")
 	bt.connect_node("output", 0, "shot")
 	var tree := AnimationTree.new()
@@ -104,7 +126,17 @@ func _build_tree(player: AnimationPlayer) -> AnimationTree:
 	add_child(tree)
 	tree.anim_player = tree.get_path_to(player)
 	tree.active = true
+	if breathing:
+		tree.set("parameters/breathe/blend_amount", 0.25)
 	return tree
+
+
+## 头的世界坐标（坐着谈话时镜头对焦用）
+func head_position() -> Vector3:
+	var b := _skel.find_bone("Bip01 Head") if _skel else -1
+	if b < 0:
+		return global_position + Vector3.UP * 1.2
+	return _skel.global_transform * _skel.get_bone_global_pose(b).origin
 
 
 func _ease_curve() -> Curve:
@@ -223,9 +255,11 @@ func _shape_name(mi: MeshInstance3D, i: int) -> String:
 
 ## 头和眼睛看向目标：脖子、头分着转（头慢慢跟过去），眼睛先到；角度有上限，超过的部分只转眼睛
 class Gaze extends SkeletonModifier3D:
-	const MAX_YAW := deg_to_rad(60.0)
+	# 头最多转 45°（Rocketbox 的脖子权重扛不住更大的扭转，颈侧拉花、领口下的暗带露出来），再多的交给眼睛——
+	# 超过了只转眼珠不转头，反而更瘆人
+	const MAX_YAW := deg_to_rad(45.0)
 	const MAX_PITCH := deg_to_rad(30.0)
-	const EYE_YAW := deg_to_rad(22.0)
+	const EYE_YAW := deg_to_rad(28.0)
 	const EYE_PITCH := deg_to_rad(14.0)
 	var target := Vector3.ZERO
 	var target_node: Node3D
@@ -235,10 +269,14 @@ class Gaze extends SkeletonModifier3D:
 	var _eye_yaw := 0.0
 	var _eye_pitch := 0.0
 	var _bones := {}
+	# 眼跳：眼睛不是平滑地跟着，而是盯住一点不动、隔一会儿猛地跳到下一点（左眼、右眼、嘴……差不到一度）
+	var _sacc_t := 0.0
+	var _sacc_off := Vector2.ZERO
+	var _saccading := true
 
 	func _ready() -> void:
 		var sk := get_skeleton()
-		for n in ["Bip01 Neck", "Bip01 Head", "Bip01 LEye", "Bip01 REye"]:
+		for n in ["Bip01 Spine2", "Bip01 Neck", "Bip01 Head", "Bip01 LEye", "Bip01 REye"]:
 			_bones[n] = sk.find_bone(n)
 
 	func _process_modification() -> void:
@@ -260,10 +298,26 @@ class Gaze extends SkeletonModifier3D:
 		var hp := clampf(want_pitch, -MAX_PITCH, MAX_PITCH)
 		_yaw = lerpf(_yaw, hy, 1.0 - exp(-dt * 3.0))
 		_pitch = lerpf(_pitch, hp, 1.0 - exp(-dt * 3.0))
-		_eye_yaw = lerpf(_eye_yaw, clampf(want_yaw - _yaw, -EYE_YAW, EYE_YAW), 1.0 - exp(-dt * 18.0))
-		_eye_pitch = lerpf(_eye_pitch, clampf(want_pitch - _pitch, -EYE_PITCH, EYE_PITCH), 1.0 - exp(-dt * 18.0))
-		for n: String in ["Bip01 Neck", "Bip01 Head"]:
-			var w := 0.4 if n == "Bip01 Neck" else 0.6
+		_sacc_t -= dt
+		if _sacc_t <= 0.0:
+			_sacc_t = randf_range(0.6, 1.8)
+			_sacc_off = Vector2(randf_range(-1.0, 1.0), randf_range(-0.6, 0.6)) * deg_to_rad(0.8)
+			_saccading = true
+		var ey := clampf(want_yaw - _yaw + _sacc_off.x, -EYE_YAW, EYE_YAW)
+		var ep := clampf(want_pitch - _pitch + _sacc_off.y, -EYE_PITCH, EYE_PITCH)
+		if absf(ey - _eye_yaw) > deg_to_rad(2.0) or absf(ep - _eye_pitch) > deg_to_rad(2.0):
+			_saccading = true
+		if _saccading:
+			# 一次扫视三四十毫秒就到
+			_eye_yaw = lerpf(_eye_yaw, ey, 1.0 - exp(-dt * 45.0))
+			_eye_pitch = lerpf(_eye_pitch, ep, 1.0 - exp(-dt * 45.0))
+			if absf(ey - _eye_yaw) < 0.002 and absf(ep - _eye_pitch) < 0.002:
+				_saccading = false
+		# 转头分到上胸、脖子、头上（0.15 / 0.3 / 0.55）
+		for n: String in ["Bip01 Spine2", "Bip01 Neck", "Bip01 Head"]:
+			if _bones[n] < 0:
+				continue
+			var w: float = {"Bip01 Spine2": 0.15, "Bip01 Neck": 0.3, "Bip01 Head": 0.55}[n]
 			var b: int = _bones[n]
 			var gp := sk.get_bone_global_pose(b)
 			gp.basis = Basis(up, _yaw * w) * Basis(right, _pitch * w) * gp.basis

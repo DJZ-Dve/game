@@ -1,43 +1,45 @@
 [gd_resource type="ShaderMaterial" format=3]
 
-[ext_resource type="Shader" path="res://assets/shaders/worn_surface.gdshader" id="1_734k1"]
-[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_Color.jpg" id="2_0qw7k"]
-[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_Roughness.jpg" id="3_vot0b"]
-[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_NormalGL.jpg" id="4_lwb7q"]
-[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fingerprints001/Fingerprints001_2K-JPG_Opacity.jpg" id="5_6talq"]
-[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Leaking004/Leaking004_2K-JPG_Opacity.jpg" id="6_7eurx"]
+[ext_resource type="Shader" path="res://assets/shaders/worn_surface.gdshader" id="1_0qw7k"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Metal016/Metal016_2K-JPG_Color.jpg" id="2_vot0b"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_Roughness.jpg" id="3_lwb7q"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_NormalGL.jpg" id="4_6talq"]
+[ext_resource type="Texture2D" path="res://assets/third_party/polyhaven/textures/rusty_metal_02/rusty_metal_02_diff_2k.jpg" id="5_7eurx"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Fingerprints001/Fingerprints001_2K-JPG_Opacity.jpg" id="6_8pwmq"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Leaking004/Leaking004_2K-JPG_Opacity.jpg" id="7_4a4q3"]
 
 [resource]
 resource_name = "M_IronBar"
 render_priority = 0
-shader = ExtResource("1_734k1")
-shader_parameter/paint_color = Color(0.08, 0.075, 0.07, 1)
+shader = ExtResource("1_0qw7k")
+shader_parameter/paint_color = Color(0.07, 0.065, 0.06, 1)
 shader_parameter/paint_roughness = 0.7
-shader_parameter/paint_metallic = 0.2
+shader_parameter/paint_metallic = 0.0
 shader_parameter/paint_variation = 0.12
-shader_parameter/grime_albedo = ExtResource("2_0qw7k")
-shader_parameter/grime_normal = ExtResource("4_lwb7q")
-shader_parameter/grime_arm = ExtResource("3_vot0b")
+shader_parameter/grime_albedo = ExtResource("2_vot0b")
+shader_parameter/grime_normal = ExtResource("4_6talq")
+shader_parameter/grime_arm = ExtResource("3_lwb7q")
 shader_parameter/arm_packed = false
 shader_parameter/tex_scale = 3.0
 shader_parameter/normal_strength = 0.18
 shader_parameter/rough_variation = 0.25
-shader_parameter/rust_amount = 0.62
+shader_parameter/rust_amount = 0.5
 shader_parameter/cavity_dirt = 1.0
 shader_parameter/edge_wear = 1.2
-shader_parameter/wear_color = Color(0.32, 0.17, 0.09, 1)
-shader_parameter/smudge_tex = ExtResource("5_6talq")
+shader_parameter/wear_color = Color(0.25, 0.13, 0.07, 1)
+shader_parameter/smudge_tex = ExtResource("6_8pwmq")
 shader_parameter/smudge_amount = 0.5
 shader_parameter/smudge_scale = 5.0
 shader_parameter/dust_amount = 0.0
 shader_parameter/dust_color = null
-shader_parameter/streak_tex = ExtResource("6_7eurx")
+shader_parameter/streak_tex = ExtResource("7_4a4q3")
 shader_parameter/streak_amount = 0.6
 shader_parameter/streak_scale = 1.2
-shader_parameter/streak_color = null
+shader_parameter/streak_color = Color(0.42, 0.2, 0.08, 1)
 shader_parameter/streak_cover = 1.0
+shader_parameter/streak_down = null
 shader_parameter/macro_amount = 0.3
-shader_parameter/macro_scale = null
+shader_parameter/macro_scale = 0.18
 shader_parameter/floor_dirt = 0.6
 shader_parameter/floor_height = -10.0
 shader_parameter/floor_fade = 0.65
@@ -48,7 +50,16 @@ shader_parameter/cond_height = null
 shader_parameter/cond_patch_scale = null
 shader_parameter/cond_patch_cover = null
 shader_parameter/cond_cavity = null
-shader_parameter/wear_metallic = 0.2
+shader_parameter/wear_metallic = 0.3
+shader_parameter/bare_roughness = null
+shader_parameter/rust_albedo = ExtResource("5_7eurx")
+shader_parameter/use_rust_albedo = true
+shader_parameter/albedo_direct = null
+shader_parameter/top_dirt = null
+shader_parameter/top_fade = null
+shader_parameter/top_color = null
+shader_parameter/corner_dirt = null
+shader_parameter/corner_width = null
 shader_parameter/primer_amount = null
 shader_parameter/primer_color = null
 shader_parameter/chip_amount = null

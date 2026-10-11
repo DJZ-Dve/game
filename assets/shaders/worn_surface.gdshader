@@ -38,6 +38,10 @@ uniform float streak_scale = 1.0;
 uniform vec4 streak_color : source_color = vec4(0.3, 0.22, 0.14, 1.0);
 // 流痕只出现在一部分竖条区域里（上面有焊缝、法兰、螺栓漏水的地方），不是满墙一个样。1 = 不分区
 uniform float streak_cover : hint_range(0.0, 1.0) = 1.0;
+// 流痕从上面往下垂（岸上的白灰墙）：从 streak_top（物体空间高度，一般是天花板）往下只出一次，不在竖直方向平铺。
+// 关着时是原来的做法（按 streak_scale 竖着平铺，潜艇里用）
+uniform bool streak_down = false;
+instance uniform float streak_top = 3.0;
 
 // 大尺度的脏污起伏（几十厘米一块的明暗、粗糙度变化），打破大平面上「新刷的漆」那种均匀感
 uniform float macro_amount : hint_range(0.0, 1.0) = 0.0;
@@ -60,6 +64,22 @@ uniform float cond_cavity = 1.0;
 
 // 棱边磨出来的底材是不是金属（漆木家具磨出来的是木头，不是金属）
 uniform float wear_metallic : hint_range(0.0, 1.0) = 0.85;
+// 磨出来的底材有多糙（钢 0.35；水泥、木头更糙）
+uniform float bare_roughness : hint_range(0.0, 1.0) = 0.35;
+// 锈的颜色：给了锈贴图就用它（防盗窗、钢窗框），不给就用细节贴图（潜艇里原来的做法）
+uniform sampler2D rust_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform bool use_rust_albedo = false;
+// 底色直接用细节贴图本身的颜色（木纹），paint_color 只当染色；关着时只取细节贴图的明暗
+uniform bool albedo_direct = false;
+// ---- 岸上房间按位置的脏（默认关）：墙顶熏黄（离 streak_top 近的一截），墙角、顶角、墙根积灰发暗。
+// room_min / room_max 是房间的范围（物体空间，story_room.gd 按房间设），到最近的两个面都近的地方就是“角”
+uniform float top_dirt : hint_range(0.0, 1.0) = 0.0;
+uniform float top_fade = 0.6;
+uniform vec4 top_color : source_color = vec4(0.66, 0.56, 0.38, 1.0);
+uniform float corner_dirt : hint_range(0.0, 1.0) = 0.0;
+uniform float corner_width = 0.22;
+instance uniform vec3 room_min = vec3(-1000.0);
+instance uniform vec3 room_max = vec3(1000.0);
 
 // ---- 厚漆钢件（军船那种一层层刷上去的漆）。默认全关，不影响别的材质。
 // 掉漆分层：漆面磕掉先露出红丹底漆，再往里才是钢；primer_amount 是底漆那一圈有多宽
@@ -183,7 +203,8 @@ void fragment() {
 	float cav = wear.g;
 	float noise = tri_sample(grime_albedo, p * 0.37 + 0.13, w).g;
 
-	vec3 col = paint_color.rgb * mix(1.0, 0.6 + lum * 1.4, paint_variation);
+	vec3 col = albedo_direct ? g.rgb * paint_color.rgb : paint_color.rgb * mix(1.0, 0.6 + lum * 1.4, paint_variation);
+	vec3 rust_col = use_rust_albedo ? tri_sample(rust_albedo, p, w).rgb : g.rgb;
 	float rough = clamp(paint_roughness + (arm.g - 0.5) * rough_variation, 0.04, 1.0);
 	float metal = paint_metallic;
 
@@ -197,7 +218,7 @@ void fragment() {
 
 	// 锈蚀：凹槽里先长，再按噪声扩散
 	float rust = smoothstep(0.55, 0.8, rust_amount + cav * cavity_dirt * 0.6 + (noise - 0.5) * 0.8);
-	col = mix(col, g.rgb, rust);
+	col = mix(col, rust_col, rust);
 	rough = mix(rough, arm.g, rust);
 	metal = mix(metal, arm.b, rust);
 
@@ -237,11 +258,11 @@ void fragment() {
 		// 磕出来的钢（不是手磨亮的棱边）发锈发暗
 		old = bare_rust * clamp(chip - edge_r * 0.6, 0.0, 1.0) * (0.6 + noise * 0.8);
 		old = clamp(old, 0.0, 1.0);
-		bare = mix(wear_color.rgb, g.rgb * 0.7, old);
+		bare = mix(wear_color.rgb, rust_col * 0.7, old);
 	}
 	col = mix(col, bare, e * (1.0 - rust));
 	metal = mix(metal, wear_metallic, e * (1.0 - rust));
-	rough = mix(rough, mix(0.35, 0.75, old), e * (1.0 - rust));
+	rough = mix(rough, mix(bare_roughness, 0.75, old), e * (1.0 - rust));
 	metal = mix(metal, 0.45, e * old * (1.0 - rust));
 
 	// 凹槽积垢
@@ -253,6 +274,31 @@ void fragment() {
 		col = mix(col, col * floor_color.rgb * 2.2, f);
 		rough = mix(rough, 0.8, f * 0.6);
 		metal = mix(metal, 0.0, f * 0.5);
+	}
+
+	if (top_dirt > 0.0) {
+		float t = smoothstep(streak_top - top_fade, streak_top, obj_pos.y) * top_dirt * (0.7 + noise * 0.6);
+		col = mix(col, col * top_color.rgb * 1.6, clamp(t, 0.0, 1.0));
+	}
+	if (corner_dirt > 0.0) {
+		vec3 da = abs(obj_pos - room_min);
+		vec3 db = abs(room_max - obj_pos);
+		// 六个面的距离里第二近的那个（第一近的是自己所在的那面）
+		float d1 = 1e5;
+		float d2 = 1e5;
+		float ds[6] = float[](da.x, da.y, da.z, db.x, db.y, db.z);
+		for (int i = 0; i < 6; i++) {
+			float x = ds[i];
+			if (x < d1) {
+				d2 = d1;
+				d1 = x;
+			} else if (x < d2) {
+				d2 = x;
+			}
+		}
+		float k = (1.0 - smoothstep(0.0, corner_width, d2)) * corner_dirt * (0.6 + noise * 0.8);
+		col *= 1.0 - 0.3 * clamp(k, 0.0, 1.0);
+		rough = clamp(rough + 0.05 * k, 0.0, 1.0);
 	}
 
 	// 指纹/油污：手常碰的地方更亮（油）或更哑（灰），这里统一成「更光滑 + 略暗」
@@ -268,7 +314,14 @@ void fragment() {
 	if (streak_amount > 0.0) {
 		vec3 sp = obj_pos * streak_scale;
 		float side = 1.0 - w.y;
-		float st = (texture(streak_tex, sp.zy).r * w.x + texture(streak_tex, sp.xy).r * w.z) / max(w.x + w.z, 1e-4);
+		float st;
+		if (streak_down) {
+			// 贴图的顶行（v = 0）是源头：从 streak_top 往下量，痕迹往下垂、越往下越淡，只出一次
+			float v = clamp((streak_top - obj_pos.y) * streak_scale, 0.0, 0.999);
+			st = (texture(streak_tex, vec2(sp.z, v)).r * w.x + texture(streak_tex, vec2(sp.x, v)).r * w.z) / max(w.x + w.z, 1e-4);
+		} else {
+			st = (texture(streak_tex, sp.zy).r * w.x + texture(streak_tex, sp.xy).r * w.z) / max(w.x + w.z, 1e-4);
+		}
 		st = smoothstep(0.2, 0.9, st) * streak_amount * side;
 		if (streak_cover < 1.0) {
 			// 竖着拉长的噪声：流痕区是一条条竖带，上面的源头决定下面湿不湿

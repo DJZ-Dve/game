@@ -43,6 +43,9 @@ DADO = 1.2                         # 墙裙高度
 CY0, CY1 = Y0 - WT - 1.8, Y0 - WT  # 走廊（南北方向的范围）
 CX0, CX1 = -5.0, 4.0               # 走廊（东西方向）
 GROUND = -3.65                     # 窗外地面（二楼）
+# 走廊两边邻居家的门：(哪面墙, x, 门牌, 漆色, 开着几度)
+COR_DOORS = [("N", -2.2, "205", "WoodDark", 0.0), ("S", -1.5, "206", "DoorBlue", 8.0), ("S", 1.6, "208", "WoodLight", 0.0),
+             ("N", 3.0, "209", "DoorBlue", 0.0)]
 BED = (-1.17, 0.15)                # 床的中心（x, y），床头朝北
 BED_Z = 0.496                      # 床绷子的高度
 DESK = (-0.55, 0.55, 1.61, 2.17, 0.76)   # 三屉桌：x 范围、y 范围、桌面高度
@@ -90,6 +93,10 @@ def materials(M):
     add("Lcd", "M_PagerLcd", (0.45, 0.5, 0.4), 0.0, 0.3)
     add("Sweater", "M_Sweater", (0.45, 0.12, 0.1), 0.0, 0.95)
     add("Bottle", "M_Bottle", (0.3, 0.2, 0.1), 0.0, 0.25)
+    add("MaskTape", "M_MaskTape", (0.8, 0.74, 0.58), 0.0, 0.9)
+    add("MopCloth", "M_MopCloth", (0.4, 0.38, 0.34), 0.0, 0.95)
+    add("Straw", "M_Straw", (0.7, 0.6, 0.35), 0.0, 0.8)
+    add("WashWater", "M_WashWater", (0.32, 0.3, 0.26), 0.0, 0.08, alpha=0.55)
     return M
 
 
@@ -106,6 +113,10 @@ def shell(S_, A, coll):
     # 走廊：北墙上和宿舍门对着开一个洞，西头是楼梯口（黑洞洞的），东头一扇小窗
     cor = Room(S_, A, CX0, CX1, CY0, CY1, H, WT)
     cor.opening("N", DOOR[0] - CX0, DOOR[1] - CX0, 0.0, DOOR[2], outer=False)
+    # 邻居家的门洞（门扇见 corridor()）：N 墙 u 从西往东量，S 墙从东往西量
+    for side, x, _num, _key, _deg in COR_DOORS:
+        u = x - CX0 if side == "N" else CX1 - x
+        cor.opening(side, u - 0.45, u + 0.45, 0.0, 2.0, outer=False)
     cor.opening("W", 0.3, 1.5, 0.0, 2.2, outer=False)
     cor.opening("E", 0.5, 1.3, 1.1, 2.0, sill="Skirt")
     cor.walls(upper="Plaster", dado="DadoGreen", dado_h=DADO, line="DadoLine", skirt="Skirt", skirt_h=0.12)
@@ -129,7 +140,8 @@ def door(K, A, coll, room):
     uc = X1 - (DOOR[0] + DOOR[1]) / 2
     F = room.frame("S", uc, 0.0)
     w = DOOR[1] - DOOR[0]
-    leaf, hw = RK.wood_door(K, F, w, DOOR[2], leaf="DoorBlue", jamb="DoorBlue", hinge_right=False, name="Door_Leaf")
+    leaf, hw = RK.wood_door(K, F, w, DOOR[2], leaf="DoorBlue", jamb="DoorBlue", hinge_right=False, name="Door_Leaf",
+                            t=WT)
     # 走廊那一面也有一圈门框贴脸
     Fo = frame(V(((DOOR[0] + DOOR[1]) / 2, Y0 - WT, 0)), V((0, -1, 0)), V((0, 0, 1)))
     for (cx, cy, sx, sy) in ((-w / 2 - 0.03, DOOR[2] / 2 + 0.03, 0.06, DOOR[2] + 0.06),
@@ -162,8 +174,9 @@ def window(K, A, coll, room):
     vc = (WIN[2] + WIN[3]) / 2
     w, h = WIN[1] - WIN[0], WIN[3] - WIN[2]
     F = room.frame("N", uc, vc, -WT * 0.55)
+    # 台风前夜：每块玻璃都贴了米字胶带（防震碎）
     RK.wood_window(K, F, w - 0.01, h - 0.01, frame_key="WindowWood", glass="WinGlass", transom=0.38,
-                   open_deg=(0, 0), name="Window")
+                   open_deg=(0, 0), name="Window", tape=True)
     # 防盗窗：窗洞外面焊一个往外凸 30 厘米的铁笼子，竖条每 12 厘米一根
     yo = Y1 + WT
     xa, xb = WIN[0] - 0.05, WIN[1] + 0.05
@@ -373,6 +386,20 @@ def mosquito_net(K, b):
         cloth_object(f"Net_{tag}", K.coll, K.M["Net"], out, faces, np.array(uv), subsurf=0)
     for k, y in enumerate((y_a + 0.12, y_f - 0.14)):
         gathered_net(K, b, x_in, y, top, k)
+    # 帐顶：竹竿框上铺一块纱，中间自然往下兜几厘米
+    def top_geo(bm):
+        uvl = bm.loops.layers.uv.new("UVMap")
+        nu, nv = 24, 50
+        vs = [[bm.verts.new((x_in + (x_w - x_in) * i / nu, y_a + (y_f - y_a) * j / nv,
+                             top + 0.008 - 0.035 * math.sin(math.pi * i / nu) * math.sin(math.pi * j / nv)
+                             + 0.003 * math.sin(i * 1.7 + j * 0.9)))
+               for i in range(nu + 1)] for j in range(nv + 1)]
+        for j in range(nv):
+            for i in range(nu):
+                f = bm.faces.new([vs[j][i], vs[j][i + 1], vs[j + 1][i + 1], vs[j + 1][i]])
+                for loop, (di, dj) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+                    loop[uvl].uv = ((i + di) / nu * abs(x_w - x_in), (j + dj) / nv * (y_f - y_a))
+    K.separate(K.uid("Cloth_NetTop"), "Net", top_geo, recalc=False)
 
 
 def gathered_net(K, b, x, y, top, k):
@@ -618,7 +645,23 @@ def washstand(K, A, coll):
     use(A, coll, "Mirror", F @ V((0, 0, 0.0)))
     # 盆、牙缸、肥皂盒
     RK.basin(K, T(*(c + V((0, 0, -0.07)))))
-    cylinder(K["Tea"], 0.12, 0.001, 32, T(*(c + V((0, 0, -0.04)))))   # 盆里一点脏水
+    # 盆里小半盆水（发灰、半透明，看得见盆底），水边一圈肥皂垢
+    cylinder(K["WashWater"], 0.118, 0.001, 32, T(*(c + V((0, 0, -0.035)))))
+    torus(K["TeaStain"], 0.118, 0.0025, 40, 4, T(*(c + V((0, 0, -0.034)))))
+    # 镜子下面：一块小木搁板（两个三角铁托着），肥皂盒、压扁的牙膏、梳子、刮胡刀
+    sz = MIRROR_Z - 0.3
+    rbox(K["WoodLight"], 0.1, 0.3, 0.015, T(xw - 0.09, cy, sz), r=0.002, seg=1)
+    for dy in (-0.11, 0.11):
+        sweep(K["Steel"], [V((xw - 0.035, cy + dy, sz - 0.08)), V((xw - 0.035, cy + dy, sz - 0.008)),
+                           V((xw - 0.12, cy + dy, sz - 0.008)), V((xw - 0.035, cy + dy, sz - 0.08))],
+              rect_profile(0.004, 0.012, 0.001))
+    rbox(K["Plastic"], 0.07, 0.1, 0.025, T(xw - 0.09, cy - 0.07, sz + 0.02), r=0.008, seg=2)
+    rbox(K["Porcelain"], 0.05, 0.075, 0.018, T(xw - 0.09, cy - 0.07, sz + 0.03) @ R(8, 'Z'), r=0.012, seg=3)
+    sweep(K["PlasticWhite"], [V((xw - 0.1, cy + 0.02, sz + 0.012)), V((xw - 0.095, cy + 0.08, sz + 0.012)),
+                              V((xw - 0.085, cy + 0.13, sz + 0.011))], rect_profile(0.022, 0.009, 0.004))
+    rbox(K["Bakelite"], 0.012, 0.12, 0.004, T(xw - 0.07, cy + 0.05, sz + 0.0095) @ R(-12, 'Z'), r=0.001, seg=1)
+    cylinder(K["Chrome"], 0.006, 0.08, 10, T(xw - 0.11, cy + 0.12, sz + 0.0135) @ R(90, 'Y') @ R(15, 'X'))
+    rbox(K["Chrome"], 0.012, 0.045, 0.008, T(xw - 0.15, cy + 0.12, sz + 0.0135) @ R(15, 'Z'), r=0.002, seg=1)
     enamel_mug(K, T(xw - 0.08, cy + 0.16, ring_z + 0.01) @ R(200, 'Z'), words=False, seed=9)
     sweep(K["PlasticWhite"], [V((xw - 0.08, cy + 0.16, ring_z + 0.05)), V((xw - 0.07, cy + 0.17, ring_z + 0.17))],
           rect_profile(0.008, 0.005, 0.002))
@@ -682,7 +725,8 @@ def wardrobe(K, A, coll):
     use(A, coll, "Wardrobe", (x0 - 0.05, (y0 + y1) / 2, 1.2))
 
 
-def towel_over(K, tag, p0, p1, hang_a, hang_b, key="Towel", seed=1, res=0.015, frames=110, mass=0.3, bending=0.08):
+def towel_over(K, tag, p0, p1, hang_a, hang_b, key="Towel", seed=1, res=0.015, frames=150, mass=0.3, bending=0.03,
+               drape=True):
     """搭在一根横杆 / 晾衣绳（p0 → p1）上的一块布：两边各垂下 hang_a、hang_b。布料模拟。"""
     p0, p1 = V(p0), V(p1)
     along = (p1 - p0).normalized()
@@ -692,11 +736,31 @@ def towel_over(K, tag, p0, p1, hang_a, hang_b, key="Towel", seed=1, res=0.015, f
     L = (p1 - p0).length
     nu, nv = int(L / res) + 1, int((hang_a + hang_b) / res) + 1
     co, uv = [], []
+    # 一开始就搭好：绕过杆子一小段圆弧，两边竖着垂下去，垂下去的部分带几道竖褶、下摆长短不齐
+    # （原来是水平铺开再模拟，到最后一帧还两边支棱着，像挂着的牌子）
+    rr = 0.012
+    arc = rr * math.pi / 2
+    ph = rng.uniform(0, 6.28)
     for j in range(nv):
         for i in range(nu):
             s = -hang_a + (hang_a + hang_b) * j / (nv - 1)
-            p = p0 + along * (L * i / (nu - 1)) + across * s + V((0, 0, 0.02 + 0.006 * noise(i * res, s)))
-            co.append(tuple(p))
+            u = L * i / (nu - 1)
+            if not drape:
+                co.append(tuple(p0 + along * u + across * s + V((0, 0, 0.02 + 0.006 * noise(u, s)))))
+                uv.append((i * res, (j * res)))
+                continue
+            if abs(s) <= arc:
+                th = s / rr
+                off = across * (rr * math.sin(th)) + V((0, 0, 0.008 + rr * math.cos(th)))
+                drop = 0.0
+            else:
+                drop = abs(s) - arc
+                off = across * (math.copysign(rr, s)) + V((0, 0, 0.008 - drop))
+            fold = 0.012 * math.sin(u * 14.0 + ph) + 0.006 * noise(u, s)
+            off += across * (math.copysign(1.0, s) * fold * min(1.0, drop / 0.08))
+            if drop > 0.0:
+                off += V((0, 0, 0.02 * math.sin(u * 9.0 + ph) * min(1.0, drop / max(abs(s), 1e-3))))
+            co.append(tuple(p0 + along * u + off))
             uv.append((i * res, (j * res)))
     co = np.array(co)
     faces = grid(nu, nv)
@@ -739,7 +803,7 @@ def kitchen(K, A, coll):
     towel_over(K, "line_shirt", line_at(0.42), line_at(0.6), 0.34, 0.3, key="Undershirt", seed=8, res=0.018)
     for k, t in enumerate((0.75, 0.8)):
         towel_over(K, f"line_sock{k}", line_at(t), line_at(t + 0.02), 0.22, 0.04, key="Sock", seed=9 + k,
-                   res=0.008, mass=0.12)
+                   res=0.008, mass=0.12, frames=110, bending=0.08, drape=False)   # 袜子窄，先搭好的形状会从绳上滑下去
         q = line_at(t + 0.01)
         rbox(K["PlasticWhite"], 0.012, 0.008, 0.05, T(*(q + V((0, 0, 0.01)))), r=0.002, seg=1)
 
@@ -759,11 +823,11 @@ def walls_and_ceiling(K, A, coll, room):
     RK.fluorescent(K, A, coll, (0.2, 0.75, H), (1, 0, 0), "Main")
     RK.ceiling_fan(K, A, coll, (0.0, -0.45, H), rod=0.42, name="Fan", blade_len=0.55)
     # 明线：开关 → 沿南墙上去 → 顶上往北拐到日光灯、往吊扇分一路
-    sw_x = X1 - 0.35
+    sw_x = 0.35    # 开关（door() 里 room.frame("S", X1 - 0.35)：南墙 u 从东往西量）
     RK.wire_run(K, [V((sw_x, Y0, 1.42)), V((sw_x, Y0, H - 0.04))], normal=(0, 1, 0))
     RK.wire_run(K, [V((sw_x, Y0 + 0.03, H)), V((sw_x, -0.45, H)), V((0.08, -0.45, H))], normal=(0, 0, -1))
     RK.wire_run(K, [V((sw_x, -0.45, H)), V((sw_x, 0.75, H)), V((0.85, 0.75, H))], normal=(0, 0, -1))
-    RK.wire_run(K, [V((X1 - 0.18, Y0, 1.42)), V((X1 - 0.18, Y0, H - 0.04))], normal=(0, 1, 0), pair=False)
+    RK.wire_run(K, [V((0.18, Y0, 1.42)), V((0.18, Y0, H - 0.04))], normal=(0, 1, 0), pair=False)
     # 墙上：挂历（北墙窗户右边）、奖状（南墙碗柜上面）
     RK.nail(K, frame(V((1.15, Y1, 1.92)), V((0, -1, 0))))
     RK.paper_quad(K, "Calendar", frame(V((1.15, Y1 - 0.012, 1.55)), V((0, -1, 0))) @ R(-1.5, 'Z'), 0.38, 0.55,
@@ -786,12 +850,38 @@ def walls_and_ceiling(K, A, coll, room):
         yb += th + 0.002
     cylinder(K["ThermosRed"], 0.09, 0.07, 32, T(X0 + 0.12, 0.62, 1.8))
     rbox(K["Cardboard"], 0.18, 0.25, 0.12, T(X0 + 0.11, 0.9, 1.86), r=0.004, seg=1)
+    coat_board(K)
     # 门边：一双胶靴、一把黑伞挂在钉子上、拖把靠墙
     anchor(A, coll, "Anchor_Boots", (0.2, Y0 + 0.25, 0.0), (1, 0.3, 0))
     RK.nail(K, frame(V((0.38, Y0, 1.65)), V((0, 1, 0))))
     umbrella(K, T(0.38, Y0 + 0.06, 1.66))
     mop(K, V((-0.25, Y0 + 0.08, 0.0)))
     anchor(A, coll, "Anchor_Trash", (0.15, -1.55, 0.0), (0, 1, 0))
+
+
+def coat_board(K):
+    """东墙（衣柜和脸盆架之间）一条挂衣板：五个斜着往上的木钉，挂着一只帆布挎包、一顶草帽。"""
+    xw = X1
+    z = 1.75
+    rbox(K["WoodLight"], 0.02, 0.9, 0.08, T(xw - 0.01, 0.33, z), r=0.004, seg=2)
+    pegs = [-0.05, 0.13, 0.33, 0.53, 0.71]
+    for y in pegs:
+        cylinder(K["WoodLight"], 0.008, 0.07, 10, T(xw - 0.02, y, z - 0.01) @ R(-90 + 15, 'Y'))
+    for y in (-0.08, 0.74):
+        cylinder(K["Steel"], 0.005, 0.003, 8, T(xw - 0.02, y, z) @ R(-90, 'Y'))
+    # 挎包：背带挂在第四个木钉上，包垂在下面
+    pb = V((xw - 0.075, pegs[3], z + 0.004))
+    bag = V((xw - 0.06, pegs[3] + 0.02, z - 0.42))
+    rbox(K["Canvas"], 0.08, 0.27, 0.21, T(*bag) @ R(-3, 'X'), r=0.02, seg=2)
+    rbox(K["Canvas"], 0.085, 0.27, 0.09, T(*(bag + V((-0.004, 0, 0.06)))) @ R(-3, 'X'), r=0.015, seg=2)   # 盖
+    for dy in (-0.12, 0.12):
+        sweep(K["Canvas"], catmull([bag + V((0, dy, 0.1)), pb + V((0, dy * 0.25, -0.12)), pb + V((0.006, 0, 0.012))], 6),
+              rect_profile(0.003, 0.03, 0.001))
+    # 草帽：挂在最后一个木钉上，帽檐靠着墙
+    Mh = T(xw - 0.1, pegs[4], z - 0.09) @ R(-90 + 12, 'Y')
+    lathe(K["Straw"], [(0.0, 0.0), (0.17, 0.0), (0.18, 0.004), (0.1, 0.012), (0.095, 0.08), (0.07, 0.1),
+                       (0.0, 0.105)], 40, Mh)
+    torus(K["ClothRed"], 0.097, 0.006, 40, 4, Mh @ T(0, 0, 0.02))
 
 
 def umbrella(K, M):
@@ -807,26 +897,30 @@ def mop(K, base):
     top = base + V((0.08, -0.06, 1.25))
     sweep(K["WoodRaw"], [base + V((0, 0.12, 0.08)), top], circle_profile(0.012, 10))
     rng = random.Random(2)
-    for k in range(26):
+    head = base + V((0, 0.12, 0.1))
+    cylinder(K["Steel"], 0.016, 0.05, 12, T(*(head + V((0, 0, -0.01)))))   # 铁箍
+    for k in range(40):
         a = rng.uniform(0, 6.28)
-        q = base + V((math.cos(a) * 0.05, 0.12 + math.sin(a) * 0.05, 0.0))
-        sweep(K["Undershirt"], catmull([base + V((0, 0.12, 0.1)), base + V((math.cos(a) * 0.03, 0.12 + math.sin(a) * 0.03,
-                                                                              0.05)), q], 4), circle_profile(0.006, 5))
+        rr = rng.uniform(0.1, 0.25)
+        q1 = base + V((math.cos(a) * rr * 0.6, 0.12 + math.sin(a) * rr * 0.6, 0.006))
+        q2 = base + V((math.cos(a) * rr, 0.12 + math.sin(a) * rr, 0.005))
+        sweep(K["MopCloth"], catmull([head, head + V((math.cos(a) * 0.03, math.sin(a) * 0.03, -0.06)), q1, q2], 4),
+              circle_profile(0.01, 5))
 
 
 # ============================================================================ 走廊
 def corridor(K, A, coll):
     """筒子楼的公共走廊：两边一扇扇门，门口堆着蜂窝煤、鞋、水桶；顶上隔老远一个灯泡（坏了一个）。"""
     rng = random.Random(11)
-    doors = [("N", -2.2, "205", "WoodDark"), ("S", -1.5, "206", "DoorBlue"), ("S", 1.6, "208", "WoodLight"),
-             ("N", 3.0, "209", "DoorBlue")]
-    for side, x, num, key in doors:
+    for side, x, num, key, deg in COR_DOORS:
         y = CY1 if side == "N" else CY0
         n = V((0, -1, 0)) if side == "N" else V((0, 1, 0))
         F = frame(V((x, y, 0.0)), n, V((0, 0, 1)))
-        RK.wood_door(K, F, 0.9, 2.0, leaf=key, jamb=key, hinge_right=True, name=K.uid("Cor_Door"), knob=True,
-                     bolt=False)
-        K.text(num, F @ T(0, 1.65, 0.03), 0.05, key="Silk", font=FONT_SANS)
+        # 门扇装在门洞里贴着走廊这面（往屋里开的 206 虚掩着，留一道黑缝）；门洞后面一块黑板封住（屋里是黑的）
+        leaf, hw = RK.wood_door(K, F, 0.9, 2.0, leaf=key, jamb=key, hinge_right=True, name=K.uid("Cor_Door"),
+                                knob=True, bolt=False, open_deg=-deg)
+        rbox(K["Dark"], 0.9, 2.0, 0.02, F @ T(0, 1.0, -WT + 0.01), r=0.0, seg=1)
+        K.text(num, leaf.matrix_world @ T(-0.45, 1.65, 0.002), 0.05, key="Silk", font=FONT_SANS)
         # 门口的东西
         stuff = rng.choice(["coal", "shoes", "bucket"])
         p = F @ V((-0.75, 0.0, 0.25))
@@ -948,8 +1042,8 @@ def decals(A, coll):
     for (x, y) in ((X0, Y1), (X1, Y1), (X0, Y0)):
         d("Mold", (x * 0.98, y * 0.98, H - 0.15), V((-x, -y, 0)).normalized(), UP, 0.5, 0.45, 0.4)
     # 开关周围一圈手印的黑；门把手、门边被摸黑
-    d("Grime", (X1 - 0.35, Y0, 1.4), V((0, 1, 0)), UP, 0.22, 0.3, 0.05)
-    d("Grime", (X1 - 0.18, Y0, 1.38), V((0, 1, 0)), UP, 0.15, 0.2, 0.05)
+    d("Grime", (0.35, Y0, 1.4), V((0, 1, 0)), UP, 0.22, 0.3, 0.05)
+    d("Grime", (0.18, Y0, 1.38), V((0, 1, 0)), UP, 0.15, 0.2, 0.05)
     # 床边的墙裙上被床沿、人蹭出来的一道
     d("Scuff", (X0, 0.15, 0.55), V((1, 0, 0)), UP, 1.9, 0.3, 0.05)
     d("Scuff", (0.0, Y1, 0.75), V((0, -1, 0)), UP, 1.2, 0.18, 0.05)
@@ -1017,11 +1111,14 @@ def main():
     kitchen(K, A, coll)
     walls_and_ceiling(K, A, coll, room)
     corridor(K, A, coll)
-    outside(K, A, coll)
+    # 窗外的零件单独一组（Outside_*），导出时不和屋里同材质的东西合并（见 room_kit.OUTSIDE）
+    out_k = Parts(coll, M, "Outside")
+    outside(out_k, A, coll)
     decals(A, coll)
     layout(A, coll)
     shell_k.flush(recalc=False)
     K.flush()
+    out_k.flush()
     os.makedirs(os.path.join(ROOT, "blender", "source"), exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(ROOT, "blender", "source", "dorm.blend"))
     if preview_dir:
