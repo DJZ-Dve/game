@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://mo0f8nq3kdsy"
-path="res://.godot/imported/crew_body_m169_head_normal.png-0ec4ef57611970a8cbb8f552bc1660fb.ctex"
+uid="uid://d4hylt6bnkx2m"
+path="res://.godot/imported/npc_shen_shen_lashes_alpha.png-d3c260325aae71cf907fb99c8503a78d.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "7d8b7f960bcf626c080660c49f36694d"
+"md5": "0552bb2df3bf83bcad629883978fe497"
 }
 
 [deps]
 
-source_file="res://assets/models/crew_body_m169_head_normal.png"
-dest_files=["res://.godot/imported/crew_body_m169_head_normal.png-0ec4ef57611970a8cbb8f552bc1660fb.ctex"]
+source_file="res://assets/models/npc_shen_shen_lashes_alpha.png"
+dest_files=["res://.godot/imported/npc_shen_shen_lashes_alpha.png-d3c260325aae71cf907fb99c8503a78d.ctex"]
 
 [params]
 

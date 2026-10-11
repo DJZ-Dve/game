@@ -23,7 +23,8 @@ import numpy as np
 from mathutils import Matrix, Vector as V
 
 sys.path.insert(0, os.path.dirname(__file__))
-from rocketbox import ROOT, SRC, import_fbx, bone_world, retarget, push_nla, rest_pose, trim_shapes  # noqa: E402
+from rocketbox import (ROOT, SRC, import_fbx, bone_world, retarget, push_nla, rest_pose, trim_shapes,  # noqa: E402
+                       eye_setup, lid_shadow, lower_lid_band, lash_material)
 
 AVATAR = "Business_Male_02_facial.fbx"
 TEX = "m008"
@@ -149,8 +150,8 @@ def body_textures():
     return save_png(px, "npc_shen_body_color"), save_png(orm, "npc_shen_body_orm", 'Non-Color'), label
 
 
-def head_textures():
-    """脸：褪血色、眼窝发青；眼球、嘴里湿润。"""
+def head_textures(eyes):
+    """脸：褪血色、眼窝发青；眼球、嘴里湿润，眼球上半截压一道眼睑的影子（eyes：rocketbox.eye_setup 量的眼球贴图坐标）。"""
     _, px = load_px(f"{TEX}_head_color.tga")
     h, w = px.shape[:2]
     u, v = uv_grid(h, w)
@@ -169,6 +170,10 @@ def head_textures():
     tint = np.array([0.8, 0.78, 0.85], np.float32)
     rgb = rgb * (1 - sock[..., None] * 0.45) + rgb * tint * (sock[..., None] * 0.45)
     px[..., :3] = np.clip(rgb, 0, 1)
+    lid_shadow(px, eyes)
+    # 下眼睑缘压暗一点（下面 ORM 里再调糙）：不然从下面照上来的光（合同、台灯）在这里亮成一道白边
+    lid = lower_lid_band(px)
+    px[..., :3] *= (1 - 0.45 * lid)[..., None]
     orm = np.zeros_like(px)
     orm[..., 3] = 1.0
     orm[..., 0] = 1.0
@@ -176,9 +181,11 @@ def head_textures():
     # 额头、鼻子出点油
     rough -= 0.08 * (blob(u, v, 0.5, 0.82, 0.08, 0.06) + blob(u, v, 0.5, 0.66, 0.025, 0.05))
     rough[hair] = 0.65
+    # 眼球：底下的眼白、虹膜不那么亮（0.3），湿的那层光交给 Godot 里眼球材质的清漆（见 npc.gd）
     eye = blob(u, v, 0.264, 0.082, 0.07, 0.07) > 0.3
-    rough[eye & atlas] = 0.04
+    rough[eye & atlas] = 0.3
     rough[atlas & ~eye] = 0.3
+    rough = np.maximum(rough, 0.55 + 0.35 * lid)
     orm[..., 1] = np.clip(rough, 0.03, 1)
     return save_png(px, "npc_shen_head_color"), save_png(orm, "npc_shen_head_orm", 'Non-Color')
 
@@ -299,7 +306,8 @@ def preview(arm, out_dir, acts):
     head = bone_world(arm, "Bip01 Head")
     for nm, pos, look, lens in (("face", head + V((0.12, 0.62, 0.06)), head + V((0, 0, 0.06)), 70),
                                 ("body", V((0.9, 2.1, 1.25)), V((0, 0, 0.75)), 40),
-                                ("side", V((2.0, 0.2, 1.0)), V((0, 0, 0.7)), 45)):
+                                ("side", V((2.0, 0.2, 1.0)), V((0, 0, 0.7)), 45),
+                                ("eyes", head + V((0.07, 0.34, 0.1)), head + V((0, 0, 0.1)), 160)):
         cam_d.lens = lens
         cam.location = pos
         cam.rotation_euler = (V(look) - V(pos)).to_track_quat('-Z', 'Y').to_euler()
@@ -340,15 +348,22 @@ def main():
         sk = parts[key].data.shape_keys
         print(f"shen: {key} 形态键 {len(sk.key_blocks) - 1 if sk else 0} 个")
 
+    # 眼球分出单独的材质（Godot 里开清漆），沿上眼睑缘加睫毛（眨眼的形态键带着睫毛走）
+    tmp = bpy.data.materials.new("eyes_tmp")      # 先占个槽，贴图做好以后换成 Shen_Eyes
+    eyes = eye_setup(parts["Head"], arm, tmp, lash_material("Shen_Lashes"))
+
     # 材质
     bc, bo, blab = body_textures()
-    hc, ho = head_textures()
+    hc, ho = head_textures(eyes)
     bn = bpy.data.images.load(os.path.join(SRC, f"{TEX}_body_normal.tga"))
     hn = bpy.data.images.load(os.path.join(SRC, f"{TEX}_head_normal.tga"))
     hair = bpy.data.images.load(os.path.join(SRC, f"{TEX}_opacity_color.tga"))
-    for key, mat in (("Head", pbr("Shen_Head", hc, ho, hn)), ("Hair", pbr("Shen_Hair", hair, alpha=True))):
-        parts[key].data.materials.clear()
-        parts[key].data.materials.append(mat)
+    hm = parts["Head"].data.materials
+    hm[0] = pbr("Shen_Head", hc, ho, hn)
+    hm[1] = pbr("Shen_Eyes", hc, ho, hn)     # 和脸共用贴图，只是单独一个材质槽
+    bpy.data.materials.remove(tmp)
+    parts["Hair"].data.materials.clear()
+    parts["Hair"].data.materials.append(pbr("Shen_Hair", hair, alpha=True))
     split_body(parts["Body"], blab, [pbr(f"Shen_{p}", bc, bo, bn) for p in BODY_PARTS])
 
     # 动画

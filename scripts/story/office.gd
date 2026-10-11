@@ -459,15 +459,29 @@ func _show_pen(on: bool) -> void:
 	_pen.visible = on
 
 
-## 沈渡把平安符推过来，玩家拿起来（藏掉）
+## 沈渡把平安符推过来：右手掌心朝下按着它，从自己跟前推到桌子中间（npc.gd 的 reach），眼睛跟着手；玩家拿起来（藏掉）
 func _give_talisman() -> void:
 	if _talisman == null:
 		return
+	# 平安符本来就在他右手跟前的桌上（坐着时右手腕在臀部前 0.34 米、偏右 0.1 米，见 npc_shen.json；再往前 8 厘米），
+	# 往来客那边推 0.24 米——再远他坐着够不着，得站起来
+	var par := _talisman.get_parent_node_3d()
+	var fwd := -shen.global_basis.z
+	var from := shen.global_position + shen.global_basis.x * 0.1 + fwd * 0.42
+	from.y = par.to_global(_talisman.position).y
+	var end := par.to_local(from + fwd * 0.24)
+	_talisman.position = par.to_local(from)
 	_talisman.visible = true
-	var start := _talisman.position
+	shen.look_at_target(_talisman)
+	shen.reach(_talisman, 0.4)
+	await get_tree().create_timer(0.5).timeout
 	var tw := create_tween()
-	tw.tween_property(_talisman, "position", start + Vector3(0, 0, 0.35), 1.2).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(_talisman, "position", end, 1.2).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	await tw.finished
+	await get_tree().create_timer(0.15).timeout
+	shen.release(0.6)
+	shen.look_at_target(null)
+	await get_tree().create_timer(0.3).timeout
 	play("cloth")
 	await get_tree().create_timer(0.8).timeout
 	_talisman.visible = false
