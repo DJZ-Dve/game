@@ -135,6 +135,12 @@ func focus_target() -> Variant:
 	return null
 
 
+## 镜头（_setup_lens）：{"auto_exposure": 自动曝光的 scale（0 不开）, "ae_min" / "ae_max": 最低 / 最高感光度（ISO，
+## 默认 AE_MIN_SENSITIVITY / AE_MAX_SENSITIVITY）}。调色 LUT 挂在房间的 Environment 上。子类覆盖
+func lens_config() -> Dictionary:
+	return {}
+
+
 func paper_config() -> Dictionary:
 	return {}
 
@@ -591,16 +597,52 @@ func add_glow(light_name: String, color: Color, size: float, energy := 2.0) -> M
 	return mi
 var _cam_attr: CameraAttributesPractical
 var _dof := 0.0
+var _ae_hold := 0.0
+
+## 自动曝光（房间的 lens_config() 开，宿舍开、办事处不开）：眼睛跟着明暗慢慢调。曝光 = scale / 测到的场景平均亮度，
+## 亮度先夹在最低 / 最高感光度换算出来的范围里（ISO 100 ≈ 亮度 0.125）：夹得窄，曝光就只在很小的范围里变——
+## 暗处不会被提成白天，亮处不会被压平。speed 0.5：开灯后三四秒落稳；闪电那一下（零点几秒）来不及压暗
+const AE_MIN_SENSITIVITY := 100.0
+const AE_MAX_SENSITIVITY := 800.0
+const AE_SPEED := 0.5
+## 截图（--capture、--shots）时自动曝光一下子收敛到位：同一个机位每次拍出来一样，和前一个机位、等了多久无关
+const AE_SPEED_SHOT := 12.0
 
 
-## 镜头：抗锯齿（MSAA 2x 管不到着色器、贴图里的锯齿，加一道 SMAA）、坐着时的景深、颗粒和暗角
+## 镜头：抗锯齿（MSAA 2x 管不到着色器、贴图里的锯齿，加一道 SMAA；FSR2/TAA 时不用）、自动曝光、
+## 坐着时的景深、调色 LUT（--lut 换掉，对比用）、颗粒和暗角
 func _setup_lens() -> void:
-	get_viewport().screen_space_aa = Viewport.SCREEN_SPACE_AA_SMAA
+	update_aa()
 	_cam_attr = CameraAttributesPractical.new()
 	_cam_attr.dof_blur_far_enabled = false
 	_cam_attr.dof_blur_far_transition = 1.6
 	_cam_attr.dof_blur_amount = 0.0
+	var lc := lens_config()
+	var ae := [float(lc.get("auto_exposure", 0.0)), float(lc.get("ae_min", AE_MIN_SENSITIVITY)),
+		float(lc.get("ae_max", AE_MAX_SENSITIVITY))]
+	match DebugArgs.get_arg("exposure"):
+		"", "auto":
+			pass
+		"off":
+			ae[0] = 0.0
+		var v:
+			# --exposure=scale[:min_sensitivity[:max_sensitivity]]（调参用）
+			var p := String(v).split(":")
+			for i in mini(p.size(), 3):
+				ae[i] = float(p[i])
+	_cam_attr.auto_exposure_enabled = ae[0] > 0.0
+	_cam_attr.auto_exposure_scale = ae[0]
+	_cam_attr.auto_exposure_min_sensitivity = ae[1]
+	_cam_attr.auto_exposure_max_sensitivity = ae[2]
+	_cam_attr.auto_exposure_speed = AE_SPEED_SHOT if DebugArgs.capturing() else AE_SPEED
+	# 截图拍闪电（shot_flash）那一下按游戏里的速度适应，别被快速收敛压暗
+	lightning.connect(func(_s: float) -> void: _ae_hold = 0.5)
 	walker.attributes = _cam_attr
+	if DebugArgs.has("lut"):
+		var we := find_child("WorldEnvironment", false, false) as WorldEnvironment
+		var lut := DebugArgs.get_arg("lut")
+		if we:
+			we.environment.adjustment_color_correction = null if lut == "off" else load(lut)
 	var layer := CanvasLayer.new()
 	layer.name = "Film"
 	layer.layer = 40     # 在剧情界面（50）下面：字幕不吃颗粒
@@ -621,10 +663,23 @@ func _exit_lens() -> void:
 		get_viewport().screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
 
 
+## SMAA 只在没有时域抗锯齿时叠：FSR2、TAA 自己就把高光、贴图、软阴影的噪点收了，再叠一道只会更糊。
+## --aa 换抗锯齿（debug_args.gd）后也调这里；--smaa=on|off 强行开关
+func update_aa() -> void:
+	var vp := get_viewport()
+	var temporal := vp.use_taa or vp.scaling_3d_mode == Viewport.SCALING_3D_MODE_FSR2
+	var smaa := DebugArgs.get_arg("smaa", "off" if temporal else "on") == "on"
+	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_SMAA if smaa else Viewport.SCREEN_SPACE_AA_DISABLED
+
+
 ## 坐着看对面的人：0.6 秒里把远处慢慢虚掉，焦点在他脸上
 func _update_dof(delta: float) -> void:
 	if _cam_attr == null:
 		return
+	# 截图时自动曝光平时一下子收敛；刚打过闪电的半秒按游戏里的速度
+	if DebugArgs.capturing() and _cam_attr.auto_exposure_enabled:
+		_ae_hold = maxf(_ae_hold - delta, 0.0)
+		_cam_attr.auto_exposure_speed = AE_SPEED if _ae_hold > 0.0 else AE_SPEED_SHOT
 	var tgt: Variant = focus_target() if walker.is_seated() else null
 	_dof = move_toward(_dof, 0.04 if tgt != null else 0.0, delta * 0.04 / 0.6)
 	_cam_attr.dof_blur_far_enabled = _dof > 0.0005

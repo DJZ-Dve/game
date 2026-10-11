@@ -94,6 +94,14 @@ func rain_config() -> Dictionary:
 		"wind": Vector2(-3.0, 2.5), "gust": 0.45, "fall_speed": 8.5, "brightness": 1.2}
 
 
+## 自动曝光（见 story_room.gd 的 _setup_lens）：开灯转身看屋里那一下亮，三四秒里慢慢落回来（落到不开时的 0.8 倍）；
+## 关灯以后先黑一下再稍稍看清（暗着时只比不开亮 0.15 档左右，开场还是那么暗）。
+## 曝光只在 0.7~1.1 倍之间变：最低 / 最高感光度把测到的场景亮度夹在 0.09~0.14，曝光 = scale / 亮度。
+## 台灯下看纸、贴着白墙最多压暗半档；闪电只有零点几秒，来不及压（录像实测）。想让暗处「慢慢看清」更明显就把 ae_min 往下调
+func lens_config() -> Dictionary:
+	return {"auto_exposure": 0.1, "ae_min": 73.0, "ae_max": 114.0}
+
+
 ## 光照贴图：日光灯关着（开场）、开着各烘一份，开关灯时换（见 room_lightmap.gd）
 func lightmap_variants() -> Dictionary:
 	return {"tube": "Light_Tube_Main"}

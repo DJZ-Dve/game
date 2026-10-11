@@ -17,6 +17,16 @@ extends Node
 ##   --no-hud         不显示操作提示（录给别人看的视频用）
 ##   --body-preview   把第一人称的身体摆到视线前方 1.3 米、面朝相机（看身体的姿势、朝向，见 crew_body.gd）
 ##   --sfx-log        每触发一个音效打一行 `SFX <帧号> <名字>`（tools/audio_report.py 拿它和录音对时间）
+##   --look=帧:帧:度每秒[:俯仰度每秒],...  在这两帧之间按这个角速度转头（正的往左转、往上看），配合 --actions 录走动
+##                    （例 `--look=120:240:40,240:420:-40`：左转三十度再右转回来；录像对比两种画面设置时输入一模一样）
+##   --seed=N         随机数种子（闪电、灯闪……的随机时刻固定下来；配合 --fixed-fps 两次录像逐帧一样）
+## 画面（对比用，不改 project.godot）：
+##   --aa=msaa|fsr2|taa|off  抗锯齿：msaa = MSAA 2x（project.godot 的默认）；fsr2 = FSR2 原生分辨率（scale 1.0，
+##                    MSAA 关）；taa = TAA（MSAA 关）；off 全关。岸上房间另外叠的 SMAA 只在没有时域抗锯齿时开
+##   --fsr-sharpness=值  FSR2 的锐化（0 最锐、2 最软，默认 0.25）；--smaa=on|off 强行开关岸上的 SMAA
+##   --exposure=auto|off|scale[:最低感光度[:最高感光度]]  岸上房间的自动曝光（默认按房间的 lens_config()，
+##                    见 story_room.gd 的 _setup_lens；给数字是调参用，例 `--exposure=0.15:50:800`）
+##   --lut=off|<路径>  岸上房间的调色 LUT：off 不挂（对比用），或换一张（比如 res://assets/textures/lut/identity_lut.png）
 ## 岸上的场景（--scene=dorm|office，scripts/story/）截图：
 ##   --at=x,z / --yaw / --pitch  站在房间局部坐标（x 东、-z 北）这一点，yaw 0 朝北、90 朝西、-90 朝东、180 朝南
 ##   --sit=座位名      坐到 Seat_<名字> 上（Desk、Bed、Visitor……），用坐着时的眼睛位置；--yaw/--pitch 变成相对椅子朝向的偏移
@@ -25,7 +35,8 @@ extends Node
 ##                    {"name", "desc", "at": [x, z], "yaw", "pitch", "sit": 座位名（yaw/pitch 是相对偏移）,
 ##                     "tube": 宿舍日光灯开不开（默认跟 --tube）, "door": 门开多少 0~1, "fov": 视野（默认 64，坐着 54）,
 ##                     "free": 不限制在能站的地方, "flash": 窗外闪电的亮度（打到最亮那一下拍）, "settle": 等多少帧（默认 90）,
-##                     "gi": "lightmap" / "voxel" 就地切换间接光（同一个进程里轮流比两套 GI 的帧率）}
+##                     "gi": "lightmap" / "voxel" 就地切换间接光（同一个进程里轮流比两套 GI 的帧率）,
+##                     "aa": 同 --aa，就地切换抗锯齿（同一个进程里轮流比 MSAA / FSR2 的帧率）}
 ##   --shot-dir=目录   --shots 存到哪（<组名>_<name>.png，另写一份 <组名>_shots.json：每张的帧率、GPU 时间）
 ##   --shot-only=a,b   只拍这几个机位（按 name）
 ##   --gi=voxel|both   岸上房间的间接光：默认有烘好的光照贴图（assets/gi/<房间>.lmbake）就用 LightmapGI，
@@ -47,6 +58,7 @@ var room: Node
 var _args := {}
 var _actions: Array = []  # [帧号, 动作名, 0 按一下 / 1 按住 / -1 松开]，按帧号排好
 var _release: Array[String] = []
+var _looks: Array = []    # --look：[开始帧, 结束帧, 偏航 弧度/秒, 俯仰 弧度/秒]
 
 
 func _init() -> void:
@@ -73,10 +85,17 @@ func capturing() -> bool:
 
 
 func _ready() -> void:
+	if has("seed"):
+		seed(int(get_arg("seed")))
+	if has("aa"):
+		apply_aa(get_viewport(), get_arg("aa"))
 	if has("shots"):
 		_shots.call_deferred()
 	elif has("capture"):
 		_capture.call_deferred()
+	for item in get_arg("look").split(",", false):
+		var p := item.split(":")
+		_looks.append([int(p[0]), int(p[1]), deg_to_rad(float(p[2])), deg_to_rad(float(p[3])) if p.size() > 3 else 0.0])
 	if has("actions"):
 		for item in get_arg("actions").split(",", false):
 			var kv := item.split(":")
@@ -87,10 +106,11 @@ func _ready() -> void:
 				act = act.substr(1)
 			_actions.append([int(kv[0]), act, mode])
 		_actions.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
-	set_process(not _actions.is_empty())
+	set_process(not _actions.is_empty() or not _looks.is_empty())
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_look(delta)
 	for act in _release:
 		Input.action_release(act)
 	_release.clear()
@@ -108,8 +128,40 @@ func _process(_delta: float) -> void:
 				ev.pressed = true
 				Input.parse_input_event(ev)
 				_release.append(a[1])
-	if _actions.is_empty() and _release.is_empty():
+	if _actions.is_empty() and _release.is_empty() and _looks.is_empty():
 		set_process(false)
+
+
+## --look：当前相机（岸上的 RoomWalker、艇里的 cockpit_camera，都有 yaw / pitch）按角速度转
+func _look(delta: float) -> void:
+	var frame := Engine.get_process_frames()
+	while not _looks.is_empty() and _looks[0][1] <= frame:
+		_looks.pop_front()
+	if _looks.is_empty() or _looks[0][0] > frame:
+		return
+	var cam := get_viewport().get_camera_3d()
+	if cam and "yaw" in cam:
+		cam.set("yaw", float(cam.get("yaw")) + _looks[0][2] * delta)
+		cam.set("pitch", clampf(float(cam.get("pitch")) + _looks[0][3] * delta, deg_to_rad(-80.0), deg_to_rad(75.0)))
+
+
+## 抗锯齿（--aa、机位的 "aa"）：
+##   msaa  MSAA 2x（project.godot 的默认），岸上房间另外叠 SMAA（见 story_room.gd 的 _setup_lens）
+##   fsr2  FSR2 原生分辨率（scale 1.0，只做时域抗锯齿不放大）：静帧里 MSAA 管不到的高光、贴图、软阴影的噪点都收得掉，
+##         但没有运动矢量的雨丝会拖成一串点、走动时墙上挂历的小字糊掉（Mac 上录像实测），所以没当默认
+##   taa   引擎自带的 TAA（偏糊，玻璃上的雨点会被抹掉）
+##   off   全关
+func apply_aa(vp: Viewport, mode: String) -> void:
+	vp.msaa_3d = Viewport.MSAA_2X if mode == "msaa" else Viewport.MSAA_DISABLED
+	vp.use_taa = mode == "taa"
+	vp.scaling_3d_scale = 1.0
+	if mode == "fsr2":
+		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR2
+		vp.fsr_sharpness = float(get_arg("fsr-sharpness", "0.25"))
+	else:
+		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+	if room and room.has_method("update_aa"):
+		room.update_aa()
 
 
 ## 音效日志（--sfx-log）
@@ -161,6 +213,8 @@ func _shots() -> void:
 		var s: Dictionary = list[i]
 		var shot_name := String(s.get("name", "%02d" % i))
 		room.shot_pose(s)
+		if s.has("aa"):
+			apply_aa(get_viewport(), String(s.aa))
 		# "debug_draw": 2 只看光照（反照率全白），查间接光、光照贴图用
 		get_viewport().debug_draw = int(s.get("debug_draw", 0)) as Viewport.DebugDraw
 		var settle := maxi(int(s.get("settle", 90)), 2) + (SHOT_WARMUP if i == 0 else 0)
