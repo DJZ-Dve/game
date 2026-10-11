@@ -824,6 +824,11 @@ func _update_lightning(delta: float) -> void:
 		fill.visible = _lightning.visible and not fill.get_meta("off", false)
 
 
+## 现在闪电有多亮（0~1，闪完往下掉）：窗外的远景（dorm.gd 的全景条）跟着它换闪电版
+func flash_level() -> float:
+	return _flash
+
+
 func _flash_once(strength: float) -> void:
 	lightning.emit(strength)
 	for k in randi_range(1, 3):
