@@ -50,7 +50,25 @@ _subresources={
 "save_to_file/fallback_path": "",
 "save_to_file/path": ""
 },
-"office_Ext_ShipName": {
+"office_Body_Out_Silk": {
+"generate/lightmap_uv": 2,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": false,
+"save_to_file/fallback_path": "",
+"save_to_file/path": ""
+},
+"office_Outside_Antifoul_001": {
+"generate/lightmap_uv": 2,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": false,
+"save_to_file/fallback_path": "",
+"save_to_file/path": ""
+},
+"office_Outside_Bollard_001": {
 "generate/lightmap_uv": 2,
 "generate/lods": 0,
 "generate/shadow_meshes": 0,
@@ -68,7 +86,61 @@ _subresources={
 "save_to_file/fallback_path": "",
 "save_to_file/path": ""
 },
-"office_Outside_CraneRust_001": {
+"office_Outside_Container_001": {
+"generate/lightmap_uv": 2,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": false,
+"save_to_file/fallback_path": "",
+"save_to_file/path": ""
+},
+"office_Outside_Dark_001": {
+"generate/lightmap_uv": 2,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": false,
+"save_to_file/fallback_path": "",
+"save_to_file/path": ""
+},
+"office_Outside_DeckGear_001": {
+"generate/lightmap_uv": 2,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": false,
+"save_to_file/fallback_path": "",
+"save_to_file/path": ""
+},
+"office_Outside_DrumBlue_001": {
+"generate/lightmap_uv": 2,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": false,
+"save_to_file/fallback_path": "",
+"save_to_file/path": ""
+},
+"office_Outside_DrumRed_001": {
+"generate/lightmap_uv": 2,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": false,
+"save_to_file/fallback_path": "",
+"save_to_file/path": ""
+},
+"office_Outside_FishHull_001": {
+"generate/lightmap_uv": 2,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": false,
+"save_to_file/fallback_path": "",
+"save_to_file/path": ""
+},
+"office_Outside_Foam_001": {
 "generate/lightmap_uv": 2,
 "generate/lods": 0,
 "generate/shadow_meshes": 0,
@@ -95,7 +167,25 @@ _subresources={
 "save_to_file/fallback_path": "",
 "save_to_file/path": ""
 },
-"office_Outside_IronBar_001": {
+"office_Outside_Lifeboat_001": {
+"generate/lightmap_uv": 2,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": false,
+"save_to_file/fallback_path": "",
+"save_to_file/path": ""
+},
+"office_Outside_PierWet_001": {
+"generate/lightmap_uv": 2,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": false,
+"save_to_file/fallback_path": "",
+"save_to_file/path": ""
+},
+"office_Outside_Rope_001": {
 "generate/lightmap_uv": 2,
 "generate/lods": 0,
 "generate/shadow_meshes": 0,
@@ -105,6 +195,15 @@ _subresources={
 "save_to_file/path": ""
 },
 "office_Outside_ShipWhite_001": {
+"generate/lightmap_uv": 2,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": false,
+"save_to_file/fallback_path": "",
+"save_to_file/path": ""
+},
+"office_Outside_ShipWindow_001": {
 "generate/lightmap_uv": 2,
 "generate/lods": 0,
 "generate/shadow_meshes": 0,
@@ -150,6 +249,15 @@ _subresources={
 "save_to_file/path": ""
 },
 "office_Outside_WoodDark_001": {
+"generate/lightmap_uv": 2,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": false,
+"save_to_file/fallback_path": "",
+"save_to_file/path": ""
+},
+"office_Outside_WoodRaw_001": {
 "generate/lightmap_uv": 2,
 "generate/lods": 0,
 "generate/shadow_meshes": 0,

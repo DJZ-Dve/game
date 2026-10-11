@@ -22,7 +22,7 @@ import bmesh  # noqa: E402
 from mathutils import Vector as V, Matrix  # noqa: E402
 
 from lib import (reset_scene, collection, frame, T, R, S, cylinder, box, uvsphere, lathe, torus, catmull,  # noqa: E402
-                 circle_profile, rect_profile, sweep, empty, text_mesh, render_preview, material)
+                 circle_profile, rect_profile, sweep, pipe, empty, text_mesh, render_preview, material)
 from kit import Parts, rbox, extrude_profile, FONT_SANS, FONT_SERIF, FONT_HAND, FONT_BRUSH  # noqa: E402
 import room_kit as RK  # noqa: E402
 from room_kit import Room, anchor, light, use, seat, walk, spawn, decal  # noqa: E402
@@ -77,6 +77,19 @@ def materials(M):
     add("Bamboo", "M_Bamboo", (0.6, 0.5, 0.3), 0.0, 0.6)
     add("CableBlue", "M_CableBlue", (0.05, 0.12, 0.35), 0.0, 0.4)
     add("FileCab", "M_FileCab", (0.2, 0.28, 0.24), 0.0, 0.5)
+    # 窗外（正式外观见 setup_project.gd 的 _harbor_materials）
+    add("PierWet", "M_PierWet", (0.3, 0.3, 0.29), 0.0, 0.3)
+    add("ShipDeck", "M_ShipDeck", (0.17, 0.075, 0.05), 0.0, 0.35)
+    add("ShipWindow", "M_ShipWindow", (0.02, 0.024, 0.028), 0.0, 0.06)
+    add("Antifoul", "M_Antifoul", (0.3, 0.075, 0.05), 0.0, 0.75)
+    add("DeckGear", "M_DeckGear", (0.5, 0.34, 0.07), 0.0, 0.45)
+    add("Lifeboat", "M_Lifeboat", (0.62, 0.2, 0.05), 0.0, 0.4)
+    add("Container", "M_Container", (0.3, 0.1, 0.06), 0.0, 0.5)
+    add("FishHull", "M_FishHull", (0.2, 0.3, 0.33), 0.0, 0.45)
+    add("Bollard", "M_Bollard", (0.05, 0.05, 0.048), 0.0, 0.5)
+    add("DrumBlue", "M_DrumBlue", (0.07, 0.15, 0.28), 0.0, 0.4)
+    add("DrumRed", "M_DrumRed", (0.33, 0.06, 0.04), 0.0, 0.4)
+    add("Foam", "M_Foam", (0.7, 0.72, 0.72), 0.0, 0.9)
     return M
 
 
@@ -747,36 +760,595 @@ def overhead(K, A, coll):
 
 
 # ============================================================================ 窗外：码头、母船、港湾
+# 楼前的岸壁（实心，沿着楼脚）和从岸壁往北伸出去的栈桥（架在桩上），8 米宽
+PX0, PX1 = -3.0, 5.0
+QUAY_Y = Y1 + WT + 6.0                 # 岸壁前沿（栈桥从这里起）
+PIER_END = Y1 + 62.0                   # 栈桥头
+PIER_T = 0.45                          # 栈桥面板厚
+CURB = (0.3, 0.22)                     # 护轮坎宽、高
+SUB = (PX1 + 2.0, Y1 + 30.0)           # 镇海号（艇身中心）
+SUB_DECK = GROUND - 0.25 + 1.41 + 0.21  # 镇海号甲板面（轴线在水线下 0.25 米，艇身半径 1.41，甲板高出艇身 0.21）
+SHIP_L, SHIP_B = 42.0, 9.0             # 母船垂线间长、型宽
+
+
 def outside(K, A, coll):
     g = GROUND
     # 港湾的水面（Godot 里换成水的材质）
     abox(K["Water"], -200, 200, Y1 + WT, 400, g - 0.2, g)
-    # 楼前的码头：从楼脚往北伸出去 60 米，8 米宽；边上一排系缆桩、轮胎
-    px0, px1 = -3.0, 5.0
-    abox(K["Concrete"], px0, px1, Y1 + WT, Y1 + 62, g - 1.0, PIER_Z)
-    abox(K["Concrete"], -30, 30, Y1 + WT - 2, Y1 + WT + 6, g - 1.0, PIER_Z)
-    for y in range(8, 62, 6):
-        cylinder(K["IronBar"], 0.18, 0.5, 16, T(px1 - 0.4, Y1 + y, PIER_Z))
-        cylinder(K["IronBar"], 0.24, 0.06, 16, T(px1 - 0.4, Y1 + y, PIER_Z + 0.5))
-        torus(K["Tire"], 0.45, 0.13, 20, 8, T(px1 + 0.15, Y1 + y + 3, PIER_Z - 0.8) @ R(90, 'Y'))
-    # 镇海号：靠在码头东边（Godot 里在这个挂点上放 submarine_exterior.glb），盖着半截帆布
+    quay(K)
+    pier(K)
+    # 镇海号：靠在栈桥东边（Godot 里在这个挂点上放 submarine_exterior.glb），盖着半截帆布
     # 艇身轴线在水线下 0.25 米（gen_submarine.py 的 WL），围壳顶离轴线 3.3 米、前后在 y ∈ [-2.75, 0.05]
-    anchor(A, coll, "Anchor_Sub", (px1 + 2.0, Y1 + 30.0, g - 0.25), (0, -1, 0))
-    tarp(K, V((px1 + 2.0, Y1 + 30.0 - 1.35, g - 0.25 + 3.35)))
-    # 母船「东溟号」：码头头上，船尾一个 A 字吊架
-    ship(K, A, coll, T(px0 - 5.5, Y1 + 58.0, g) @ R(180, 'Z'))
-    # 远处：防波堤、灯塔、几条渔船、山
-    abox(K["Concrete"], -120, -10, Y1 + 160, Y1 + 168, g - 1, g + 2.5)
+    anchor(A, coll, "Anchor_Sub", (SUB[0], SUB[1], g - 0.25), (0, -1, 0))
+    tarp(K, V((SUB[0], SUB[1] - 1.35, g - 0.25 + 3.35)))
+    # 母船「东溟号」：靠在栈桥头的西边，船艏朝岸（朝窗户），后甲板一个 A 字吊架
+    ship_m = T(PX0 - 4.8, Y1 + 58.0, g) @ R(180, 'Z')
+    ship(K, A, coll, ship_m)
+    moorings(K, ship_m)
+    pier_clutter(K)
+    breakwater(K, A, coll)
+    # 港里几条木渔船：避开母船、栈桥，彼此离开一点
+    rng = random.Random(3)
+    placed = []
+    while len(placed) < 7:
+        x = rng.uniform(-60, 60)
+        y = Y1 + rng.uniform(70, 140)
+        if -20 < x < 3 and y < Y1 + 95:
+            continue
+        if any((x - px) ** 2 + (y - py) ** 2 < 18 ** 2 for px, py in placed):
+            continue
+        placed.append((x, y))
+        fishing_boat(K, T(x, y, g) @ R(rng.uniform(0, 360), 'Z'), rng)
+    hills(K)
+
+
+def loft(bm, rings, mats=None, caps=True):
+    """一圈圈的顶点（每圈同样多、首尾相接）连成管状表面，两头封口。mats：每一段（第 i 点到第 i+1 点）的材质编号。"""
+    n = len(rings[0])
+    for a, b in zip(rings, rings[1:]):
+        for i in range(n):
+            j = (i + 1) % n
+            try:
+                f = bm.faces.new([a[i], a[j], b[j], b[i]])
+            except ValueError:
+                continue
+            if mats:
+                f.material_index = mats[i]
+    if caps:
+        for r in (rings[0], rings[-1]):
+            try:
+                bm.faces.new(r)
+            except ValueError:
+                pass
+
+
+def hang(a, b, sag, n=12):
+    """两点之间垂下来的缆（抛物线近似悬链线），sag 是正中间比两端连线低多少。"""
+    a, b = V(a), V(b)
+    return [a.lerp(b, k / n) - V((0, 0, sag * 4 * (k / n) * (1 - k / n))) for k in range(n + 1)]
+
+
+def rope(bm, a, b, sag, r=0.028, n=12):
+    sweep(bm, hang(a, b, sag, n), circle_profile(r, 6))
+
+
+def tire(bm, M, r=0.42, t=0.13, segs=14):
+    """旧轮胎（低面数）：M 的 Z 是轮胎的轴。"""
+    torus(bm, r - t, t, segs, 6, M)
+
+
+def bollard(K, x, y, z, s=1.0):
+    """铸铁系缆桩：底座法兰、腰身、帽檐。"""
+    prof = [(0.0, 0.0), (0.32, 0.0), (0.32, 0.05), (0.2, 0.07), (0.17, 0.12), (0.16, 0.3), (0.17, 0.4),
+            (0.26, 0.43), (0.27, 0.48), (0.2, 0.52), (0.0, 0.53)]
+    lathe(K["Bollard"], [(r * s, h * s) for r, h in prof], 12, T(x, y, z))
+
+
+def drum(K, M, key):
+    """200 升油桶：桶身带两道滚箍，上下卷边。M 的原点在桶底中心，Z 朝桶顶。"""
+    prof = [(0.0, 0.0), (0.285, 0.0), (0.293, 0.012), (0.29, 0.29), (0.298, 0.3), (0.29, 0.31), (0.29, 0.57),
+            (0.298, 0.58), (0.29, 0.59), (0.29, 0.865), (0.296, 0.878), (0.282, 0.88), (0.0, 0.872)]
+    lathe(K[key], prof, 14, M)
+
+
+# ---------------------------------------------------------------------------- 岸壁、栈桥
+def quay(K):
+    """楼前的岸壁：实心混凝土，前沿一道压顶的护轮坎，几个系缆桩，岸壁面上挂着轮胎。"""
+    g = GROUND
+    abox(K["PierWet"], -30, 30, Y1 + WT - 2, QUAY_Y, g - 2.5, PIER_Z)
+    for x0, x1 in ((-30, PX0 - 0.6), (PX1 + 0.6, 30)):
+        abox(K["PierWet"], x0, x1, QUAY_Y - CURB[0], QUAY_Y, PIER_Z - 0.01, PIER_Z + CURB[1], r=0.03, seg=1)
+    for x in (-21, -11, 12, 22):
+        bollard(K, x, QUAY_Y - 0.75, PIER_Z)
+    for x in (-16, -7, 9, 17, 26):
+        tire(K["Tire"], T(x, QUAY_Y + 0.14, PIER_Z - 0.55) @ R(90, 'X'))
+        for dx in (-0.22, 0.22):
+            sweep(K["Steel"], [V((x + dx, QUAY_Y - 0.12, PIER_Z + CURB[1])), V((x + dx, QUAY_Y + 0.04, PIER_Z + 0.16)),
+                               V((x + dx * 0.7, QUAY_Y + 0.14, PIER_Z - 0.17))], circle_profile(0.014, 4))
+
+
+def pier(K):
+    """栈桥式码头：0.45 米厚的混凝土面板架在桩基上（每 4 米一道桩帽横梁，底下三根方桩），面板底下黑洞洞的，水拍着桩；
+    两边压一道护轮坎（隔一段留个排水缺口），挂船的两段沿边挂一排旧轮胎当护舷，面上两条吊车轨道。"""
+    g = GROUND
+    z1, z0 = PIER_Z, PIER_Z - PIER_T
+    abox(K["PierWet"], PX0, PX1, QUAY_Y, PIER_END, z0, z1)
+    y = QUAY_Y + 2.0
+    while y < PIER_END - 0.3:
+        abox(K["PierWet"], PX0 + 0.05, PX1 - 0.05, y - 0.35, y + 0.35, z0 - 0.35, z0 + 0.01)
+        for x in (PX0 + 0.6, (PX0 + PX1) / 2, PX1 - 0.6):
+            abox(K["PierWet"], x - 0.25, x + 0.25, y - 0.25, y + 0.25, g - 3.0, z0 - 0.34)
+        y += 4.0
+    # 栈桥头一道端梁
+    abox(K["PierWet"], PX0 + 0.02, PX1 - 0.02, PIER_END - 0.6, PIER_END - 0.02, z0 - 0.35, z0 + 0.01)
+    # 护轮坎：每 7.6 米断开一个排水缺口
+    for xa, xb in ((PX0, PX0 + CURB[0]), (PX1 - CURB[0], PX1)):
+        y = QUAY_Y
+        while y < PIER_END - 0.6:
+            ye = min(y + 7.6, PIER_END - CURB[0])
+            abox(K["PierWet"], xa, xb, y, ye, z1 - 0.01, z1 + CURB[1], r=0.03, seg=1)
+            y = ye + 0.35
+    abox(K["PierWet"], PX0, PX1, PIER_END - CURB[0], PIER_END, z1 - 0.01, z1 + CURB[1], r=0.03, seg=1)
+    # 吊车轨道（嵌在面板里，钢轨顶面露出一点）
+    for x in (PX0 + 1.2, PX1 - 1.2):
+        abox(K["Steel"], x - 0.035, x + 0.035, QUAY_Y - 0.5, PIER_END - 0.5, z1 - 0.01, z1 + 0.022)
+    # 系缆桩（两边，护轮坎里侧）
+    for y in range(int(QUAY_Y) + 5, int(PIER_END), 10):
+        for x in (PX0 + CURB[0] + 0.35, PX1 - CURB[0] - 0.35):
+            bollard(K, x, y, z1)
+    bollard(K, PX0 + CURB[0] + 0.35, PIER_END - 1.0, z1)
+    bollard(K, PX1 - CURB[0] - 0.35, PIER_END - 1.0, z1)
+    # 护舷：旧轮胎挂在面板侧面，用两根链子吊在护轮坎上，底边泡在水里
+    fend = [(PX1, 1, y) for y in range(int(SUB[1]) - 12, int(SUB[1]) + 10, 3)]
+    fend += [(PX0, -1, y) for y in range(int(Y1 + 37), int(PIER_END), 3)]
+    fend += [(PX1, 1, Y1 + 50), (PX1, 1, Y1 + 57), (PX0, -1, Y1 + 15), (PX0, -1, Y1 + 24)]
+    for x, s, y in fend:
+        cx = x + s * 0.14
+        tire(K["Tire"], T(cx, y, z1 - 0.62) @ R(90, 'Y'))
+        for dy in (-0.22, 0.22):
+            sweep(K["Steel"], [V((x - s * 0.12, y + dy, z1 + CURB[1])), V((x + s * 0.04, y + dy, z1 + 0.16)),
+                               V((cx, y + dy * 0.7, z1 - 0.22))], circle_profile(0.014, 4))
+
+
+def pier_clutter(K):
+    """栈桥上的零碎：一堆油桶、盖帆布的木箱、一辆手推车、一根码头灯杆（白天不亮）、一盘缆绳、搭到母船上的舷梯。"""
+    z = PIER_Z
+    rng = random.Random(11)
+    # 油桶：栈桥根上靠西边一堆，五个立着、一个躺着
+    for k, (x, y) in enumerate(((-2.2, QUAY_Y + 1.4), (-1.6, QUAY_Y + 1.2), (-2.25, QUAY_Y + 2.0), (-1.62, QUAY_Y + 1.85),
+                                (-1.05, QUAY_Y + 1.5))):
+        drum(K, T(x, y, z) @ R(rng.uniform(0, 360), 'Z') @ R(rng.uniform(-1.5, 1.5), 'X'),
+             "DrumBlue" if k % 3 else "DrumRed")
+    drum(K, T(-0.7, QUAY_Y + 2.6, z + 0.29) @ R(70, 'Z') @ R(90, 'X') @ T(0, 0, -0.44), "DrumRed")
+    # 三个木箱，上面盖一块帆布：箱子顶上绷着，盖不住的边垂下来
+    bx, by = PX1 - 1.4, Y1 + 46.0
+    crates = ((0.0, 0.0, 0.0, 1.2, 1.6, 1.0), (0.0, 1.75, 0.0, 1.2, 1.5, 0.9), (0.05, 0.6, 1.0, 1.0, 1.2, 0.7))
+    for dx, dy, dz, sx, sy, sz in crates:
+        rbox(K["WoodRaw"], sx, sy, sz, T(bx + dx, by + dy, z + dz + sz / 2), r=0.02, seg=1)
+    rows = []
+    for j in range(16):
+        y = by - 0.95 + 3.6 * j / 15
+        row = []
+        for i in range(10):
+            x = bx - 0.75 + 1.5 * i / 9
+            hz = z + 0.3
+            for dx, dy, dz, sx, sy, sz in crates:
+                if abs(x - bx - dx) < sx / 2 + 0.05 and abs(y - by - dy) < sy / 2 + 0.05:
+                    hz = max(hz, z + dz + sz + 0.02)
+            row.append(V((x, y, hz + 0.03 * math.sin(i * 1.7 + j * 0.9))))
+        rows.append(row)
+    from cockpit import cloth
+    cloth(K["Tarp"], rows, 0.01)
+    # 手推车：一块木板车斗、两个轮子、两根车把
+    cx, cy = 0.6, Y1 + 21.0
+    M = T(cx, cy, z) @ R(25, 'Z')
+    rbox(K["WoodRaw"], 0.75, 1.2, 0.05, M @ T(0, 0, 0.42), r=0.01, seg=1)
+    for sx in (-1, 1):
+        rbox(K["WoodRaw"], 0.04, 1.2, 0.18, M @ T(sx * 0.37, 0, 0.53), r=0.005, seg=1)
+        cylinder(K["Tire"], 0.2, 0.08, 12, M @ T(sx * 0.45, 0.25, 0.2) @ R(90, 'Y') @ T(0, 0, -0.04))
+        sweep(K["Steel"], [M @ V((sx * 0.3, 0.6, 0.45)), M @ V((sx * 0.3, 1.3, 0.62))], circle_profile(0.018, 6))
+        sweep(K["Steel"], [M @ V((sx * 0.3, -0.5, 0.42)), M @ V((sx * 0.3, -0.5, 0.0))], circle_profile(0.015, 6))
+    sweep(K["Steel"], [M @ V((-0.47, 0.25, 0.2)), M @ V((0.47, 0.25, 0.2))], circle_profile(0.02, 6))
+    # 码头灯杆：栈桥东沿（不挡从窗户看母船），白天不亮，弯臂伸到栈桥中间
+    lx, ly = PX1 - 0.45, Y1 + 44.0
+    sweep(K["Bollard"], [V((lx, ly, z)), V((lx, ly, z + 7.6))], circle_profile(0.12, 10), scales=[1.0, 0.55])
+    pipe(K["Bollard"], [V((lx, ly, z + 7.4)), V((lx - 0.3, ly, z + 8.0)), V((lx - 1.3, ly, z + 8.15))], 0.05, 8, 4)
+    rbox(K["Bollard"], 0.6, 0.3, 0.16, T(lx - 1.55, ly, z + 8.12) @ R(6, 'Y'), r=0.04, seg=1)
+    rbox(K["ShipWindow"], 0.45, 0.22, 0.03, T(lx - 1.57, ly, z + 8.04) @ R(6, 'Y'), r=0.01, seg=1)
+    cylinder(K["Bollard"], 0.2, 0.25, 10, T(lx, ly, z))
+    # 一盘缆绳，盘在系缆桩旁边
+    rx, ry = PX1 - 1.2, Y1 + 38.4
+    for k in range(4):
+        torus(K["Rope"], 0.32 - 0.05 * k, 0.03, 16, 5, T(rx, ry, z + 0.03 + 0.05 * k))
+    # 舷梯：从栈桥搭到母船舷边（顺着船身斜上去），两边扶手
+    a, b = V((PX0 + 0.6, Y1 + 46.5, z + 0.02)), V((PX0 - 0.55, Y1 + 53.5, GROUND + 3.85))
+    d = (b - a).normalized()
+    side = d.cross(V((0, 0, 1))).normalized()
+    sweep(K["ShipWhite"], [a, b], rect_profile(0.7, 0.07), up_hint=V((0, 0, 1)))
+    for s in (-0.33, 0.33):
+        sweep(K["Steel"], [a + side * s + V((0, 0, 0.95)), b + side * s + V((0, 0, 0.95))], circle_profile(0.025, 6))
+        for k in range(5):
+            p = a.lerp(b, (k + 0.5) / 5) + side * s
+            sweep(K["Steel"], [p, p + V((0, 0, 0.95))], circle_profile(0.02, 6))
+
+
+def moorings(K, ship_m):
+    """缆绳：镇海号艏、艉、倒缆系到栈桥东边的系缆桩上；母船左舷（朝栈桥那边）的缆系到西边的桩上。"""
+    bz = PIER_Z + 0.45
+    xe = PX1 - CURB[0] - 0.35
+    xw = PX0 + CURB[0] + 0.35
+    sx = SUB[0] - 0.35
+    for a, b, sag in (((sx, SUB[1] + 4.5, SUB_DECK + 0.05), (xe, Y1 + 38.0, bz), 0.25),
+                      ((sx, SUB[1] + 1.5, SUB_DECK + 0.05), (xe, Y1 + 28.0, bz), 0.15),
+                      ((sx, SUB[1] - 7.0, SUB_DECK + 0.05), (xe, Y1 + 18.0, bz), 0.25)):
+        rope(K["Rope"], a, b, sag)
+    # 母船：从舷墙上的导缆孔下来（局部坐标 -x 是朝栈桥的左舷）
+    for yl, by in ((17.0, Y1 + 38.0), (6.0, Y1 + 48.0), (-12.0, Y1 + 58.0), (-18.0, PIER_END - 1.0)):
+        zd = _ship_deck_at(yl)
+        hw = _ship_hw(_ship_u(yl), zd, zd)
+        a = ship_m @ V((-(hw + 0.05), yl, zd + 0.55))
+        rope(K["Rope"], a, (xw, by, bz), 0.6, 0.035)
+
+
+# ---------------------------------------------------------------------------- 母船
+def _ship_sheer(u):
+    """主甲板（舷边）高出水线多少：后甲板 2.6 米，往前舷弧抬起，船艏比船尾高 1.8 米。u：0 船尾 → 1 船艏。"""
+    s = max(0.0, (u - 0.45) / 0.55)
+    return 2.6 + 1.8 * s ** 1.8
+
+
+FLARE_Z = 0.8   # 水线往上这一截船壳是直的（贴着水面不悬空），再往上船艏才外飘
+
+
+def _ship_hw(u, z, zd):
+    """站位 u、高度 z 处的半宽：船艏收尖；水线附近直上直下，FLARE_Z 往上越来越丰满（外飘）；水线以下舭部收圆。"""
+    b = SHIP_B / 2
+    s = min(max((u - 0.5) / 0.5, 0.0), 1.0)
+    wl = b * max(1.0 - s ** 1.7, 0.0) ** 0.6
+    if z <= FLARE_Z:
+        w = wl
+        if z < 0.0:
+            w *= 1.0 - 0.25 * (z / -1.8) ** 2
+            w *= 1.0 - 0.1 * max(0.0, 1.0 - u / 0.1) * (z / -1.8)   # 船尾水下收一点
+    else:
+        dk = b * max(1.0 - s ** 3.2, 0.0) ** 0.6
+        t = min(max((z - FLARE_Z) / max(zd - FLARE_Z, 0.1), 0.0), 1.0) ** 1.5
+        w = wl + (dk - wl) * t
+    return max(w, 0.04)
+
+
+def _ship_y(u, z):
+    """站位 u、高度 z 处的纵向坐标：艏柱从龙骨往上略微前倾，FLARE_Z 往上倾得更厉害。"""
+    w = min(max((u - 0.82) / 0.18, 0.0), 1.0)
+    rake = 0.12 * (z + 1.8) + 0.45 * max(0.0, z - FLARE_Z)
+    return -SHIP_L / 2 + SHIP_L * u + rake * w * w * (3 - 2 * w)
+
+
+def _ship_u(y):
+    """甲板上纵向坐标 y 对应的站位（船艏一段艏柱前倾，二分去找）。"""
+    lo, hi = 0.0, 1.0
+    for _ in range(30):
+        mid = (lo + hi) / 2
+        if _ship_y(mid, _ship_sheer(mid)) < y:
+            lo = mid
+        else:
+            hi = mid
+    return lo
+
+
+def _ship_deck_at(y):
+    return _ship_sheer(_ship_u(y))
+
+
+def ship_hull(K, M):
+    """船壳（单独一个对象，四种材质）：一圈圈放样，每圈从左舷甲板边 → 舷墙内侧 → 舷墙顶 → 左舷外板（水线以上黑漆、
+    以下红色防污漆）→ 船底 → 右舷 → 舷墙 → 中拱的甲板，首尾相接；船尾方艉封板，船艏收成前倾的艏柱。"""
+    HULL, ANTI, DECK, WHITE = 0, 1, 2, 3
+    BW, TW, BOOT = 1.0, 0.16, 0.45   # 舷墙高、厚，防污漆上沿（水线以上）
+    us = [0.0, 0.015, 0.06, 0.13, 0.2, 0.28, 0.36, 0.44, 0.52, 0.6, 0.67, 0.73, 0.78, 0.83, 0.87, 0.905, 0.935,
+          0.96, 0.98, 0.993, 1.0]
+    bm = bmesh.new()
+    rings = []
+    seg = None
+    for u in us:
+        zd = _ship_sheer(u)
+        hwd = _ship_hw(u, zd, zd)
+        t = min(TW, hwd * 0.45)
+        sz = [zd, (zd + FLARE_Z) / 2, FLARE_Z, BOOT, 0.0, -0.9, -1.55, -1.8]
+        pts = [(-(hwd - t), zd), (-(hwd - t), zd + BW), (-hwd, zd + BW)]
+        pts += [(-_ship_hw(u, z, zd), z) for z in sz]
+        pts += [(_ship_hw(u, z, zd), z) for z in reversed(sz)]
+        pts += [(hwd, zd + BW), (hwd - t, zd + BW), (hwd - t, zd)]
+        for f in (0.5, 0.0, -0.5):
+            pts.append(((hwd - t) * f, zd + 0.12 * (1 - f * f)))
+        rings.append([bm.verts.new(M @ V((x, _ship_y(u, z), z))) for x, z in pts])
+        if seg is None:
+            # 每一段的材质：舷墙内侧白、甲板红、水线附近往下防污漆，其余黑漆
+            seg = []
+            for i in range(len(pts)):
+                (x0, z0), (x1, z1) = pts[i], pts[(i + 1) % len(pts)]
+                if i == 0 or i == len(pts) - 5:
+                    seg.append(WHITE)
+                elif i >= len(pts) - 4:
+                    seg.append(DECK)
+                elif max(z0, z1) <= BOOT + 1e-6:
+                    seg.append(ANTI)
+                else:
+                    seg.append(HULL)
+    loft(bm, rings, seg)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    me = bpy.data.meshes.new("Ext_ShipHull")
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new("Ext_ShipHull", me)
+    K.coll.objects.link(ob)
+    for key in ("ShipHull", "Antifoul", "ShipDeck", "ShipWhite"):
+        me.materials.append(K.M[key])
+    me.shade_smooth()
+    me.set_sharp_from_angle(angle=math.radians(35))
+
+
+def hexa(bm, pts):
+    """八个点（下面四个逆时针、上面四个对应）围成的六面体（斜面的驾驶楼、烟囱）。"""
+    v = [bm.verts.new(p) for p in pts]
+    for f in ((0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)):
+        bm.faces.new([v[i] for i in f])
+
+
+def rail(K, M, pts, z, h=1.0, step=1.6, r=0.025, closed=False):
+    """栏杆：立柱 + 上下两道扶手（局部坐标的折线 pts，在高度 z 的甲板上）。"""
+    path = [V((x, y, z)) for x, y in pts] + ([V((pts[0][0], pts[0][1], z))] if closed else [])
+    for hz in (h, h * 0.5):
+        sweep(K["ShipWhite"], [M @ (p + V((0, 0, hz))) for p in path], circle_profile(r, 6), closed=False)
+    for a, b in zip(path, path[1:]):
+        n = max(1, round((b - a).length / step))
+        for k in range(n + (0 if (closed or b != path[-1]) else 1)):
+            p = a.lerp(b, k / n)
+            sweep(K["ShipWhite"], [M @ p, M @ (p + V((0, 0, h)))], circle_profile(r * 0.9, 5))
+
+
+def ship(K, A, coll, M):
+    """母船「东溟号」：四十来米的海洋工程（打捞）母船。船艏高、外飘，船中偏前三层上层建筑（两层舱室 + 驾驶楼，
+    驾驶楼一圈窗带），后面烟囱，桅杆上挂雷达；两边舱室顶上各一条封闭式救生艇；低矮的后甲板上一个集装箱、
+    一台甲板吊、绞车，船尾一个黄色的 A 字吊架（收分方管、液压油缸、顶上滑轮组），吊着一根钢缆下到水里。
+    局部坐标：+y 船艏，-x 左舷（摆在码头上朝栈桥、朝窗户那一边），z 从水线往上。"""
+    ship_hull(K, M)
+    W = K["ShipWhite"]
+    L2 = SHIP_L / 2
+
+    def P(x, y, z):
+        return M @ V((x, y, z))
+
+    def blk(key, x0, x1, y0, y1, z0, z1, r=0.06):
+        rbox(K[key], x1 - x0, y1 - y0, z1 - z0, M @ T((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), r=r, seg=1)
+
+    def pane(c, nrm, w, h, key="ShipWindow"):
+        rbox(K[key], w, h, 0.05, M @ frame(V(c), V(nrm)), r=0.012, seg=1)
+
+    # ---- 上层建筑：A 层舱室、B 层舱室、驾驶楼（前脸往前倾）
+    za, zb, zc, zr = 5.9, 8.3, 10.7, 10.85
+    blk("ShipWhite", -3.7, 3.7, -1.0, 10.5, 2.4, za - 0.06)
+    blk("ShipWhite", -3.3, 3.3, 0.5, 9.5, za - 0.05, zb)
+    hexa(W, [P(-3.5, 5.0, zb - 0.05), P(3.5, 5.0, zb - 0.05), P(3.5, 9.6, zb - 0.05), P(-3.5, 9.6, zb - 0.05),
+             P(-3.5, 5.0, zc), P(3.5, 5.0, zc), P(3.5, 10.0, zc), P(-3.5, 10.0, zc)])
+    blk("ShipWhite", -3.75, 3.75, 4.8, 10.3, zc, zr, r=0.03)                  # 驾驶楼顶（挑檐）
+    blk("ShipWhite", -4.5, 4.5, 7.6, 9.6, zb - 0.16, zb - 0.01, r=0.02)       # 两翼
+    blk("ShipWhite", -3.75, 3.75, -1.2, 10.7, za - 0.12, za, r=0.02)          # A 层顶（艇甲板）
+    # 舱室的窗：A 层两侧一排、前脸三个；B 层两侧
+    for sx in (-1, 1):
+        for y in (0.4, 2.4, 4.4, 6.4, 8.4):
+            pane((sx * 3.72, y, 4.45), (sx, 0, 0), 0.7, 0.55)
+        for y in (1.6, 3.6, 7.6):
+            pane((sx * 3.32, y, 7.2), (sx, 0, 0), 0.7, 0.55)
+        # 舱门（白漆钢门，稍微凸出来）
+        blk("ShipWhite", sx * 3.7 - 0.04, sx * 3.7 + 0.04, -0.6, 0.3, 2.7, 4.7, r=0.02)
+    for x in (-2.2, 0.0, 2.2):
+        pane((x, 10.52, 4.5), (0, 1, 0), 0.8, 0.6)
+    # 驾驶楼一圈窗带：前脸五块（跟着前倾的面），两侧三块，后面两块
+    fz = 9.75
+    fy = 9.6 + (fz - zb) * 0.4 / (zc - zb)
+    fn = V((0, zc - zb, -0.4)).normalized()
+    for k in range(5):
+        x = -2.8 + 1.4 * k
+        rbox(K["ShipWindow"], 1.25, 1.05, 0.05, M @ frame(V((x, fy, fz)) + fn * 0.02, fn), r=0.012, seg=1)
+    for sx in (-1, 1):
+        for y in (5.8, 7.1, 8.4):
+            pane((sx * 3.52, y, fz), (sx, 0, 0), 1.1, 1.0)
+    for x in (-1.6, 1.6):
+        pane((x, 4.98, fz), (0, -1, 0), 1.1, 1.0)
+    # 栏杆：A 层顶一圈、B 层顶（驾驶楼后面那截）、两翼外沿、驾驶楼顶一圈
+    rail(K, M, [(-3.7, -1.15), (3.7, -1.15), (3.7, 10.65), (-3.7, 10.65)], za, closed=True)
+    rail(K, M, [(3.28, 4.95), (3.28, 0.55), (-3.28, 0.55), (-3.28, 4.95)], zb)
+    for sx in (-1, 1):
+        rail(K, M, [(sx * 3.5, 7.65), (sx * 4.45, 7.65), (sx * 4.45, 9.55), (sx * 3.5, 9.55)], zb)
+    rail(K, M, [(-3.7, 4.85), (3.7, 4.85), (3.7, 10.25), (-3.7, 10.25)], zr, h=0.9, closed=True)
+    # ---- 烟囱（往后倾，顶上一圈黑，中间一道公司色带）
+    hexa(W, [P(-1.0, 1.2, zb - 0.05), P(1.0, 1.2, zb - 0.05), P(1.0, 3.8, zb - 0.05), P(-1.0, 3.8, zb - 0.05),
+             P(-0.85, 0.6, 12.0), P(0.85, 0.6, 12.0), P(0.85, 3.2, 12.0), P(-0.85, 3.2, 12.0)])
+
+    def funnel_band(key, z0, z1, grow):
+        def at(z):
+            k = (z - zb) / (12.0 - zb)
+            return 1.0 - 0.15 * k + grow, 1.2 - 0.6 * k - grow, 3.8 - 0.6 * k + grow
+        x0, ya0, yb0 = at(z0)
+        x1, ya1, yb1 = at(z1)
+        hexa(K[key], [P(-x0, ya0, z0), P(x0, ya0, z0), P(x0, yb0, z0), P(-x0, yb0, z0),
+                      P(-x1, ya1, z1), P(x1, ya1, z1), P(x1, yb1, z1), P(-x1, yb1, z1)])
+    funnel_band("ShipHull", 11.4, 12.04, 0.03)
+    funnel_band("Antifoul", 10.1, 10.7, 0.02)
+    # ---- 桅杆：驾驶楼顶上一根，雷达平台、横桁（挂航行灯），两根鞭状天线；楼顶前面再一台小雷达、一盏探照灯
+    sweep(K["ShipWhite"], [P(0, 6.5, zr), P(0, 6.5, 17.0)], circle_profile(0.14, 10), scales=[1.0, 0.55])
+    sweep(K["ShipWhite"], [P(-1.7, 6.5, 15.3), P(1.7, 6.5, 15.3)], circle_profile(0.06, 6))
+    blk("ShipWhite", -0.8, 0.8, 6.6, 7.7, 12.5, 12.62, r=0.01)
+    cylinder(K["Dark"], 0.18, 0.4, 10, M @ T(0, 7.15, 12.62))
+    blk("Dark", -1.3, 1.3, 7.05, 7.3, 13.05, 13.3, r=0.03)
+    cylinder(K["Dark"], 0.15, 0.3, 10, M @ T(0, 9.3, zr))
+    blk("Dark", -0.9, 0.9, 9.2, 9.42, 11.18, 11.38, r=0.03)
+    cylinder(K["ShipWhite"], 0.22, 0.35, 10, M @ T(2.6, 9.6, zr) @ R(-80, 'X'))
+    for sx in (-1, 1):
+        sweep(K["ShipWhite"], [P(sx * 3.3, 5.2, zr), P(sx * 3.3, 5.2, zr + 4.5)], circle_profile(0.025, 5))
+    light(A, coll, "Light_ShipMast", P(0, 6.5, 17.1), (0, 0, -1))
+    # ---- 救生艇：B 层顶两边各一条（封闭式，橘红），前后两副吊艇架伸到舷外
+    for sx in (-1, 1):
+        cx = sx * 2.35
+        brs = []
+        for k in range(11):
+            v = k / 10
+            y = 0.75 + 4.1 * v
+            w = 0.82 * math.sin(math.pi * (0.04 + 0.92 * v)) ** 0.55
+            hh = 0.62 * math.sin(math.pi * (0.04 + 0.92 * v)) ** 0.35
+            ring = []
+            for a in range(10):
+                ang = 2 * math.pi * a / 10 - math.pi / 2
+                ring.append(P(cx + math.cos(ang) * w, y, zb + 0.75 + math.sin(ang) * (hh if math.sin(ang) < 0 else hh * 1.15)))
+            brs.append([K["Lifeboat"].verts.new(p) for p in ring])
+        loft(K["Lifeboat"], brs)
+        for y in (1.0, 4.6):
+            blk("ShipHull", cx - 0.6, cx + 0.6, y - 0.1, y + 0.1, zb - 0.02, zb + 0.3, r=0.02)
+            pipe(K["ShipWhite"], [P(cx - sx * 0.6, y, zb), P(cx - sx * 0.5, y, zb + 1.6), P(cx + sx * 0.4, y, zb + 2.0),
+                                  P(cx + sx * 0.9, y, zb + 1.7)], 0.08, 8, 4)
+    # ---- 前甲板：起锚机、两副带缆桩、前桅（锚灯），船艏两舷的锚（锚链孔底下淌着锈水）
+    yw = 17.5
+    zw = _ship_deck_at(yw)
+    blk("ShipHull", -1.4, 1.4, yw - 0.6, yw + 0.6, zw - 0.1, zw + 0.45, r=0.04)
+    for sx in (-1, 1):
+        cylinder(K["ShipHull"], 0.42, 0.55, 12, M @ T(sx * 0.75, yw, zw + 0.9) @ R(90, 'Y') @ T(0, 0, -0.27))
+        cylinder(K["Dark"], 0.18, 0.3, 8, M @ T(sx * 1.3, yw + 2.2, _ship_deck_at(yw + 2.2) - 0.05))
+    sweep(K["ShipHull"], [P(-1.2, yw, zw + 0.9), P(1.2, yw, zw + 0.9)], circle_profile(0.1, 8))
+    yf = 20.5
+    zf = _ship_deck_at(yf)
+    sweep(K["ShipWhite"], [P(0, yf, zf - 0.1), P(0, yf, zf + 5.5)], circle_profile(0.11, 8), scales=[1.0, 0.6])
+    sweep(K["ShipWhite"], [P(-0.8, yf, zf + 4.2), P(0.8, yf, zf + 4.2)], circle_profile(0.04, 6))
+    # 带缆桩：两舷各一对，前甲板、后甲板
+    for yb in (13.0, -10.0, -17.0):
+        zdk = _ship_deck_at(yb)
+        hw = _ship_hw(_ship_u(yb), zdk, zdk)
+        for sx in (-1, 1):
+            for dy in (-0.35, 0.35):
+                cylinder(K["Bollard"], 0.15, 0.55, 8, M @ T(sx * (hw - 0.75), yb + dy, zdk - 0.05))
+    # 锚：锚链孔（船壳上一个黑圈）里收着，锚杆竖着贴在船壳上，锚爪横在底下
+    ua, zh = 0.935, 3.6
+    zd = _ship_sheer(ua)
+    for sx in (-1, 1):
+        p0 = V((sx * _ship_hw(ua, zh, zd), _ship_y(ua, zh), zh))
+        p1 = V((sx * _ship_hw(ua + 0.01, zh, zd), _ship_y(ua + 0.01, zh), zh))
+        out = (p1 - p0).cross(V((0, 0, 1))).normalized() * sx      # 船壳朝外的方向
+        cylinder(K["Dark"], 0.32, 0.12, 10, M @ frame(p0 - out * 0.04, out))
+        rbox(K["ShipHull"], 0.22, 0.25, 1.3, M @ frame(p0 + out * 0.12 - V((0, 0, 0.7)), out, V((0, 0, 1)))
+             @ R(90, 'X'), r=0.04, seg=1)
+        rbox(K["ShipHull"], 1.1, 0.25, 0.35, M @ T(*(p0 + out * 0.14 - V((0, 0, 1.35)))) @ R(math.degrees(
+            math.atan2(out.y, out.x)) + 90, 'Z'), r=0.06, seg=1)
+    # ---- 船名：船艏两舷「东溟」，下面一行拼音
+    for sx in (-1, 1):
+        u0 = 0.86
+        zd = _ship_sheer(u0)
+        for txt, zt, size, font in (("东溟", 3.35, 1.25, FONT_SERIF), ("DONG MING", 2.25, 0.42, FONT_SANS)):
+            pa = V((sx * _ship_hw(u0, zt, zd), _ship_y(u0, zt), zt))
+            pb = V((sx * _ship_hw(u0 + 0.02, zt, zd), _ship_y(u0 + 0.02, zt), zt))
+            pc = V((sx * _ship_hw(u0, zt + 0.3, zd), _ship_y(u0, zt + 0.3), zt + 0.3))
+            fwd = (pb - pa).normalized()
+            up = (pc - pa).normalized()
+            xa = fwd * sx            # 左舷从船艏往船尾读，右舷从船尾往船艏读
+            zn = xa.cross(up).normalized()   # 朝船外
+            ya = zn.cross(xa)
+            m = Matrix(((xa.x, ya.x, zn.x, 0), (xa.y, ya.y, zn.y, 0), (xa.z, ya.z, zn.z, 0), (0, 0, 0, 1)))
+            m.translation = pa + zn * 0.06
+            K.text(txt, M @ m, size, key="Silk", font=font).name = "Ext_ShipName"
+    # ---- 后甲板：集装箱（左舷）、甲板吊（右舷）、舱口盖、绞车、船尾滚筒
+    zd0 = _ship_sheer(0.2)
+    blk("Container", -3.95, -1.5, -8.3, -2.25, zd0 - 0.05, zd0 + 2.55, r=0.03)
+    for k in range(13):
+        y = -8.0 + 0.47 * k
+        blk("Container", -3.99, -3.92, y - 0.06, y + 0.06, zd0 + 0.15, zd0 + 2.35, r=0.0)
+    blk("ShipHull", -1.0, 1.0, -7.0, -4.8, zd0 - 0.05, zd0 + 0.35, r=0.04)
+    cylinder(K["DeckGear"], 0.45, 2.3, 10, M @ T(2.8, -4.8, zd0 - 0.05))
+    blk("DeckGear", 2.2, 3.4, -5.5, -4.1, zd0 + 2.25, zd0 + 2.95, r=0.06)
+    sweep(K["DeckGear"], [P(2.8, -4.6, zd0 + 2.7), P(2.8, -11.5, zd0 + 4.3)], rect_profile(0.45, 0.5, 0.04),
+          scales=[1.0, 0.7])
+    sweep(K["DeckGear"], [P(2.8, -11.4, zd0 + 4.3), P(2.8, -12.0, zd0 + 1.6)], rect_profile(0.32, 0.36, 0.03))
+    sweep(K["Steel"], [P(2.8, -12.0, zd0 + 1.6), P(2.8, -12.05, zd0 + 0.6)], circle_profile(0.02, 5))
+    yw = -11.0
+    blk("DeckGear", -1.4, 1.4, yw - 0.8, yw + 0.8, zd0 - 0.05, zd0 + 0.45, r=0.04)
+    cylinder(K["DeckGear"], 0.55, 1.8, 12, M @ T(-0.9, yw, zd0 + 1.1) @ R(90, 'Y'))
+    for sx in (-1, 1):
+        cylinder(K["DeckGear"], 0.85, 0.08, 14, M @ T(sx * 0.95 - 0.04, yw, zd0 + 1.1) @ R(90, 'Y'))
+        blk("DeckGear", sx * 1.05 - 0.08, sx * 1.05 + 0.08, yw - 0.5, yw + 0.5, zd0 + 0.4, zd0 + 1.4, r=0.02)
+    blk("DeckGear", 1.15, 1.9, yw - 0.45, yw + 0.45, zd0 + 0.4, zd0 + 1.2, r=0.06)
+    cylinder(K["ShipHull"], 0.36, 3.0, 12, M @ T(-1.5, -L2 + 0.25, zd0 + 0.25) @ R(90, 'Y'))
+    # ---- A 字吊架：两条收分方管腿从后甲板斜着探出船尾，顶上横梁，中间两根液压油缸撑着；滑轮组吊在横梁下，
+    # 钢缆从绞车上来、绕过滑轮，往下垂到水里
+    ztop = zd0 + 9.6
+    for sx in (-1, 1):
+        foot, top = V((sx * 3.55, -L2 + 1.7, zd0)), V((sx * 3.3, -L2 - 1.9, ztop))
+        sweep(K["DeckGear"], [M @ foot, M @ top], rect_profile(0.8, 0.8, 0.05), scales=[1.0, 0.62])
+        cylinder(K["DeckGear"], 0.3, 1.1, 10, M @ T(foot.x - 0.55, foot.y, foot.z + 0.3) @ R(90, 'Y'))
+        mid = foot.lerp(top, 0.55)
+        base = V((sx * 3.55, -L2 + 7.0, zd0 + 0.25))
+        sweep(K["DeckGear"], [M @ base, M @ base.lerp(mid, 0.6)], circle_profile(0.17, 8))
+        sweep(K["Steel"], [M @ base.lerp(mid, 0.58), M @ mid], circle_profile(0.08, 8))
+    sweep(K["DeckGear"], [P(-3.75, -L2 - 1.9, ztop + 0.1), P(3.75, -L2 - 1.9, ztop + 0.1)], rect_profile(0.7, 0.7, 0.05))
+    for sx in (-1, 1):
+        blk("DeckGear", sx * 0.17 - 0.03, sx * 0.17 + 0.03, -L2 - 2.4, -L2 - 1.4, ztop - 1.2, ztop - 0.2, r=0.02)
+    cylinder(K["DeckGear"], 0.42, 0.28, 14, M @ T(-0.14, -L2 - 1.9, ztop - 0.7) @ R(90, 'Y'))
+    sweep(K["Steel"], [P(0, -L2 - 1.5, ztop - 0.3), P(0, yw - 0.3, zd0 + 1.62)], circle_profile(0.03, 5))
+    sweep(K["Steel"], [P(0, -L2 - 2.3, ztop - 0.8), P(0, -L2 - 2.4, -0.6)], circle_profile(0.035, 5))
+
+
+# ---------------------------------------------------------------------------- 防波堤、灯塔、渔船
+def breakwater(K, A, coll):
+    """防波堤：堤身、外侧一道挡浪墙，墙外一排扭工字块（四脚的混凝土块）参差地露出墙头；里侧堤脚一溜抛石；
+    堤头上的灯塔（灯光、闪光见 office.gd）。"""
+    g = GROUND
+    y0, y1 = Y1 + 160, Y1 + 168
+    abox(K["Concrete"], -120, -10, y0, y1, g - 1, g + 2.5)
+    abox(K["Concrete"], -120, -10, y1 - 1.2, y1, g + 2.4, g + 3.6)
+    rng = random.Random(5)
+    legs = [V((0, 0, 1)), V((0.943, 0, -0.333)), V((-0.471, 0.816, -0.333)), V((-0.471, -0.816, -0.333))]
+    x = -118.0
+    while x < -11.0:
+        for row in range(2):
+            c = V((x + rng.uniform(-0.4, 0.4) + row * 1.1, y1 + 0.9 + row * 1.6, g + 2.7 + rng.uniform(-0.4, 0.6) - row * 0.6))
+            rot = (R(rng.uniform(0, 360), 'Z') @ R(rng.uniform(0, 360), 'X')).to_3x3()
+            for leg in legs:
+                d = rot @ leg
+                cylinder(K["Concrete"], 0.75, 1.5, 6, frame(c, d), r2=0.4)
+        x += rng.uniform(2.0, 2.6)
+    # 里侧堤脚的抛石：一条坡上随机起伏的石头面，往下封到堤身里（封闭的，法线才算得对）
+    nx = 90
+    prof = ((-4.5, -0.6), (-3.0, 0.3), (-1.5, 1.2), (0.05, 1.9))
+    rings = []
+    for i in range(nx + 1):
+        x = -120 + 110 * i / nx
+        ring = [V((x, y0 + dy + rng.uniform(-0.3, 0.3), g + dz + rng.uniform(-0.35, 0.35))) for dy, dz in prof]
+        ring.append(V((x, y0 + 0.05, g - 1.0)))
+        rings.append([K["Concrete"].verts.new(p) for p in ring])
+    loft(K["Concrete"], rings)
+    # 外侧（窗户看不见）也是一道抛石坡，扭工字块压在上面，不悬空
+    rings = []
+    for i in range(nx + 1):
+        x = -120 + 110 * i / nx
+        ring = [V((x, y1 - 0.05, g + 2.4))]
+        ring += [V((x, y1 + dy + rng.uniform(-0.3, 0.3), g + dz + rng.uniform(-0.3, 0.3)))
+                 for dy, dz in ((1.5, 1.6), (3.5, 0.4), (6.0, -1.2))]
+        ring.append(V((x, y1 - 0.05, g - 1.0)))
+        rings.append([K["Concrete"].verts.new(p) for p in ring])
+    loft(K["Concrete"], rings)
+    # 白浪线：浪拍在抛石脚上、绕着堤头翻的一道白沫（一段一段断开，宽窄不一）
+    x = -119.0
+    while x < -9.0:
+        ln = rng.uniform(2.0, 7.0)
+        w = rng.uniform(0.4, 1.1)
+        abox(K["Foam"], x, min(x + ln, -8.5), y0 - 4.6 - w, y0 - 4.3, g, g + 0.03)
+        x += ln + rng.uniform(0.3, 2.5)
+    for k in range(5):
+        a = math.radians(-90 + 45 * k)
+        c = V((-10 + math.cos(a) * 5.2, Y1 + 164 + math.sin(a) * 5.2, g))
+        rbox(K["Foam"], rng.uniform(1.5, 3.0), rng.uniform(0.6, 1.4), 0.03, T(*c) @ R(math.degrees(a) + 90, 'Z'), r=0.0)
+    # 灯塔：白色塔身、红色灯室
     lp = V((-10, Y1 + 164, g + 2.5))
     cylinder(K["ShipWhite"], 1.2, 9.0, 24, T(*lp), r2=0.9)
     cylinder(K["InkRed"], 1.0, 1.4, 24, T(*(lp + V((0, 0, 9.0)))))
     light(A, coll, "Light_Lighthouse", lp + V((0, 0, 10.0)), (0, 0, -1))
-    rng = random.Random(3)
-    for k in range(7):
-        x = rng.uniform(-60, 60)
-        y = Y1 + rng.uniform(70, 140)
-        fishing_boat(K, T(x, y, g) @ R(rng.uniform(0, 360), 'Z'), rng)
-    hills(K)
 
 
 def tarp(K, top):
@@ -796,50 +1368,69 @@ def tarp(K, top):
     cloth(K["Tarp"], rows, 0.01)
 
 
-def ship(K, A, coll, M):
-    """母船（四十来米的工作船）：船体、驾驶楼、桅杆，后甲板一个 A 字吊架，吊着一根钢缆。"""
-    L, B, D = 42.0, 9.0, 4.2
-    hull = bmesh.new()
-    rows = []
-    for k in range(25):
-        t = k / 24
-        y = -L / 2 + L * t
-        b = B / 2 * (1 - max(0.0, t - 0.75) ** 1.5 * 3.2)
-        b = max(b, 0.2)
-        ring = [hull.verts.new(M @ V((sx * b, y, z))) for sx, z in ((-1, D), (-1, -1.2), (1, -1.2), (1, D))]
-        rows.append(ring)
-    for k in range(24):
-        for i in range(3):
-            hull.faces.new([rows[k][i], rows[k][i + 1], rows[k + 1][i + 1], rows[k + 1][i]])
-    hull.faces.new(list(reversed(rows[0])))
-    hull.faces.new(rows[-1])
-    bmesh.ops.recalc_face_normals(hull, faces=hull.faces[:])
-    me = bpy.data.meshes.new("Ext_ShipHull")
-    hull.to_mesh(me)
-    hull.free()
-    ob = bpy.data.objects.new("Ext_ShipHull", me)
-    K.coll.objects.link(ob)
-    me.materials.append(K.M["ShipHull"])
-    rbox(K["ShipWhite"], 7.0, 9.0, 3.2, M @ T(0, 6.0, D + 1.6), r=0.1, seg=1)
-    rbox(K["ShipWhite"], 5.5, 5.0, 2.4, M @ T(0, 6.5, D + 4.4), r=0.1, seg=1)
-    sweep(K["ShipWhite"], [M @ V((0, 5.0, D + 5.6)), M @ V((0, 5.0, D + 13.0))], circle_profile(0.12, 10))
-    for sx in (-1, 1):
-        sweep(K["CraneRust"], [M @ V((sx * 3.8, -L / 2 + 2.0, D)), M @ V((sx * 1.2, -L / 2 - 1.5, D + 9.0))],
-              rect_profile(0.5, 0.5, 0.05))
-    sweep(K["CraneRust"], [M @ V((-1.4, -L / 2 - 1.5, D + 9.0)), M @ V((1.4, -L / 2 - 1.5, D + 9.0))],
-          rect_profile(0.6, 0.6, 0.05))
-    sweep(K["Steel"], [M @ V((0, -L / 2 - 1.5, D + 8.6)), M @ V((0, -L / 2 - 1.6, -0.5))], circle_profile(0.04, 6))
-    # 文字对象默认叫 Int_Txt_*，改成 Ext_ 开头，导出时归到窗外那一组
-    K.text("东溟", M @ T(4.52, 10.0, D - 1.0) @ R(90, 'Z') @ R(90, 'X'), 1.2, key="Silk",
-           font=FONT_SERIF).name = "Ext_ShipName"
-    light(A, coll, "Light_ShipMast", M @ V((0, 5.0, D + 13.1)), (0, 0, -1))
-
-
 def fishing_boat(K, M, rng):
-    L = rng.uniform(10, 18)
-    rbox(K["ShipHull"] if rng.random() < 0.5 else K["ShipWhite"], 3.2, L, 1.6, M @ T(0, 0, 0.5), r=0.4, seg=2)
-    rbox(K["ShipWhite"], 2.4, 3.0, 2.0, M @ T(0, -L * 0.2, 2.2), r=0.1, seg=1)
-    sweep(K["WoodDark"], [M @ V((0, L * 0.15, 1.3)), M @ V((0, L * 0.15, 7.0))], circle_profile(0.1, 8))
+    """木渔船（十几米长，七十到一百四十米外的雾里，面数要省）：放样的船壳（船艏翘起、往前探，船尾收窄），
+    后部一个驾驶楼（窗带），前桅、楼顶后桅，前后拉索、两边侧支索，前桅一根吊杆，后桅顶一面小红旗，
+    两舷各挂两个旧轮胎当护舷。"""
+    L = rng.uniform(11.0, 17.0)
+    B = L * 0.27
+    hull_key = rng.choice(("FishHull", "FishHull", "ShipHull", "ShipWhite"))
+
+    def zd(u):
+        return 1.15 + 0.2 * max(0.0, 1 - u / 0.2) + 1.1 * max(0.0, (u - 0.5) / 0.5) ** 2
+
+    def hw(u, k):
+        s = max(0.0, (u - 0.45) / 0.55)
+        w = B / 2 * max(1 - s ** (1.0 + 1.6 * k), 0.0) ** 0.55
+        w *= 1 - 0.18 * max(0.0, 1 - u / 0.15) * (1 - k)
+        return max(w, 0.03)
+
+    def yy(u, z):
+        w = min(max((u - 0.8) / 0.2, 0.0), 1.0)
+        return -L / 2 + L * u + 0.7 * (z + 0.9) * w * w
+
+    bm = K[hull_key]
+    rings = []
+    for u in (0.0, 0.12, 0.3, 0.5, 0.68, 0.82, 0.92, 1.0):
+        d = zd(u)
+        hd = hw(u, 1.0)
+        t = min(0.08, hd * 0.4)
+        prof = [(-(hd - t), d - 0.35), (-(hd - t), d), (-hd, d), (-hw(u, 0.6), d * 0.45), (-hw(u, 0.35), 0.0),
+                (-hw(u, 0.12) * 0.8, -0.55), (0.0, -0.9), (hw(u, 0.12) * 0.8, -0.55), (hw(u, 0.35), 0.0),
+                (hw(u, 0.6), d * 0.45), (hd, d), (hd - t, d), (hd - t, d - 0.35)]
+        rings.append([bm.verts.new(M @ V((x, yy(u, z), z))) for x, z in prof])
+    loft(bm, rings)
+    deck = zd(0.25) - 0.35
+    # 驾驶楼（船尾那一截），窗带
+    y0, y1 = -L / 2 + 0.1 * L, -L / 2 + 0.3 * L
+    wh = B * 0.6
+    hz = rng.uniform(1.8, 2.2)
+    rbox(K["ShipWhite"], wh, y1 - y0, hz, M @ T(0, (y0 + y1) / 2, deck + hz / 2 - 0.05), r=0.05, seg=1)
+    rbox(K["ShipWhite"], wh + 0.3, y1 - y0 + 0.4, 0.08, M @ T(0, (y0 + y1) / 2, deck + hz), r=0.02, seg=1)
+    rbox(K["ShipWindow"], wh * 0.8, 0.45, 0.05, M @ T(0, y1 + 0.01, deck + hz - 0.5) @ R(90, 'X'), r=0.01, seg=1)
+    for sx in (-1, 1):
+        rbox(K["ShipWindow"], (y1 - y0) * 0.6, 0.4, 0.05,
+             M @ T(sx * (wh / 2 + 0.01), (y0 + y1) / 2 + 0.2, deck + hz - 0.5) @ R(90, 'Z') @ R(90, 'X'), r=0.01, seg=1)
+    # 桅杆、吊杆、拉索、旗
+    yf = -L / 2 + 0.66 * L
+    df = zd(0.66) - 0.35
+    hf = rng.uniform(5.5, 7.5)
+    top = V((0, yf, df + hf))
+    sweep(K["WoodDark"], [M @ V((0, yf, df - 0.1)), M @ top], circle_profile(0.1, 6), scales=[1.0, 0.6])
+    sweep(K["WoodDark"], [M @ V((0, yf - 0.3, df + 1.2)), M @ V((0, yf - 4.2, df + 2.8))], circle_profile(0.06, 5))
+    ya = (y0 + y1) / 2
+    atop = V((0, ya, deck + hz + 3.2))
+    sweep(K["WoodDark"], [M @ V((0, ya, deck + hz)), M @ atop], circle_profile(0.06, 5))
+    stem = V((0, yy(1.0, zd(1.0)), zd(1.0)))
+    for a, b in ((top, stem), (top, V((0, y1, deck + hz))), (atop, V((0, y0 - 0.2, deck + 0.4))),
+                 (top, V((hw(0.66, 1.0), yf - 0.3, df + 0.35))), (top, V((-hw(0.66, 1.0), yf - 0.3, df + 0.35)))):
+        sweep(K["Steel"], [M @ a, M @ b], circle_profile(0.02, 4))
+    rbox(K["InkRed"], 0.02, 0.85, 0.55, M @ T(0, ya - 0.45, atop.z - 0.35) @ R(rng.uniform(-15, 15), 'Z'), r=0.0)
+    # 舷边的轮胎
+    for u in (0.4, 0.6):
+        for sx in (-1, 1):
+            d = zd(u)
+            tire(K["Tire"], M @ T(sx * (hw(u, 0.85) + 0.1), yy(u, d), d - 0.45) @ R(90, 'Y'), 0.32, 0.1, 8)
 
 
 def hills(K):

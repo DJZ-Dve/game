@@ -15,6 +15,7 @@ const FABRIC := preload("res://assets/shaders/fabric.gdshader")
 const RAIN_GLASS := preload("res://assets/shaders/rain_glass.gdshader")
 const NET_SHADER := preload("res://assets/shaders/mosquito_net.gdshader")
 const HARBOR := preload("res://assets/shaders/harbor_water.gdshader")
+const WET_CONCRETE := preload("res://assets/shaders/wet_concrete.gdshader")
 
 
 func _init() -> void:
@@ -668,7 +669,6 @@ func _room_materials(mats: Array[Material]) -> void:
 	mats.append(ground)
 	mats.append(_std("M_Brick", Color(0.22, 0.12, 0.09), 0.85))
 	mats.append(_std("M_CraneRust", Color(0.12, 0.07, 0.05), 0.75, 0.3))
-	mats.append(_std("M_ShipHull", Color(0.08, 0.08, 0.085), 0.6, 0.2))
 	mats.append(_std("M_StreetLampGlass", Color(1.0, 0.6, 0.3), 0.3, 0.0, Color(1.0, 0.55, 0.2), 2.5))
 	mats.append(_std("M_NeighborWindow", Color(0.6, 0.45, 0.25), 0.5, 0.0, Color(1.0, 0.62, 0.3), 1.4))
 	mats.append(_std("M_Coil", Color(0.45, 0.4, 0.36), 0.5, 0.7))
@@ -707,7 +707,7 @@ func _room_materials(mats: Array[Material]) -> void:
 	water.resource_name = "M_HarborWater"
 	water.shader = HARBOR
 	mats.append(water)
-	mats.append(_std("M_ShipWhite", Color(0.55, 0.55, 0.52), 0.7, 0.1))
+	_harbor_materials(mats)
 	var hill := _std("M_Hill", Color(0.09, 0.11, 0.1), 0.95)
 	hill.cull_mode = BaseMaterial3D.CULL_DISABLED   # 远山是单面片，正面朝上，从屋里看过去是背面
 	mats.append(hill)
@@ -717,3 +717,85 @@ func _room_materials(mats: Array[Material]) -> void:
 	mats.append(_tex_std("M_ScrollPaper", Color(0.86, 0.82, 0.7), "Fabric045", {"rough": 0.95, "scale": 8.0,
 		"nstrength": 0.2}))
 	mats.append(_std("M_RottenFruit", Color(0.22, 0.13, 0.05), 0.55))
+
+
+## 办事处窗外：码头、母船「东溟号」、渔船（名字和 blender/scripts/gen_office.py 里的对应）。
+## 雨天下午，60~140 米的东西在雾里，先要轮廓和大块的明暗（锈水流痕、掉漆）对；下着雨，漆面都是湿的（粗糙度偏低）。
+## 窗外的网格都在房间坐标里（原点在办事处地面，-8.6 是水面）：floor_dirt 一律关掉（不然整条船都算「靠近地板」）
+func _harbor_materials(mats: Array[Material]) -> void:
+	# 船壳：黑灰色厚漆，锈水从舷边、锚链孔、排水孔往下淌成一条条竖痕，磕掉的地方先露红丹再露锈钢；
+	# 外板在肋骨之间凹进去一点（「瘦马肋」），反光一棱一棱的。
+	# 流痕颜色是乘在漆色上的：黑漆（线性 0.005）上的锈水要比漆亮得多，所以给很大的倍数
+	# （换算成线性约 10、4、1.5 倍，乘出来是暗锈褐色 0.08、0.035、0.015）
+	mats.append(_paint("M_ShipHull", Color(0.06, 0.065, 0.07), {"rough": 0.42, "metal": 0.0, "edge": 1.3,
+		"rust": 0.3, "rust_tex": "rusty_metal_02", "streak": 0.9, "streak_scale": 0.28, "streak_cover": 0.6,
+		"wear_color2": Color(2.7, 1.8, 1.2), "primer": 0.5, "chip": 0.3, "chip_scale": 0.25, "chip_cover": 0.2,
+		"bare_rust": 1.0, "wear": Color(0.3, 0.15, 0.08), "wear_metal": 0.0, "bare_rough": 0.7, "macro": 0.8,
+		"macro_scale": 0.08, "warp": 1.5, "warp_scale": 0.45, "variation": 0.3, "rough_var": 0.35,
+		"nstrength": 0.25, "scale": 0.6, "smudge": 0.0, "dust": 0.0, "floor": 0.0, "cavity": 0.8}))
+	# 上层建筑、烟囱、灯塔、渔船驾驶楼：发灰的白漆，每个窗角、排水口底下一道褐色锈水，棱边掉漆露红丹
+	mats.append(_paint("M_ShipWhite", Color(0.6, 0.6, 0.57), {"rough": 0.45, "metal": 0.0, "edge": 1.3,
+		"rust": 0.1, "rust_tex": "rusty_metal_02", "streak": 0.9, "streak_scale": 0.35, "streak_cover": 0.65,
+		"wear_color2": Color(0.6, 0.42, 0.28), "primer": 0.4, "chip": 0.2, "chip_scale": 0.4, "chip_cover": 0.15,
+		"bare_rust": 1.0, "wear": Color(0.3, 0.15, 0.08), "wear_metal": 0.0, "bare_rough": 0.7, "macro": 0.6,
+		"macro_scale": 0.12, "warp": 0.8, "warp_scale": 0.6, "variation": 0.25, "rough_var": 0.3,
+		"nstrength": 0.25, "scale": 0.8, "smudge": 0.0, "dust": 0.0, "floor": 0.0, "cavity": 0.8}))
+	# 甲板：铁红甲板漆，被缆绳、钢丝绳、货拖得斑斑驳驳，磨掉的地方是锈；雨里一层水，发亮
+	mats.append(_paint("M_ShipDeck", Color(0.22, 0.09, 0.06), {"rough": 0.32, "metal": 0.0, "edge": 1.0,
+		"rust": 0.2, "rust_tex": "rusty_metal_02", "chip": 0.3, "chip_scale": 0.3, "chip_cover": 0.3,
+		"bare_rust": 1.0, "wear": Color(0.25, 0.14, 0.08), "wear_metal": 0.0, "bare_rough": 0.5, "macro": 0.8,
+		"macro_scale": 0.15, "variation": 0.2, "rough_var": 0.3, "nstrength": 0.2, "scale": 0.5, "smudge": 0.0,
+		"dust": 0.0, "floor": 0.0}))
+	# A 字吊架、绞车、甲板吊：黄漆（工程船的甲板机械），锈得厉害
+	mats.append(_paint("M_DeckGear", Color(0.62, 0.45, 0.08), {"rough": 0.45, "metal": 0.0, "edge": 1.4,
+		"rust": 0.25, "rust_tex": "rusty_metal_02", "streak": 0.8, "streak_scale": 0.5, "streak_cover": 0.6,
+		"wear_color2": Color(0.55, 0.36, 0.22), "primer": 0.5, "chip": 0.4, "chip_scale": 0.6, "chip_cover": 0.3,
+		"bare_rust": 1.0, "wear": Color(0.3, 0.15, 0.08), "wear_metal": 0.0, "bare_rough": 0.7, "macro": 0.6,
+		"variation": 0.15, "nstrength": 0.2, "scale": 1.5, "smudge": 0.0, "dust": 0.0, "floor": 0.0}))
+	# 救生艇：玻璃钢壳的橘红色，晒褪了色、一道道黑灰的水痕
+	mats.append(_paint("M_Lifeboat", Color(0.55, 0.2, 0.07), {"rough": 0.5, "metal": 0.0, "edge": 0.6,
+		"rust": 0.0, "detail": "Plastic012B", "streak": 0.6, "streak_scale": 0.8, "wear_color2": Color(0.5, 0.45, 0.4),
+		"wear": Color(0.7, 0.66, 0.6), "wear_metal": 0.0, "macro": 0.7, "variation": 0.3, "nstrength": 0.2,
+		"smudge": 0.0, "dust": 0.0, "floor": 0.0}))
+	# 后甲板上的集装箱：铁锈红
+	mats.append(_paint("M_Container", Color(0.3, 0.1, 0.06), {"rough": 0.5, "metal": 0.0, "edge": 1.3, "rust": 0.4,
+		"rust_tex": "rusty_metal_02", "streak": 0.7, "streak_scale": 0.6, "wear_color2": Color(0.7, 0.5, 0.35),
+		"chip": 0.5, "chip_cover": 0.3, "bare_rust": 1.0, "primer": 0.3, "wear": Color(0.3, 0.15, 0.08),
+		"wear_metal": 0.0, "macro": 0.6, "warp": 1.0, "warp_scale": 1.5, "smudge": 0.0, "dust": 0.0, "floor": 0.0}))
+	# 木渔船：船壳刷的灰蓝漆（木头外面一层层刷），掉漆露出木头，水线附近发黑
+	mats.append(_paint("M_FishHull", Color(0.2, 0.3, 0.33), {"rough": 0.45, "metal": 0.0, "detail": "PaintedWood009C",
+		"albedo": "PaintedWood009C", "nstrength": 0.6, "scale": 1.0, "edge": 1.4, "rust": 0.0,
+		"wear": Color(0.3, 0.24, 0.17), "wear_metal": 0.0, "bare_rough": 0.7, "primer": 0.4,
+		"primer_color": Color(0.6, 0.6, 0.56), "chip": 0.5, "chip_scale": 1.0, "chip_cover": 0.35, "streak": 0.6,
+		"streak_scale": 0.6, "macro": 0.7, "variation": 0.35, "smudge": 0.0, "dust": 0.0, "floor": 0.0}))
+	# 系缆桩：铸铁刷黑漆，满是锈，顶上被缆绳磨出发乌的铁（不发白）
+	mats.append(_paint("M_Bollard", Color(0.05, 0.05, 0.048), {"rough": 0.5, "metal": 0.0, "edge": 1.4, "rust": 0.25,
+		"rust_tex": "rusty_metal_02", "primer": 0.2, "chip": 0.4, "chip_scale": 3.0, "chip_cover": 0.4,
+		"bare_rust": 1.0, "wear": Color(0.22, 0.2, 0.18), "wear_metal": 0.5, "bare_rough": 0.45, "streak": 0.6,
+		"streak_scale": 2.0, "wear_color2": Color(1.1, 0.85, 0.65), "macro": 0.5, "smudge": 0.0, "dust": 0.0,
+		"floor": 0.0}))
+	# 油桶：蓝的、红的，桶箍上掉漆生锈
+	for d in [["M_DrumBlue", Color(0.07, 0.12, 0.18)], ["M_DrumRed", Color(0.26, 0.07, 0.045)]]:
+		mats.append(_paint(d[0], d[1], {"rough": 0.4, "metal": 0.0, "edge": 1.5, "rust": 0.35,
+			"rust_tex": "rusty_metal_02", "chip": 0.5, "chip_scale": 3.0, "chip_cover": 0.35, "bare_rust": 1.0,
+			"streak": 0.6, "streak_scale": 1.5, "wear_color2": Color(0.8, 0.55, 0.35), "wear": Color(0.3, 0.15, 0.08),
+			"wear_metal": 0.0, "macro": 0.5, "smudge": 0.0, "dust": 0.0, "floor": 0.0}))
+	# 驾驶室、舱室的窗：暗玻璃，透出一点灰白的天光。反光压低：窗是竖着的，从楼上往下看反射的是天空盒的「地面」半边
+	# （程序天空的地面色发棕，镜面的窗会变成一块块牛皮纸）
+	var win := _std("M_ShipWindow", Color(0.01, 0.012, 0.014), 0.2, 0.0, Color(0.62, 0.66, 0.7), 0.035)
+	win.metallic_specular = 0.2
+	mats.append(win)
+	# 防波堤脚下的白浪沫
+	mats.append(_std("M_Foam", Color(0.66, 0.68, 0.68), 0.9))
+	# 码头面、桩、岸壁：泡透了的混凝土，水洼、潮差带的青苔、面板底下背光（见 wet_concrete.gdshader）
+	var pier := ShaderMaterial.new()
+	pier.resource_name = "M_PierWet"
+	pier.shader = WET_CONCRETE
+	pier.set_shader_parameter("albedo_tex", _acg("Concrete046", "Color"))
+	pier.set_shader_parameter("normal_tex", _acg("Concrete046", "NormalGL"))
+	pier.set_shader_parameter("rough_tex", _acg("Concrete046", "Roughness"))
+	pier.set_shader_parameter("tint", Color(0.62, 0.62, 0.58))
+	pier.set_shader_parameter("tex_scale", 0.5)
+	pier.set_shader_parameter("puddle_amount", 0.22)
+	pier.set_shader_parameter("puddle_scale", 0.9)
+	mats.append(pier)

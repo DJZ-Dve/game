@@ -1,0 +1,30 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/wet_concrete.gdshader" id="1_ap03d"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Concrete046/Concrete046_2K-JPG_Color.jpg" id="2_ng0nj"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Concrete046/Concrete046_2K-JPG_NormalGL.jpg" id="3_5mlcm"]
+[ext_resource type="Texture2D" path="res://assets/third_party/ambientcg/Concrete046/Concrete046_2K-JPG_Roughness.jpg" id="4_hgfkw"]
+
+[resource]
+resource_name = "M_PierWet"
+render_priority = 0
+shader = ExtResource("1_ap03d")
+shader_parameter/albedo_tex = ExtResource("2_ng0nj")
+shader_parameter/normal_tex = ExtResource("3_5mlcm")
+shader_parameter/rough_tex = ExtResource("4_hgfkw")
+shader_parameter/tint = Color(0.62, 0.62, 0.58, 1)
+shader_parameter/tex_scale = 0.5
+shader_parameter/normal_strength = null
+shader_parameter/wetness = null
+shader_parameter/wet_darken = null
+shader_parameter/wet_roughness = null
+shader_parameter/puddle_amount = 0.22
+shader_parameter/puddle_scale = 0.9
+shader_parameter/puddle_darken = null
+shader_parameter/ripple_cells = null
+shader_parameter/rain = null
+shader_parameter/water_level = null
+shader_parameter/tide_band = null
+shader_parameter/algae_color = null
+shader_parameter/under_top = null
+shader_parameter/under_dark = null

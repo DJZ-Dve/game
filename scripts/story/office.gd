@@ -8,6 +8,7 @@ const DLG := "res://assets/story/office.dlg"
 const DOCS := "res://assets/story/docs/"
 const NPC_MODEL := preload("res://assets/models/npc_shen.glb")
 const SUB_MODEL := "res://assets/models/submarine_exterior.glb"
+const SPLASH := preload("res://assets/shaders/rain_splash.gdshader")
 ## 开场钟上的时间（下午三点零七分）；签字那一刻停在三点十四
 const START_TIME := 15.0 * 3600.0 + 7.0 * 60.0 + 20.0
 
@@ -160,6 +161,8 @@ func _ready() -> void:
 	_dress_papers()
 	_add_shen()
 	_add_sub()
+	_add_splashes()
+	_setup_water()
 	_setup_clock()
 	_add_steam()
 	_talisman = model.find_child("Hide_Talisman", true, false) as Node3D
@@ -214,6 +217,67 @@ func _add_sub() -> void:
 		return
 	var sub := (load(SUB_MODEL) as PackedScene).instantiate() as Node3D
 	a.add_child(sub)
+
+
+## 雨点溅起的小水花（rain_splash.gdshader）：栈桥面、岸壁顶、码头两边的水面、母船后甲板、镇海号甲板，
+## 每块一个网格（几百到几千个四边形，位置全在着色器里算，一块一次绘制），和雨丝一样衬着天光才看得见。
+## 区域是房间局部坐标（gen_office.py 的码头、母船位置：Blender (x, y, z) → (x, z, -y)）
+const SPLASH_AREAS := [
+	# [x0, z0, x1, z1, 落点高度, 个数, 水花大小（米）]
+	[-2.65, -65.0, 4.65, -9.3, -7.6, 2000, 0.12],      # 栈桥面
+	[-14.0, -9.0, 14.0, -3.6, -7.6, 800, 0.12],        # 楼前岸壁顶
+	[-16.0, -55.0, 18.0, -9.6, -8.6, 3500, 0.08],      # 码头两边的水面
+	[-11.4, -81.0, -4.2, -70.0, -5.95, 500, 0.1],      # 母船后甲板
+	[6.65, -36.0, 7.35, -23.0, -7.23, 120, 0.08],      # 镇海号甲板
+]
+
+
+## 挨着船、码头的水面发暗（harbor_water.gdshader 的 occ_box / occ_par）：
+## [中心 x, 中心 z, 半长 x, 半宽 z, 圆角半径, 往外淡出的距离, 浓淡]（房间局部坐标）
+const WATER_OCCLUDERS := [
+	[-7.8, -60.5, 4.5, 21.5, 3.0, 3.5, 0.7],     # 母船
+	[7.0, -29.5, 1.4, 6.8, 1.4, 1.5, 0.6],       # 镇海号
+	[1.0, -37.15, 4.0, 27.85, 0.0, 1.2, 0.8],    # 栈桥（底下背光）
+	[0.0, -6.3, 30.0, 3.0, 0.0, 2.0, 0.6],       # 楼前岸壁
+]
+
+
+func _setup_water() -> void:
+	var w := model.find_child("Body_Out_HarborWater", true, false) as MeshInstance3D
+	var m := w.get_active_material(0) as ShaderMaterial if w else null
+	if m == null:
+		return
+	var boxes := PackedVector4Array()
+	var pars := PackedVector4Array()
+	for o: Array in WATER_OCCLUDERS:
+		var c := to_global(Vector3(o[0], 0.0, o[1]))
+		boxes.append(Vector4(c.x, c.z, o[2], o[3]))
+		pars.append(Vector4(o[4], o[5], o[6], 0.0))
+	m.set_shader_parameter("occ_box", boxes)
+	m.set_shader_parameter("occ_par", pars)
+
+
+func _add_splashes() -> void:
+	var c := rain_config()
+	if c.is_empty():
+		return
+	for a: Array in SPLASH_AREAS:
+		var m := ShaderMaterial.new()
+		m.shader = SPLASH
+		m.set_shader_parameter("area_min", Vector2(a[0], a[1]))
+		m.set_shader_parameter("area_max", Vector2(a[2], a[3]))
+		m.set_shader_parameter("surface_y", a[4])
+		m.set_shader_parameter("size", a[6])
+		m.set_shader_parameter("ambient", c.get("ambient", Vector3.ZERO))
+		m.set_shader_parameter("brightness", c.get("brightness", 1.0))
+		var mi := MeshInstance3D.new()
+		mi.name = "Splash"
+		mi.mesh = _drop_field(a[5])
+		mi.material_override = m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+		mi.custom_aabb = AABB(Vector3(a[0], a[4] - 0.2, a[1]), Vector3(a[2] - a[0], 0.6, a[3] - a[1]))
+		add_child(mi)
 
 
 func _connect_uses() -> void:
