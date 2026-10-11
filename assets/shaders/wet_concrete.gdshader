@@ -74,7 +74,8 @@ float vnoise(vec2 p) {
 }
 
 // 水洼里的雨点涟漪（同 harbor_water 的做法）：返回水面斜率
-vec2 ripples(vec2 p, float t) {
+// px：一格在屏幕上多宽（在分支外面求导数，见 fragment()）
+vec2 ripples(vec2 p, float t, float px) {
 	vec2 g = p * ripple_cells;
 	vec2 id = floor(g);
 	vec2 f = fract(g) - 0.5;
@@ -82,8 +83,7 @@ vec2 ripples(vec2 p, float t) {
 	float ph = fract(t * (0.9 + r) + r * 7.0);
 	vec2 d = f + (vec2(hash(id + 3.1), hash(id + 7.7)) - 0.5) * 0.6;
 	float l = length(d);
-	float ring = sin((l - ph * 0.5) * 50.0) * (1.0 - ph) * smoothstep(0.5 * ph + 0.06, 0.5 * ph, l);
-	float px = length(fwidth(g));
+	float ring = sin((l - ph * 0.5) * 50.0) * (1.0 - ph) * (1.0 - smoothstep(0.5 * ph, 0.5 * ph + 0.06, l));
 	return d / max(l, 1e-3) * ring * step(0.3, r) * (1.0 - smoothstep(0.15, 0.4, px));
 }
 
@@ -123,13 +123,15 @@ void fragment() {
 
 	// 背光：面板底下、朝下的面
 	float under = (1.0 - smoothstep(under_top - 0.5, under_top + 0.02, obj_pos.y)) * step(obj_pos.y, under_top + 0.3);
-	under = max(under, smoothstep(-0.3, -0.8, n.y));
+	under = max(under, 1.0 - smoothstep(-0.8, -0.3, n.y));
 	col *= 1.0 - under_dark * under;
 
 	vec3 nn = tri_normal(p, n, w, normal_strength * (1.0 - 0.5 * wet));
-	// 水洼：水面是平的（盖住混凝土的起伏），雨点打出涟漪
+	// 水洼：水面是平的（盖住混凝土的起伏），雨点打出涟漪。
+	// 涟漪一格在屏幕上多宽要在分支外面算：分支里求导数（fwidth）各像素走的路不一样，结果没有定义，有的显卡会闪
+	float rpx = length(fwidth(obj_pos.xz * ripple_cells));
 	if (puddle > 0.001) {
-		vec2 s = ripples(obj_pos.xz, TIME) * rain;
+		vec2 s = ripples(obj_pos.xz, TIME, rpx) * rain;
 		vec3 wn = normalize(n + vec3(s.x, 0.0, s.y) * 0.25);
 		nn = normalize(mix(nn, wn, puddle));
 		col = mix(col, col * puddle_darken, puddle);

@@ -15,6 +15,8 @@ uniform float size = 0.12;                   // 水花多高多宽（米）
 uniform float brightness = 1.0;
 uniform vec3 ambient = vec3(0.05, 0.055, 0.06);
 uniform float fade_near = 1.5;
+uniform float seed = 0.0;                    // 每块区域换一个：网格是同一套随机数，不换的话各块的落点节拍、相对位置一模一样
+uniform float deck_crown = 0.0;              // 区域正中（沿 x）比两边高多少：甲板中拱
 
 varying float v_alpha;
 varying float v_age;
@@ -28,12 +30,13 @@ vec3 hash3(vec3 p) {
 void vertex() {
 	vec4 r = COLOR;
 	float per = period * (0.7 + 0.6 * r.w);
-	float t = TIME / per + r.x * 13.7;
+	float t = TIME / per + r.x * 13.7 + seed * 0.37;
 	float cycle = floor(t);
 	float age = fract(t) * per / life;          // 0 → 1 这一下水花的一生，>1 就不画
-	vec3 h = hash3(vec3(cycle * 0.173 + r.y * 91.0, r.z * 37.0 + cycle * 0.311, r.w * 53.0));
+	vec3 h = hash3(vec3(cycle * 0.173 + r.y * 91.0 + seed * 7.31, r.z * 37.0 + cycle * 0.311, r.w * 53.0 + seed * 3.17));
 	vec2 xz = mix(area_min, area_max, h.xy);
-	vec3 p = vec3(xz.x, surface_y, xz.y);
+	float cu = h.x * 2.0 - 1.0;
+	vec3 p = vec3(xz.x, surface_y + deck_crown * (1.0 - cu * cu), xz.y);
 	vec3 c = (VIEW_MATRIX * (MODEL_MATRIX * vec4(p, 1.0))).xyz;
 	float dist = length(c);
 	float px = 2.0 * max(-c.z, 0.05) / (PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y);

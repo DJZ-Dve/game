@@ -135,6 +135,8 @@ func _paint(name: String, paint: Color, o := {}) -> ShaderMaterial:
 		m.set_shader_parameter("floor_color", o.floor_color)
 	if o.has("wear_color2"):
 		m.set_shader_parameter("streak_color", o.wear_color2)
+	if o.has("streak_replace"):
+		m.set_shader_parameter("streak_replace", o.streak_replace)
 	# 锈用真的锈贴图（Poly Haven，取 _diff），不然锈是细节贴图的颜色（Metal016 几乎是白的）
 	if o.has("rust_tex"):
 		m.set_shader_parameter("rust_albedo", _tex(o.rust_tex, "diff"))
@@ -725,11 +727,12 @@ func _room_materials(mats: Array[Material]) -> void:
 func _harbor_materials(mats: Array[Material]) -> void:
 	# 船壳：黑灰色厚漆，锈水从舷边、锚链孔、排水孔往下淌成一条条竖痕，磕掉的地方先露红丹再露锈钢；
 	# 外板在肋骨之间凹进去一点（「瘦马肋」），反光一棱一棱的。
-	# 流痕颜色是乘在漆色上的：黑漆（线性 0.005）上的锈水要比漆亮得多，所以给很大的倍数
-	# （换算成线性约 10、4、1.5 倍，乘出来是暗锈褐色 0.08、0.035、0.015）
+	# 黑漆（线性 0.005）上的锈水比漆亮得多，乘法乘不出来（倍数一大，掉漆露出的红丹也跟着乘成刺眼的橘红点），
+	# 所以流痕直接换成暗锈褐色（streak_replace）
 	mats.append(_paint("M_ShipHull", Color(0.06, 0.065, 0.07), {"rough": 0.42, "metal": 0.0, "edge": 1.3,
 		"rust": 0.3, "rust_tex": "rusty_metal_02", "streak": 0.9, "streak_scale": 0.28, "streak_cover": 0.6,
-		"wear_color2": Color(2.7, 1.8, 1.2), "primer": 0.5, "chip": 0.3, "chip_scale": 0.25, "chip_cover": 0.2,
+		"wear_color2": Color(0.27, 0.18, 0.12), "streak_replace": 1.0,
+		"primer": 0.5, "chip": 0.3, "chip_scale": 0.25, "chip_cover": 0.2,
 		"bare_rust": 1.0, "wear": Color(0.3, 0.15, 0.08), "wear_metal": 0.0, "bare_rough": 0.7, "macro": 0.8,
 		"macro_scale": 0.08, "warp": 1.5, "warp_scale": 0.45, "variation": 0.3, "rough_var": 0.35,
 		"nstrength": 0.25, "scale": 0.6, "smudge": 0.0, "dust": 0.0, "floor": 0.0, "cavity": 0.8}))

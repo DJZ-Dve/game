@@ -1053,7 +1053,7 @@ def ship_hull(K, M):
     for u in us:
         zd = _ship_sheer(u)
         hwd = _ship_hw(u, zd, zd)
-        t = min(TW, hwd * 0.45)
+        t = min(TW, hwd * 0.45) if u < 1.0 else hwd    # 艏柱那一圈：两边舷墙的内侧并到中线上
         sz = [zd, (zd + FLARE_Z) / 2, FLARE_Z, BOOT, 0.0, -0.9, -1.55, -1.8]
         pts = [(-(hwd - t), zd), (-(hwd - t), zd + BW), (-hwd, zd + BW)]
         pts += [(-_ship_hw(u, z, zd), z) for z in sz]
@@ -1061,7 +1061,18 @@ def ship_hull(K, M):
         pts += [(hwd, zd + BW), (hwd - t, zd + BW), (hwd - t, zd)]
         for f in (0.5, 0.0, -0.5):
             pts.append(((hwd - t) * f, zd + 0.12 * (1 - f * f)))
-        rings.append([bm.verts.new(M @ V((x, _ship_y(u, z), z))) for x, z in pts])
+        if u < 1.0:
+            rings.append([bm.verts.new(M @ V((x, _ship_y(u, z), z))) for x, z in pts])
+        else:
+            # 艏柱：重合的点（两边舷墙内侧、甲板都并到了中线上）共用一个顶点，左右两边的面在中线上合拢，不留缝
+            vs = {}
+            ring = []
+            for x, z in pts:
+                k = (round(x, 5), round(z, 5))
+                if k not in vs:
+                    vs[k] = bm.verts.new(M @ V((x, _ship_y(u, z), z)))
+                ring.append(vs[k])
+            rings.append(ring)
         if seg is None:
             # 每一段的材质：舷墙内侧白、甲板红、水线附近往下防污漆，其余黑漆
             seg = []
@@ -1075,7 +1086,17 @@ def ship_hull(K, M):
                     seg.append(ANTI)
                 else:
                     seg.append(HULL)
-    loft(bm, rings, seg)
+    loft(bm, rings, seg, caps=False)
+    bm.faces.new(rings[0]).material_index = HULL      # 方艉封板（平的，一个面）
+    # 艏柱（最后一圈 8 厘米宽）：原来整圈当一个不共面的 n 边形封口，两边舷墙中间还留着一道 4 厘米的缝，
+    # 导出三角化以后艏柱上透出一道白色的舷墙内侧。现在舷墙内侧、甲板在中线上合拢（上面共用顶点，甲板自己收成一条线），
+    # 封口按左右对称的点一条条封：舷墙那截一块、往下一条条横带
+    r, nl = rings[-1], 3 + len(sz)          # 左舷 0..nl-1（舷墙 3 个点 + 外板），右舷 nl..2nl-1 倒过来，再后面是甲板
+    mir = [2 * nl - 1 - i for i in range(2 * nl)]
+    for f, mat in (((3, 2, 1, mir[2], mir[3], 0), HULL), ((3, 4, mir[4], mir[3], 0), seg[3])):
+        bm.faces.new([r[i] for i in f]).material_index = mat
+    for i in range(4, nl - 1):
+        bm.faces.new([r[i], r[i + 1], r[mir[i + 1]], r[mir[i]]]).material_index = seg[i]
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
     me = bpy.data.meshes.new("Ext_ShipHull")
     bm.to_mesh(me)
@@ -1188,7 +1209,7 @@ def ship(K, A, coll, M):
     for sx in (-1, 1):
         sweep(K["ShipWhite"], [P(sx * 3.3, 5.2, zr), P(sx * 3.3, 5.2, zr + 4.5)], circle_profile(0.025, 5))
     light(A, coll, "Light_ShipMast", P(0, 6.5, 17.1), (0, 0, -1))
-    # ---- 救生艇：B 层顶两边各一条（封闭式，橘红），前后两副吊艇架伸到舷外
+    # ---- 救生艇：B 层顶两边各一条（封闭式，橘红），搁在艇座上，前后两副弯管吊艇架跨在艇顶（放艇时才往舷外甩）
     for sx in (-1, 1):
         cx = sx * 2.35
         brs = []
@@ -1226,18 +1247,31 @@ def ship(K, A, coll, M):
         for sx in (-1, 1):
             for dy in (-0.35, 0.35):
                 cylinder(K["Bollard"], 0.15, 0.55, 8, M @ T(sx * (hw - 0.75), yb + dy, zdk - 0.05))
-    # 锚：锚链孔（船壳上一个黑圈）里收着，锚杆竖着贴在船壳上，锚爪横在底下
-    ua, zh = 0.935, 3.6
+    # 锚：锚杆收在锚链孔（船壳上一个黑圈）里，顺着船壳斜贴下来，锚冠、两片锚爪横在底下贴着船壳。
+    # 船壳往上外飘、越往下越往里收（锚链孔那儿半宽 2.31，往下 1.25 米只剩 1.98），所以每一截都按自己那个高度的壳面放
+    ua, zh, zc = 0.935, 3.6, 2.35
     zd = _ship_sheer(ua)
+
+    def hull_at(sx, z, du=0.0):
+        return V((sx * _ship_hw(ua + du, z, zd), _ship_y(ua + du, z), z))
+
+    def hull_out(sx, z):
+        # 壳面在高度 z 处朝外的法向：沿站位的切线 × 沿高度的切线（外飘的地方朝外偏下）
+        n = (hull_at(sx, z, 0.005) - hull_at(sx, z, -0.005)).cross(hull_at(sx, z + 0.05) - hull_at(sx, z - 0.05))
+        n.normalize()
+        return n if n.x * sx > 0 else -n
     for sx in (-1, 1):
-        p0 = V((sx * _ship_hw(ua, zh, zd), _ship_y(ua, zh), zh))
-        p1 = V((sx * _ship_hw(ua + 0.01, zh, zd), _ship_y(ua + 0.01, zh), zh))
-        out = (p1 - p0).cross(V((0, 0, 1))).normalized() * sx      # 船壳朝外的方向
-        cylinder(K["Dark"], 0.32, 0.12, 10, M @ frame(p0 - out * 0.04, out))
-        rbox(K["ShipHull"], 0.22, 0.25, 1.3, M @ frame(p0 + out * 0.12 - V((0, 0, 0.7)), out, V((0, 0, 1)))
-             @ R(90, 'X'), r=0.04, seg=1)
-        rbox(K["ShipHull"], 1.1, 0.25, 0.35, M @ T(*(p0 + out * 0.14 - V((0, 0, 1.35)))) @ R(math.degrees(
-            math.atan2(out.y, out.x)) + 90, 'Z'), r=0.06, seg=1)
+        n0, nc = hull_out(sx, zh), hull_out(sx, zc)
+        p0, pc = hull_at(sx, zh), hull_at(sx, zc)
+        cylinder(K["Dark"], 0.32, 0.12, 10, M @ frame(p0 - n0 * 0.04, n0))
+        # 锚杆：上头插进锚链孔，下头到锚冠；中心离壳面 0.12（半厚 0.1，贴着壳，弦和壳面差不到 1 厘米）
+        a, b = p0 + n0 * 0.12, pc + nc * 0.12
+        sweep(K["ShipHull"], [M @ a, M @ b], rect_profile(0.22, 0.2, 0.03), up_hint=M.to_3x3() @ n0)
+        # 锚冠横在锚杆底下，两片锚爪从锚冠两头往上翘（在壳面里稍微张开）
+        F = M @ frame(pc + nc * 0.13, nc, a - b)
+        rbox(K["ShipHull"], 0.95, 0.3, 0.24, F, r=0.06, seg=1)
+        for k in (-1, 1):
+            rbox(K["ShipHull"], 0.26, 0.7, 0.14, F @ T(k * 0.36, 0.38, -0.04) @ R(k * 12, 'Z'), r=0.04, seg=1)
     # ---- 船名：船艏两舷「东溟」，下面一行拼音
     for sx in (-1, 1):
         u0 = 0.86

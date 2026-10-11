@@ -20,7 +20,7 @@ uniform float rough_near = 0.08;
 uniform float rough_far = 0.18;
 uniform vec2 rough_dist = vec2(8.0, 90.0);
 uniform float squall = 0.05;
-uniform vec2 squall_wind = vec2(0.6, -1.0);   // 雨阵在水面上走的速度（米/秒，世界 x、z）
+uniform vec2 squall_wind = vec2(0.6, 1.0);    // 雨阵在水面上走的速度（米/秒，世界 x、z；和 office.gd 雨丝的风一致，从海上往岸上刮）
 // 挨着船、码头的水面发暗：船壳、栈桥挡住了一大块天（反射里本该是船的倒影，屏幕空间反射在远处常常找不到它），
 // 栈桥底下更是背光。几个圆角矩形（世界 x、z 的中心，半长、半宽），occ_par：圆角半径、往外淡出的距离、浓淡。
 // 由 office.gd 按码头、母船、镇海号的位置设
@@ -59,7 +59,7 @@ float ripples(vec2 p, float t) {
 	float r = hash(id);
 	float ph = fract(t * (0.8 + r) + r * 7.0);
 	float d = length(f + (vec2(hash(id + 3.1), hash(id + 7.7)) - 0.5) * 0.6);
-	float ring = sin((d - ph * 0.5) * 60.0) * (1.0 - ph) * smoothstep(0.5 * ph + 0.06, 0.5 * ph, d);
+	float ring = sin((d - ph * 0.5) * 60.0) * (1.0 - ph) * (1.0 - smoothstep(0.5 * ph, 0.5 * ph + 0.06, d));
 	return ring * step(0.35, r);
 }
 

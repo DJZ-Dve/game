@@ -223,12 +223,13 @@ func _add_sub() -> void:
 ## 每块一个网格（几百到几千个四边形，位置全在着色器里算，一块一次绘制），和雨丝一样衬着天光才看得见。
 ## 区域是房间局部坐标（gen_office.py 的码头、母船位置：Blender (x, y, z) → (x, z, -y)）
 const SPLASH_AREAS := [
-	# [x0, z0, x1, z1, 落点高度, 个数, 水花大小（米）]
-	[-2.65, -65.0, 4.65, -9.3, -7.6, 2000, 0.12],      # 栈桥面
-	[-14.0, -9.0, 14.0, -3.6, -7.6, 800, 0.12],        # 楼前岸壁顶
-	[-16.0, -55.0, 18.0, -9.6, -8.6, 3500, 0.08],      # 码头两边的水面
-	[-11.4, -81.0, -4.2, -70.0, -5.95, 500, 0.1],      # 母船后甲板
-	[6.65, -36.0, 7.35, -23.0, -7.23, 120, 0.08],      # 镇海号甲板
+	# [x0, z0, x1, z1, 落点高度（两边）, 个数, 水花大小（米）, 正中比两边高多少]
+	[-2.65, -65.0, 4.65, -9.3, -7.6, 2000, 0.12, 0.0],        # 栈桥面
+	[-14.0, -9.0, 14.0, -3.6, -7.6, 800, 0.12, 0.0],          # 楼前岸壁顶
+	[-16.0, -55.0, -3.2, -9.6, -8.6, 1300, 0.08, 0.0],        # 栈桥西边的水面（栈桥底下淋不到，不放）
+	[5.2, -55.0, 18.0, -9.6, -8.6, 1300, 0.08, 0.0],          # 栈桥东边的水面
+	[-11.4, -81.0, -4.2, -70.0, -5.963, 500, 0.1, 0.083],     # 母船后甲板（中拱：舷边 -5.963，中线 -5.88）
+	[6.65, -36.0, 7.35, -23.0, -7.23, 120, 0.08, 0.0],        # 镇海号甲板
 ]
 
 
@@ -261,9 +262,12 @@ func _add_splashes() -> void:
 	var c := rain_config()
 	if c.is_empty():
 		return
-	for a: Array in SPLASH_AREAS:
+	for i in SPLASH_AREAS.size():
+		var a: Array = SPLASH_AREAS[i]
 		var m := ShaderMaterial.new()
 		m.shader = SPLASH
+		m.set_shader_parameter("seed", float(i + 1))
+		m.set_shader_parameter("deck_crown", a[7])
 		m.set_shader_parameter("area_min", Vector2(a[0], a[1]))
 		m.set_shader_parameter("area_max", Vector2(a[2], a[3]))
 		m.set_shader_parameter("surface_y", a[4])
@@ -276,7 +280,7 @@ func _add_splashes() -> void:
 		mi.material_override = m
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-		mi.custom_aabb = AABB(Vector3(a[0], a[4] - 0.2, a[1]), Vector3(a[2] - a[0], 0.6, a[3] - a[1]))
+		mi.custom_aabb = AABB(Vector3(a[0], a[4] - 0.2, a[1]), Vector3(a[2] - a[0], 0.6 + a[7], a[3] - a[1]))
 		add_child(mi)
 
 

@@ -38,6 +38,9 @@ uniform float streak_scale = 1.0;
 uniform vec4 streak_color : source_color = vec4(0.3, 0.22, 0.14, 1.0);
 // 流痕只出现在一部分竖条区域里（上面有焊缝、法兰、螺栓漏水的地方），不是满墙一个样。1 = 不分区
 uniform float streak_cover : hint_range(0.0, 1.0) = 1.0;
+// 流痕怎么上色：0 = 乘在原来的颜色上（浅色的漆、墙）；1 = 直接换成 streak_color（黑漆上的锈水比漆还亮，
+// 乘法得给很大的倍数，碰上掉漆露出的红丹就乘成一粒粒刺眼的橘红）
+uniform float streak_replace : hint_range(0.0, 1.0) = 0.0;
 // 流痕从上面往下垂（岸上的白灰墙）：从 streak_top（物体空间高度，一般是天花板）往下只出一次，不在竖直方向平铺。
 // 关着时是原来的做法（按 streak_scale 竖着平铺，潜艇里用）
 uniform bool streak_down = false;
@@ -329,7 +332,7 @@ void fragment() {
 			float zn = value_noise(zp + 3.1) * 0.75 + value_noise(zp * 3.1 + 8.7) * 0.25;
 			st *= smoothstep(1.0 - streak_cover - 0.1, 1.0 - streak_cover + 0.15, zn);
 		}
-		col = mix(col, col * streak_color.rgb * 1.6, st);
+		col = mix(col, mix(col * streak_color.rgb * 1.6, streak_color.rgb, streak_replace), st);
 		rough = mix(rough, 0.25, st * 0.7);
 	}
 
