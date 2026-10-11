@@ -63,12 +63,15 @@ func _ready() -> void:
 	for g in model.find_children("*", "GeometryInstance3D", true, false):
 		(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows \
 			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# 头（周海生的脸）：相机在头里面，平时不画；只放在镜子那一层（PlanarMirror.HEAD_LAYER），
+	# 头和头发（周海生的脸）：相机在头里面，平时不画；只放在镜子那一层（PlanarMirror.HEAD_LAYER），
 	# 两种相机都不画这一层，只有镜子的反射相机画得出来
 	_face = model.find_child("Crew_Head", true, false) as MeshInstance3D
-	if _face:
-		_face.layers = 1 << (HEAD_LAYER - 1)
-		_cam.cull_mask &= ~(1 << (HEAD_LAYER - 1))
+	_cam.cull_mask &= ~(1 << (HEAD_LAYER - 1))
+	for nm in ["Crew_Head", "Crew_Hair"]:
+		var mi := model.find_child(nm, true, false) as MeshInstance3D
+		if mi:
+			mi.layers = 1 << (HEAD_LAYER - 1)
+			_setup_head_materials(mi)
 	var player := model.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
 	for n in ["idle", "walk", "run", "sit"]:
 		player.get_animation(n).loop_mode = Animation.LOOP_LINEAR
@@ -107,6 +110,35 @@ func _setup_hands() -> void:
 		+ r.call("Bip01 L Forearm").distance_to(r.call("Bip01 L Hand"))
 	_grip = HandGrip.new()
 	_skel.add_child(_grip)   # 排在 IK 后面：IK 先把手腕拉到位，再转手掌、弯手指
+
+
+## 镜子里的脸：皮肤透一点光（次表面散射），眼球湿的一层清漆，睫毛半透明，头发片裁切透明度、双面
+## （材质槽见 gen_crew.py：Crew_Head、Crew_Eyes、Crew_Lashes，头发 Crew_Hair）
+func _setup_head_materials(mi: MeshInstance3D) -> void:
+	for i in mi.get_surface_override_material_count():
+		var mat := mi.get_active_material(i) as StandardMaterial3D
+		if mat == null:
+			continue
+		mat = mat.duplicate()
+		var n := mat.resource_name
+		if n.ends_with("Hair"):
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+			mat.alpha_scissor_threshold = 0.5
+			mat.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE
+			mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		elif n.ends_with("Eyes"):
+			mat.clearcoat_enabled = true
+			mat.clearcoat = 1.0
+			mat.clearcoat_roughness = 0.05
+		elif n.ends_with("Lashes"):
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+			mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+		else:
+			mat.subsurf_scatter_enabled = true
+			mat.subsurf_scatter_skin_mode = true
+			mat.subsurf_scatter_strength = 0.3
+		mi.set_surface_override_material(i, mat)
 
 
 ## 动画混合：idle ←move→ (walk ←gait→ run)，再 ←seat→ sit；walk、run 前面各接一个定位节点

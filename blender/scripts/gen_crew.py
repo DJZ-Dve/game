@@ -2,13 +2,15 @@
 
 先跑 tools/fetch_rocketbox.sh 把角色和动画下到 blender/cache/rocketbox/，再：
     Blender -b --factory-startup --python blender/scripts/gen_crew.py
-导出 assets/models/crew_body.glb（骨骼 + 身体、头两块网格 + walk / run / idle / sit 四段原地动画）
+导出 assets/models/crew_body.glb（骨骼 + 身体、头、头发三块网格 + walk / run / idle / sit 四段原地动画）
 和 assets/models/crew_body_gait.json（走、跑动画里左右脚落地在循环里的位置，Godot 拿它把动画和步伐对齐）。
 
 - 动画：按世界空间朝向重定向到角色骨骼上（见 rocketbox.py 的 retarget）
 - 贴图：蓝色工装压成深海军蓝的作业服，磨旧、蹭脏一点；浅黄色劳保鞋改成黑皮靴；手不动
-- 头换成 Police_Male_05（东亚面孔、短发——主角周海生的脸，见 docs/story.md），帽子去掉，带眨眼、微笑的形态键；
-  头单独一块网格，Godot 里只有镜子看得见（第一人称看不见自己的脸），手的肤色往这张脸上靠
+- 头换成 Male_Adult_10（东亚面孔、偏瘦、短乱发——主角周海生的脸，见 docs/story.md），带头发片和眨眼、微笑的形态键；
+  肤色从发橙的黄调回来、下巴和上唇一层胡茬、眼下稍暗（三十出头、跑船的、欠着债），眼球单独一个材质、加睫毛（rocketbox.eye_setup）；
+  头和头发各一块网格，Godot 里只有镜子看得见（第一人称看不见自己的脸），手的肤色往这张脸上靠。
+  （以前用的 Police_Male_05 和沈渡 Business_Male_02 是 Rocketbox 里同一张扫描脸，镜子里看见的是摘了眼镜的沈渡）
 - 缩放到眼睛离地 1.62 米（和 cockpit_camera.gd 的 eye_height 一致），脸朝 Blender +Y（Godot 的 -Z）
 """
 import json
@@ -21,12 +23,13 @@ import numpy as np
 from mathutils import Matrix, Vector as V
 
 sys.path.insert(0, os.path.dirname(__file__))
-from rocketbox import ROOT, SRC, import_fbx, bone_world, retarget, push_nla, rest_pose, trim_shapes  # noqa: E402
+from rocketbox import (ROOT, SRC, import_fbx, bone_world, retarget, push_nla, rest_pose, trim_shapes,  # noqa: E402
+                       eye_setup, lid_shadow, lower_lid_band, lash_material)
 OUT = os.path.join(ROOT, "assets", "models", "crew_body.glb")
 GAIT = os.path.join(ROOT, "assets", "models", "crew_body_gait.json")
 EYE = 1.62
-FACE = "Police_Male_05_facial.fbx"
-FACE_TEX = "m169"
+FACE = "Male_Adult_10_facial.fbx"
+FACE_TEX = "m024"
 FACE_SHAPES = {"AK_09_EyeBlinkLeft", "AK_10_EyeBlinkRight", "AK_19_EyeSquintLeft", "AK_20_EyeSquintRight",
                "AK_21_EyeWideLeft", "AK_22_EyeWideRight", "AK_25_JawOpen", "AK_44_MouthSmileLeft",
                "AK_45_MouthSmileRight", "AK_03_BrowInnerUp", "AK_30_MouthFrownLeft", "AK_31_MouthFrownRight"}
@@ -60,10 +63,93 @@ def contacts(arm, act, f0, f1):
     return out
 
 
+def _blob(u, v, cu, cv, ru, rv):
+    return np.exp(-(((u - cu) / ru) ** 2 + ((v - cv) / rv) ** 2))
+
+
+def face_texture(eyes):
+    """周海生的脸（m024 原来是二十出头的样子）：褪掉发橙的黄、下巴和上唇一层胡茬、眼下稍暗；眼球上压一道眼睑的影子，
+    下眼睑缘调糙（只压暗一点）。存成 blender/cache/rocketbox/crew_head_color.png 和 crew_head_orm.png（G 粗糙度），
+    返回 (颜色图, ORM 图, 脸上皮肤的平均颜色)。"""
+    img = bpy.data.images.load(os.path.join(SRC, f"{FACE_TEX}_head_color.tga"))
+    w, h = img.size
+    px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)
+    v, u = np.mgrid[0:h, 0:w].astype(np.float32)
+    u, v = (u + 0.5) / w, (v + 0.5) / h                 # v 朝上（Blender 的像素从左下角开始存）
+    rgb = px[..., :3]
+    lum = 0.3 * rgb[..., 0] + 0.59 * rgb[..., 1] + 0.11 * rgb[..., 2]
+    face = (v > 0.42) & (lum > 0.12)                    # 上半截的皮肤（头发、左下角的眼球口腔图集不动）
+    # 原贴图黄得发橙、偏暗（日光灯下像抹了橘子水，看着不像本地人）：蓝通道提起来、绿稍提，
+    # 落到和原来那张东亚脸差不多的亮度、肤色
+    rgb[face] *= np.array([1.05, 1.1, 1.26], np.float32)
+    # 胡茬：下巴、两腮下半、上唇（嘴唇本身空出来），发青灰；一颗颗的毛孔点
+    beard = (_blob(u, v, 0.5, 0.53, 0.1, 0.05) + _blob(u, v, 0.5, 0.608, 0.055, 0.012) * 0.9
+             + _blob(u, v, 0.375, 0.56, 0.035, 0.07) * 0.7 + _blob(u, v, 0.625, 0.56, 0.035, 0.07) * 0.7)
+    beard = np.clip(beard - _blob(u, v, 0.5, 0.587, 0.06, 0.013) * 1.2, 0, 1) * face
+    dots = np.random.default_rng(11).random((h, w)).astype(np.float32)
+    k = beard * (0.55 + 0.45 * dots)
+    rgb[:] = rgb * (1 - 0.3 * k[..., None]) + rgb * np.array([0.78, 0.82, 0.9], np.float32) * (0.3 * k[..., None])
+    # 眼下发暗（熬夜、心事）
+    under = (_blob(u, v, 0.41, 0.692, 0.035, 0.013) + _blob(u, v, 0.587, 0.692, 0.035, 0.013)) * face
+    rgb[:] *= (1 - 0.04 * np.clip(under, 0, 1))[..., None]
+    lid_shadow(px, eyes)
+    # 下眼睑缘只压一点点：沈渡那 45% 是给桌上纸面、台灯从下往上照出的白边用的；镜子前是顶上的日光灯，
+    # 压那么深反而像一圈眼线。防反光靠下面的粗糙度
+    lid = lower_lid_band(px)
+    rgb[:] *= (1 - 0.1 * lid)[..., None]
+    px[..., :3] = np.clip(rgb, 0, 1)
+    skin = px[int(h * 0.62):int(h * 0.72), int(w * 0.42):int(w * 0.58), :3].reshape(-1, 3).mean(0)
+    img.pixels[:] = px.ravel()
+    img.filepath_raw = os.path.join(SRC, "crew_head_color.png")
+    img.file_format = 'PNG'
+    img.save()
+    # 粗糙度：皮肤 0.55，额头、鼻子出点油，下眼睑缘糙（不反出白边），眼球 0.3（湿的那层交给 Godot 的清漆）
+    rough = 0.55 - 0.08 * (_blob(u, v, 0.5, 0.82, 0.08, 0.06) + _blob(u, v, 0.5, 0.66, 0.025, 0.05))
+    rough = np.maximum(rough, 0.55 + 0.35 * lid)
+    rough[(v < 0.42) & (u < 0.38)] = 0.3
+    orm = np.ones((h, w, 4), np.float32)
+    orm[..., 1] = rough
+    orm[..., 2] = 0.0
+    om = bpy.data.images.new("crew_head_orm", w, h, alpha=True)
+    om.pixels[:] = orm.ravel()
+    om.filepath_raw = os.path.join(SRC, "crew_head_orm.png")
+    om.file_format = 'PNG'
+    om.save()
+    om.colorspace_settings.name = 'Non-Color'
+    return img, om, skin
+
+
+def _mat(name, color, normal=None, rough=0.55, alpha=False, orm=None):
+    mat = bpy.data.materials.new(name)
+    nt = mat.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    t = nt.nodes.new('ShaderNodeTexImage')
+    t.image = color
+    nt.links.new(t.outputs["Color"], bsdf.inputs["Base Color"])
+    if alpha:
+        nt.links.new(t.outputs["Alpha"], bsdf.inputs["Alpha"])
+    if normal is not None:
+        tn = nt.nodes.new('ShaderNodeTexImage')
+        tn.image = normal
+        nm = nt.nodes.new('ShaderNodeNormalMap')
+        nt.links.new(tn.outputs["Color"], nm.inputs["Color"])
+        nt.links.new(nm.outputs["Normal"], bsdf.inputs["Normal"])
+    bsdf.inputs["Roughness"].default_value = rough
+    bsdf.inputs["Metallic"].default_value = 0.0
+    if orm is not None:
+        to = nt.nodes.new('ShaderNodeTexImage')
+        to.image = orm
+        sep = nt.nodes.new('ShaderNodeSeparateColor')
+        nt.links.new(to.outputs["Color"], sep.inputs["Color"])
+        nt.links.new(sep.outputs["Green"], bsdf.inputs["Roughness"])
+        nt.links.new(sep.outputs["Blue"], bsdf.inputs["Metallic"])
+    return mat
+
+
 def swap_head(arm, old_head):
-    """换脸：导入 Police_Male_05 的头（带表情形态键），去掉警帽的几块（帽顶、帽带、扣子、帽徽——都是单独的散件），
-    按两副骨架头骨的位置挪过来，绑到工装身体的骨架上（骨头名字一样，绑定姿势下不变形），替掉原来的头。
-    返回 (新的头, 脸上皮肤的平均颜色)。"""
+    """换脸：导入 FACE 的头和头发片（带表情形态键），按两副骨架头骨的位置挪过来，绑到工装身体的骨架上
+    （骨头名字一样，绑定姿势下不变形），替掉原来的头。眼球分出 Crew_Eyes 材质、沿上眼睑缘加睫毛（Crew_Lashes）。
+    返回 (新的头, 头发, 脸上皮肤的平均颜色)。"""
     objs = import_fbx(FACE)
     farm = next(o for o in objs if o.type == 'ARMATURE')
     fmesh = next(o for o in objs if o.type == 'MESH')
@@ -80,65 +166,39 @@ def swap_head(arm, old_head):
     parts = [o for o in bpy.data.objects if o.type == 'MESH' and o.data.materials
              and o.data.materials[0].name.startswith(FACE_TEX)]
     head = next(o for o in parts if "head" in o.data.materials[0].name)
+    hair = next(o for o in parts if "opacity" in o.data.materials[0].name)
     for o in parts:
-        if o is not head:
-            bpy.data.objects.remove(o, do_unlink=True)
-    bpy.ops.object.select_all(action='DESELECT')
-    bpy.context.view_layer.objects.active = head
-    head.select_set(True)
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.separate(type='LOOSE')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    keep = []
-    for o in [o for o in bpy.data.objects if o.type == 'MESH' and o.data.materials
-              and "head" in o.data.materials[0].name and o is not old_head]:
-        uv = np.array([d.uv[:] for d in o.data.uv_layers.active.data])
-        u, v = uv.mean(0)
-        # 帽子的几块在贴图下半截偏右（u > 0.33、v < 0.3）；眼球在左下角（u < 0.33），脸在上半截
-        if v < 0.3 and u > 0.33:
-            bpy.data.objects.remove(o, do_unlink=True)
-        else:
-            keep.append(o)
-    bpy.ops.object.select_all(action='DESELECT')
-    for o in keep:
-        o.select_set(True)
-    bpy.context.view_layer.objects.active = keep[0]
-    bpy.ops.object.join()
-    head = keep[0]
-    trim_shapes(head, FACE_SHAPES)
+        if o not in (head, hair):
+            bpy.data.objects.remove(o, do_unlink=True)     # 这个角色自己的身体不要
+    for o in (head, hair):
+        trim_shapes(o, FACE_SHAPES)
+    tmp = bpy.data.materials.new("eyes_tmp")
+    eyes = eye_setup(head, farm, tmp, lash_material("Crew_Lashes"))
     # 挪到工装身体的头骨上，改绑到它的骨架
-    mw = head.matrix_world.copy()
-    head.parent = arm
-    head.matrix_world = Matrix.Translation(offset) @ mw
-    for m in head.modifiers:
-        if m.type == 'ARMATURE':
-            m.object = arm
+    for o in (head, hair):
+        mw = o.matrix_world.copy()
+        o.parent = arm
+        o.matrix_world = Matrix.Translation(offset) @ mw
+        for m in o.modifiers:
+            if m.type == 'ARMATURE':
+                m.object = arm
     bpy.data.objects.remove(farm, do_unlink=True)
     bpy.data.objects.remove(old_head, do_unlink=True)
     head.name = head.data.name = "Crew_Head"
-    # 贴图
-    img = bpy.data.images.load(os.path.join(SRC, f"{FACE_TEX}_head_color.tga"))
-    w, h = img.size
-    px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)
-    skin = px[int(h * 0.62):int(h * 0.72), int(w * 0.42):int(w * 0.58), :3].reshape(-1, 3).mean(0)
+    hair.name = hair.data.name = "Crew_Hair"
+    # 贴图、材质：脸和眼球共用一张图（眼球单独一个槽，Godot 里开清漆），头发片带透明度
+    img, orm, skin = face_texture(eyes)
     nrm = bpy.data.images.load(os.path.join(SRC, f"{FACE_TEX}_head_normal.tga"))
     nrm.colorspace_settings.name = 'Non-Color'
-    mat = bpy.data.materials.new("Crew_Head")
-    nt = mat.node_tree
-    bsdf = nt.nodes["Principled BSDF"]
-    t = nt.nodes.new('ShaderNodeTexImage')
-    t.image = img
-    nt.links.new(t.outputs["Color"], bsdf.inputs["Base Color"])
-    tn = nt.nodes.new('ShaderNodeTexImage')
-    tn.image = nrm
-    nm = nt.nodes.new('ShaderNodeNormalMap')
-    nt.links.new(tn.outputs["Color"], nm.inputs["Color"])
-    nt.links.new(nm.outputs["Normal"], bsdf.inputs["Normal"])
-    bsdf.inputs["Roughness"].default_value = 0.55
-    head.data.materials.clear()
-    head.data.materials.append(mat)
+    hm = head.data.materials
+    hm[0] = _mat("Crew_Head", img, nrm, orm=orm)
+    hm[1] = _mat("Crew_Eyes", img, nrm, orm=orm)
+    bpy.data.materials.remove(tmp)
+    hair.data.materials.clear()
+    hair.data.materials.append(_mat("Crew_Hair", bpy.data.images.load(os.path.join(SRC, f"{FACE_TEX}_opacity_color.tga")),
+                                    rough=0.45, alpha=True))
     print("crew: 换脸 %s，挪了 %s，皮肤 %s" % (FACE, tuple(round(c, 3) for c in offset), skin.round(3)))
-    return head, skin
+    return head, hair, skin
 
 
 def recolor(img_path, skin=None):
@@ -207,7 +267,7 @@ def main():
         else:
             o.name = o.data.name = "Crew_Body"
     body = bpy.data.objects["Crew_Body"]
-    head, skin = swap_head(arm, bpy.data.objects["Crew_Head"])
+    head, hair, skin = swap_head(arm, bpy.data.objects["Crew_Head"])
 
     # 材质：贴图换成改过色的；布料很糙，不反光
     col = recolor(os.path.join(SRC, "m104_body_color.tga"), skin)
@@ -258,7 +318,7 @@ def main():
     push_nla(arm, acts)
 
     bpy.ops.object.select_all(action='DESELECT')
-    for o in (arm, body, head):
+    for o in (arm, body, head, hair):
         o.select_set(True)
     bpy.context.view_layer.objects.active = arm
     bpy.ops.export_scene.gltf(

@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dvbputdbqa7in"
-path="res://.godot/imported/crew_body_m169_head_color.png-7c485f37f040777e27c369e4f5986b22.ctex"
+uid="uid://c2crk2jxkd7rq"
+path="res://.godot/imported/crew_body_m024_opacity_color.png-156214a9020821492f2638df3aba2c81.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "e93858ccbe1e07c4decbdca213c84e53"
+"md5": "bef3db6605c14d34f547c122fe949c28"
 }
 
 [deps]
 
-source_file="res://assets/models/crew_body_m169_head_color.png"
-dest_files=["res://.godot/imported/crew_body_m169_head_color.png-7c485f37f040777e27c369e4f5986b22.ctex"]
+source_file="res://assets/models/crew_body_m024_opacity_color.png"
+dest_files=["res://.godot/imported/crew_body_m024_opacity_color.png-156214a9020821492f2638df3aba2c81.ctex"]
 
 [params]
 
