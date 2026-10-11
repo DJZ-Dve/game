@@ -17,6 +17,27 @@ var _radio_on := false
 var _crane_lights: Array[Light3D] = []
 var _leaving := false
 var _knock_timer := -1.0
+var _backdrop: ShaderMaterial
+
+## 窗外 150 米以外和天空：Cycles 预渲染的全景条（blender/scripts/render_backdrop.py 渲，图在 BACKDROP_DIR），
+## 贴在以窗户眼点为圆心、半径 BACKDROP_R 的一段圆柱面上。眼点、水平范围（正北左右各 BACKDROP_U 度）、
+## 竖直范围（tan(仰角)，BACKDROP_V）和 render_backdrop.py 的 EYE、U_DEG、V_MIN/V_MAX 同步
+const BACKDROP_DIR := "res://assets/textures/backdrop/"
+const BACKDROP_EYE := Vector3(0.0, 1.62, -2.34)
+const BACKDROP_U := 80.0
+const BACKDROP_V := Vector2(-0.0874887, 0.8433315)
+const BACKDROP_R := 600.0
+## 远处那盏快坏的钠灯（render_backdrop.py 的 FLICKER_LAMP：方位角、水平距离、灯头比眼睛高多少，米）
+const BACKDROP_FLICKER := Vector3(-36.0, 230.0, 7.03)
+## 闪电最亮那一下体积雾往前散射的亮度（闪电的颜色）：圆柱不吃雾，自己补上，和圆柱外面的天、3D 近景前面那层雾对上
+const BACKDROP_FLASH_FOG := Color(0.70, 0.765, 0.9)
+## 闪电时远处的雨雾也被照亮：深度雾换成冷白（sRGB），亮度按闪电亮度往这边插。不然 150 米处 3D 地面的雾还是暗橙，
+## 全景条已经亮了，地平线上一道明暗交界
+const FLASH_FOG_COLOR := Color(0.62, 0.66, 0.74)
+const FLASH_FOG_ENERGY := 0.5
+var _fog_base := Color.BLACK
+var _fog_base_energy := 0.0
+var _fog_flashing := false
 
 
 func props() -> Dictionary:
@@ -169,6 +190,8 @@ func _ready() -> void:
 			scr.reparent(_pager, true)
 		_pager_base = _pager.transform
 	_envelope = _make_envelope()
+	if not (DebugArgs.has("bake-gi") or DebugArgs.has("lm-export")):
+		_add_backdrop()
 	for k in ["Light_CraneRed", "Light_CraneRed2"]:
 		if lights_by_name.has(k):
 			_crane_lights.append(lights_by_name[k])
@@ -415,9 +438,75 @@ func _radio(state: String) -> void:
 	audio.set_radio(state)
 
 
+# ----------------------------------------------------------------------------- 窗外远景
+func _add_backdrop() -> void:
+	var night := load(BACKDROP_DIR + "dorm_night.exr") as Texture2D
+	if night == null:
+		return
+	# 圆柱面：水平每 2° 一段（600 米远，弦和弧差不到一个像素），竖直一段（中心圆柱投影在高度上本来就是线性的）
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := int(BACKDROP_U)
+	for i in n + 1:
+		var u := float(i) / n
+		var a := deg_to_rad(lerpf(-BACKDROP_U, BACKDROP_U, u))
+		var d := Vector3(sin(a), 0.0, -cos(a)) * BACKDROP_R
+		st.set_uv(Vector2(u, 1.0))
+		st.add_vertex(d + Vector3.UP * BACKDROP_R * BACKDROP_V.x)
+		st.set_uv(Vector2(u, 0.0))
+		st.add_vertex(d + Vector3.UP * BACKDROP_R * BACKDROP_V.y)
+	for i in n:
+		for k in [0, 1, 2, 1, 3, 2]:
+			st.add_index(i * 2 + k)
+	_backdrop = ShaderMaterial.new()
+	_backdrop.shader = preload("res://assets/shaders/backdrop.gdshader")
+	_backdrop.set_shader_parameter("night_tex", night)
+	_backdrop.set_shader_parameter("flash_tex", load(BACKDROP_DIR + "dorm_flash.exr"))
+	_backdrop.set_shader_parameter("glow_tex", load(BACKDROP_DIR + "dorm_glow.png"))
+	_backdrop.set_shader_parameter("tan_range", BACKDROP_V)
+	_backdrop.set_shader_parameter("sky_fade", Vector2(tan(deg_to_rad(10.0)), BACKDROP_V.y))
+	var ff := BACKDROP_FLASH_FOG
+	_backdrop.set_shader_parameter("flash_fog", Vector3(ff.r, ff.g, ff.b))
+	if lightning_light():
+		_backdrop.set_shader_parameter("flash_dir", lightning_light().global_basis.z)
+	var fl := BACKDROP_FLICKER
+	_backdrop.set_shader_parameter("flicker_uv", Vector2((fl.x + BACKDROP_U) / (2.0 * BACKDROP_U),
+		1.0 - (fl.z / fl.y - BACKDROP_V.x) / (BACKDROP_V.y - BACKDROP_V.x)))
+	# 截图时窗户不灭、灯不闪（--flicker=on 照常）
+	_backdrop.set_shader_parameter("animate", 0.0 if DebugArgs.capturing() and DebugArgs.get_arg("flicker") != "on" else 1.0)
+	var mi := MeshInstance3D.new()
+	mi.name = "Backdrop"
+	mi.mesh = st.commit()
+	mi.material_override = _backdrop
+	mi.position = BACKDROP_EYE
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	add_child(mi)
+
+
+## 每帧：闪电那一下全景条换成闪电版、远处的深度雾跟着亮；圆柱往上淡到的夜空颜色跟着环境背景（闪电时 story_room 把它调亮）
+func _update_backdrop() -> void:
+	if _backdrop == null:
+		return
+	var env := ($WorldEnvironment as WorldEnvironment).environment
+	var c := env.background_color.srgb_to_linear() * env.background_energy_multiplier
+	var f := clampf(flash_level(), 0.0, 1.0)
+	_backdrop.set_shader_parameter("sky_top", Vector3(c.r, c.g, c.b))
+	_backdrop.set_shader_parameter("flash_amt", f)
+	# 深度雾只在闪的时候动（闪之前记下原来的颜色、亮度，闪完放回去），平时不碰
+	if f > 0.0 and not _fog_flashing:
+		_fog_base = env.fog_light_color
+		_fog_base_energy = env.fog_light_energy
+	if f > 0.0 or _fog_flashing:
+		env.fog_light_color = _fog_base.lerp(FLASH_FOG_COLOR, f)
+		env.fog_light_energy = lerpf(_fog_base_energy, FLASH_FOG_ENERGY, f)
+	_fog_flashing = f > 0.0
+
+
 # ----------------------------------------------------------------------------- 每帧
 func _process(delta: float) -> void:
 	super._process(delta)
+	_update_backdrop()
 	_update_pager(delta)
 	if _knock_timer > 0.0 and not Story.busy:
 		_knock_timer -= delta

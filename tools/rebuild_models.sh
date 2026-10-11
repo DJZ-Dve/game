@@ -3,7 +3,9 @@
 # 用法: tools/rebuild_models.sh [submarine|seabed|dorm|office|npc ...]   不给参数就全部重新生成
 #   submarine  潜艇（外壳 + 舱内），顺带重新烘焙舱内 VoxelGI
 #   seabed     海床
-#   dorm       序章的宿舍（gen_dorm.py），顺带烘焙宿舍的 VoxelGI 和光照贴图
+#   dorm       序章的宿舍（gen_dorm.py），顺带烘焙宿舍的 VoxelGI 和光照贴图。
+#              窗外 150 米以外的远景全景条（assets/textures/backdrop/）不在这里：Cycles 渲一遍要几分钟，
+#              改了远景单独跑 blender/scripts/render_backdrop.py（用法见文件头）
 #   office     第一章的东溟办事处（gen_office.py），顺带烘焙办事处的 VoxelGI 和光照贴图
 #   npc        沈渡（gen_npc.py，要先跑 tools/fetch_rocketbox.sh）
 # Blender / Godot 默认在 /Applications 下，装在别处时用环境变量 BLENDER / GODOT 指定。

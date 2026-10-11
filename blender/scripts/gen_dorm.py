@@ -959,9 +959,11 @@ def briquettes(K, M, rng):
 
 # ============================================================================ 窗外
 def outside(K, A, coll):
-    """窗外：二楼底下的院子（湿地面、一滩滩水），院墙，一盏路灯；远处是停工的船厂：龙门吊、船台上一条半截的船壳。"""
+    """窗外 150 米以内：二楼底下的院子（湿地面、一滩滩水），院墙，一盏路灯；再往外是停工的船厂：龙门吊、船台上一条半截的船壳。
+    150 米以外和天空是预渲染的全景条（blender/scripts/render_backdrop.py，scripts/story/dorm.gd 贴在一段圆柱面上）。"""
     g = GROUND
-    abox(K["Ground"], -40, 40, Y1 + WT, 90, g - 0.1, g)
+    # 地面铺到 150 米（全景条从这里接上：两边按同一个深度雾公式，150 米处都是八成五的雾色）
+    abox(K["Ground"], -150, 150, Y1 + WT, 150, g - 0.1, g)
     # 楼的外墙（往两边延伸），一楼几扇黑窗户、楼上几扇亮着灯的窗户
     abox(K["Facade"], -20, 20, Y1 + WT - 0.01, Y1 + WT, g, -0.0 + WIN[2] - 1.2)
     for x in (-6.0, -3.2, 3.2, 6.0):
@@ -1015,13 +1017,6 @@ def outside(K, A, coll):
     ob = bpy.data.objects.new("Ext_Ship", me)
     K.coll.objects.link(ob)
     me.materials.append(K.M["ShipHull"])
-    # 远处城里零星的灯（一排小亮块）
-    rng = random.Random(9)
-    for k in range(40):
-        x = rng.uniform(-150, 150)
-        y = Y1 + rng.uniform(150, 260)
-        z = g + rng.uniform(1, 22)
-        abox(K["NeighborWindow"], x - 0.6, x + 0.6, y, y + 0.1, z - 0.5, z + 0.5)
 
 
 # ============================================================================ 贴花
