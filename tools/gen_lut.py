@@ -6,8 +6,8 @@
       python3 tools/gen_lut.py identity --size 64   只出单位 LUT，64³（对比 LUT 管线有没有偏差用）
   名字: identity（单位 LUT：理论上和不挂 LUT 一模一样）、office、dorm，调色见下面的 GRADES
 产出: <目录>/<名字>_lut.png：N 张 N×N 的切片从左往右排成一条（宽 N*N、高 N），第 k 张是蓝 = 第 k 格，
-      切片里 x 是红、y 是绿。第一次生成后要写一份 .import（Texture3D，横切 N 片、无损、不要 mipmap），
-      本脚本会顺手写好（已有的不覆盖）；然后跑一次 Godot --import。
+      切片里 x 是红、y 是绿。要配一份 .import（Texture3D，横切 N 片、无损、不要 mipmap），
+      本脚本会顺手写好（已有的只改横切片数，跟着 --size 走，别的设置和 uid 不动）；然后跑一次 Godot --import。
 
 Godot 4.7 怎么用这张表（tonemap 着色器，查过引擎源码）：
   - 色调映射（AgX）→ 转 sRGB → 亮度/对比/饱和度 → clamp 到 0~1 → textureLod(lut, color)。
@@ -23,6 +23,7 @@ Godot 4.7 怎么用这张表（tonemap 着色器，查过引擎源码）：
 """
 import argparse
 import os
+import re
 
 import numpy as np
 from PIL import Image
@@ -47,14 +48,17 @@ def saturation(c):
     return np.where(mx > 1e-5, (mx - mn) / np.maximum(mx, 1e-5), 0.0)
 
 
-def split_tone(c, shadow, shadow_band, high, high_band, toe, keep_sat=0.0):
+def split_tone(c, shadow, shadow_band, high, high_band, toe, keep_sat=0.0, warm_only=False):
     """分离色调：暗部加 shadow（RGB 偏移），亮部加 high。
-    shadow_band = (满, 开始退, 退完)：亮度到「满」时偏移加满，「开始退」到「退完」之间退掉。
-    toe：从纯黑到 toe 这一段偏移从 0 慢慢加上去（纯黑保持 0，最暗的地方不突然变成蓝黑）。
-    high_band = (开始, 满)。keep_sat：已经很饱和的颜色（钠灯的橙）少偏一点，0 不管、1 饱和的完全不偏。"""
+    toe：从纯黑到 toe 这一段偏移从 0 慢慢加满（纯黑保持 0，最暗的地方不突然变成蓝黑）；
+    shadow_band = (开始退, 退完)：亮度在这两个值之间把偏移退掉。
+    high_band = (开始, 满)。keep_sat：已经很饱和的颜色（钠灯的橙）少偏一点，0 不管、1 饱和的完全不偏。
+    warm_only：亮部只给本来就偏暖的颜色加（台灯照的纸、皮肤），灰白、偏冷的亮处（阴天的窗外）不动"""
     L = luma(c)[..., None]
-    ws = smoothstep(0.0, toe, L) * (1.0 - smoothstep(shadow_band[1], shadow_band[2], L))
+    ws = smoothstep(0.0, toe, L) * (1.0 - smoothstep(shadow_band[0], shadow_band[1], L))
     wh = smoothstep(high_band[0], high_band[1], L)
+    if warm_only:
+        wh = wh * smoothstep(0.0, 0.04, c[..., 0] - c[..., 2])[..., None]
     if keep_sat > 0.0:
         k = 1.0 - keep_sat * smoothstep(0.25, 0.7, saturation(c))[..., None]
         ws = ws * k
@@ -69,14 +73,15 @@ def grade_identity(c):
 def grade_office(c):
     """办事处（阴天下午、日光灯）：整屋灰绿一色。暗部（西装、墙裙、柜子阴影）往青里偏，
     亮部（窗、台灯照的纸、皮肤高光）往暖里偏，层次靠冷暖分出来；纯黑不动"""
-    return split_tone(c, shadow=(-0.02, 0.004, 0.025), shadow_band=(0.03, 0.18, 0.38),
-                      high=(0.02, 0.01, -0.02), high_band=(0.45, 0.65), toe=0.06, keep_sat=0.4)
+    # 窗外阴雨天的天是灰白偏冷的，亮部要是一律往暖里偏会变成米黄（像晴天黄昏），所以只偏本来就暖的亮处
+    return split_tone(c, shadow=(-0.02, 0.004, 0.025), shadow_band=(0.18, 0.38),
+                      high=(0.02, 0.01, -0.02), high_band=(0.45, 0.65), toe=0.06, keep_sat=0.4, warm_only=True)
 
 
 def grade_dorm(c):
     """宿舍（夜里、台灯和窗外钠灯）：橙色的灯光原样留着；暗处轻轻偏一点蓝绿，
     让黑里不只是一片棕黑。亮部不动，开场要压抑"""
-    return split_tone(c, shadow=(-0.006, 0.005, 0.015), shadow_band=(0.03, 0.15, 0.32),
+    return split_tone(c, shadow=(-0.006, 0.005, 0.015), shadow_band=(0.15, 0.32),
                       high=(0.0, 0.0, 0.0), high_band=(0.5, 0.8), toe=0.05)
 
 
@@ -133,6 +138,13 @@ def main():
         if not os.path.exists(imp):
             with open(imp, "w") as f:
                 f.write(IMPORT.format(n=a.size))
+        else:
+            with open(imp) as f:
+                s = f.read()
+            s2 = re.sub(r"(?m)^slices/horizontal=\d+$", f"slices/horizontal={a.size}", s)
+            if s2 != s:
+                with open(imp, "w") as f:
+                    f.write(s2)
         print(f"{path}  {a.size}³")
 
 

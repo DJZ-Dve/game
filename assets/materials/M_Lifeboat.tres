@@ -36,6 +36,7 @@ shader_parameter/streak_amount = 0.6
 shader_parameter/streak_scale = 0.8
 shader_parameter/streak_color = Color(0.5, 0.45, 0.4, 1)
 shader_parameter/streak_cover = 1.0
+shader_parameter/streak_replace = null
 shader_parameter/streak_down = null
 shader_parameter/macro_amount = 0.7
 shader_parameter/macro_scale = 0.18

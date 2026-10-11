@@ -248,6 +248,8 @@ func _keep_only(root: Node, keep: Array, center: bool) -> void:
 		if String(n.name) in keep:
 			kept.append(n)
 		else:
+			# 马上从树上摘掉：同一帧里核对光照贴图指纹时还看得见它，会当成「多了一块没烘过的网格」退回 VoxelGI
+			n.get_parent().remove_child(n)
 			n.queue_free()
 	if center and not kept.is_empty():
 		var c := Vector3.ZERO

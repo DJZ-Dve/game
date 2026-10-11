@@ -117,10 +117,12 @@ func rain_config() -> Dictionary:
 
 ## 自动曝光（见 story_room.gd 的 _setup_lens）：开灯转身看屋里那一下亮，三四秒里慢慢落回来（落到不开时的 0.8 倍）；
 ## 关灯以后先黑一下再稍稍看清（暗着时只比不开亮 0.15 档左右，开场还是那么暗）。
-## 曝光只在 0.7~1.1 倍之间变：最低 / 最高感光度把测到的场景亮度夹在 0.09~0.14，曝光 = scale / 亮度。
-## 台灯下看纸、贴着白墙最多压暗半档；闪电只有零点几秒，来不及压（录像实测）。想让暗处「慢慢看清」更明显就把 ae_min 往下调
+## 曝光在 0.7~2 倍之间变：最低 / 最高感光度把测到的场景亮度夹在 0.05~0.14，曝光 = scale / 亮度。
+## 宿舍用光照贴图以后（间接光不漏了）夜里离台灯远的地方很黑：关着日光灯待一会儿，眼睛慢慢适应、最多亮一档，
+## 看得出门、脸盆架的轮廓，开场仍然是暗的（ae_min 73 时只到 1.1 倍，窗边回看门口几乎全黑）。
+## 台灯下看纸、贴着白墙最多压暗半档；闪电只有零点几秒，来不及压（录像实测）
 func lens_config() -> Dictionary:
-	return {"auto_exposure": 0.1, "ae_min": 73.0, "ae_max": 114.0}
+	return {"auto_exposure": 0.1, "ae_min": 40.0, "ae_max": 114.0}
 
 
 ## 光照贴图：日光灯关着（开场）、开着各烘一份，开关灯时换（见 room_lightmap.gd）
@@ -509,6 +511,15 @@ func _update_backdrop() -> void:
 		env.fog_light_color = _fog_base.lerp(FLASH_FOG_COLOR, f)
 		env.fog_light_energy = lerpf(_fog_base_energy, FLASH_FOG_ENERGY, f)
 	_fog_flashing = f > 0.0
+
+
+func _exit_tree() -> void:
+	super._exit_tree()
+	# 正打着闪就切走了场景：环境资源是共享的，深度雾别留在冷白
+	if _fog_flashing:
+		var env := ($WorldEnvironment as WorldEnvironment).environment
+		env.fog_light_color = _fog_base
+		env.fog_light_energy = _fog_base_energy
 
 
 # ----------------------------------------------------------------------------- 每帧

@@ -10,7 +10,10 @@ render_mode unshaded, fog_disabled, cull_disabled, shadows_disabled, ambient_lig
 uniform sampler2D night_tex : filter_linear_mipmap_anisotropic, repeat_disable;
 uniform sampler2D flash_tex : filter_linear_mipmap, repeat_disable;
 uniform sampler2D glow_tex : filter_linear_mipmap_anisotropic, repeat_disable;
-uniform float gain = 0.8;                 // 夜景整体再压一点：地平线的雾别比 3D 的船壳、吊车亮（它们要成剪影）
+uniform float gain = 0.8;                 // 夜景地平线以上再压一点：天边的雾别比 3D 的船壳、吊车亮（它们要成剪影）
+// 地平线以下（150 米外的地面，和 3D 地面的深度雾在 150 米处接着）不压：图里的雾已经按 3D 雾的公式算过，
+// 再乘 gain 会比紧挨着的 3D 地面暗三四成，出现一道直线接缝。仰角 tan 从 0 到 gain_ramp 慢慢压到 gain
+uniform float gain_ramp = 0.05;
 uniform float flash_gain = 2.6;           // 闪电版提亮：屋里看窗外那一下天要亮得晃眼，吊车、楼成剪影
 uniform float flash_amt = 0.0;            // 闪电亮度（0~1），dorm.gd 每帧跟着 story_room 的闪电设
 uniform vec2 tan_range = vec2(-0.0874887, 0.8433315);   // 全景图竖直范围：tan(仰角)，下沿、上沿
@@ -51,9 +54,9 @@ void fragment() {
 	float sputter = 0.5 + 0.5 * sin(TIME * 23.0) * sin(TIME * 7.7);
 	dim = max(dim, near * burst * (1.0 - sputter * 0.6));
 	vec3 col = night * (1.0 - glow * dim * animate);
-	col = mix(col * gain, texture(flash_tex, uv).rgb * flash_gain, flash_amt);
-	// 越往上越淡到夜空：头顶的云离城里的灯远、照不着；上沿和圆柱外面的背景接上
 	float tan_el = mix(tan_range.y, tan_range.x, uv.y);
+	col = mix(col * mix(1.0, gain, smoothstep(0.0, gain_ramp, tan_el)), texture(flash_tex, uv).rgb * flash_gain, flash_amt);
+	// 越往上越淡到夜空：头顶的云离城里的灯远、照不着；上沿和圆柱外面的背景接上
 	float up = smoothstep(sky_fade.x, sky_fade.y, tan_el);
 	col = mix(col, sky_top * sky_dim, up);
 	if (flash_amt > 0.0) {
