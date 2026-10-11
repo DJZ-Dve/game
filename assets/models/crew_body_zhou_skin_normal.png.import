@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c2crk2jxkd7rq"
-path="res://.godot/imported/crew_body_m024_opacity_color.png-156214a9020821492f2638df3aba2c81.ctex"
+uid="uid://bahpi3cnurkyk"
+path="res://.godot/imported/crew_body_zhou_skin_normal.png-617af50678a1c41c880516ead7aa735f.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "bef3db6605c14d34f547c122fe949c28"
+"md5": "f181c4a45268fa6673d4ceb9af912640"
 }
 
 [deps]
 
-source_file="res://assets/models/crew_body_m024_opacity_color.png"
-dest_files=["res://.godot/imported/crew_body_m024_opacity_color.png-156214a9020821492f2638df3aba2c81.ctex"]
+source_file="res://assets/models/crew_body_zhou_skin_normal.png"
+dest_files=["res://.godot/imported/crew_body_zhou_skin_normal.png-617af50678a1c41c880516ead7aa735f.ctex"]
 
 [params]
 

@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c7a3c5ukfq8h6"
-path="res://.godot/imported/crew_body_crew_head_orm.png-133c458ddb1f1bb27951dc87294b8847.ctex"
+uid="uid://dda38j1xlv5c0"
+path="res://.godot/imported/crew_body_eyelashes01.png-60fa7f77d01695512afbb884c611c521.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "00d397772d777fdd17acbaab9c933c4a"
+"md5": "050add4f6a49b84709d4e478963163c9"
 }
 
 [deps]
 
-source_file="res://assets/models/crew_body_crew_head_orm.png"
-dest_files=["res://.godot/imported/crew_body_crew_head_orm.png-133c458ddb1f1bb27951dc87294b8847.ctex"]
+source_file="res://assets/models/crew_body_eyelashes01.png"
+dest_files=["res://.godot/imported/crew_body_eyelashes01.png-60fa7f77d01695512afbb884c611c521.ctex"]
 
 [params]
 

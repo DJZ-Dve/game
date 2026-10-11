@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b1mt5qcyi4gow"
-path="res://.godot/imported/crew_body_m024_head_normal.png-027a64ddcd2a3961718a8b9cd61813f1.ctex"
+uid="uid://ccxj4ab86o6wl"
+path="res://.godot/imported/crew_body_zhou_brow_color.png-68efe43da9ccb75c89f816b77b7f7e9f.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "f5882706cc2ae19ad2b64196e5eacb7b"
+"md5": "a822169d2b9fd0a6ea5e12dea71e73a4"
 }
 
 [deps]
 
-source_file="res://assets/models/crew_body_m024_head_normal.png"
-dest_files=["res://.godot/imported/crew_body_m024_head_normal.png-027a64ddcd2a3961718a8b9cd61813f1.ctex"]
+source_file="res://assets/models/crew_body_zhou_brow_color.png"
+dest_files=["res://.godot/imported/crew_body_zhou_brow_color.png-68efe43da9ccb75c89f816b77b7f7e9f.ctex"]
 
 [params]
 

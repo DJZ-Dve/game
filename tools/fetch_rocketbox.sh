@@ -1,7 +1,7 @@
 #!/bin/zsh
 # 从 Microsoft Rocketbox（MIT 许可，https://github.com/microsoft/Microsoft-Rocketbox）下载角色和动画到
 # blender/cache/rocketbox/（不进 git）：
-#   - 第一人称的身体（blender/scripts/gen_crew.py → assets/models/crew_body.glb）
+#   - 第一人称的身体（blender/scripts/gen_crew.py → assets/models/crew_body.glb；头是 MPFB 生成的，见 tools/fetch_mpfb.sh）
 #   - 剧情角色沈渡（blender/scripts/gen_npc.py → assets/models/npc_shen.glb）
 # 用法: tools/fetch_rocketbox.sh
 set -eu
@@ -14,8 +14,6 @@ crew=Construction_Male_05   # 一身蓝色连体工装，改成潜艇兵的深�
 crew_tex=m104
 shen=Business_Male_02       # 东亚面孔、深色西装：沈渡。用带表情形态键的 _facial 版（口型、眨眼、微笑）
 shen_tex=m008
-face=Male_Adult_10          # 主角周海生的脸（东亚面孔、偏瘦、短乱发），头和头发换到工装身体上。
-face_tex=m024               # 原来用的 Police_Male_05（m169）和沈渡的 m008 是同一张扫描脸（脸部贴图相关 0.94），换掉
 
 files=(
   Avatars/Professions/$crew/Export/$crew.fbx
@@ -28,11 +26,6 @@ files=(
   Animations/all_animations_max_motextr_xy/m_run_neutral.max.fbx
   $anim/m_idle_neutral_01.max.fbx
   $anim/m_sit_chair_idle_neutral_01.max.fbx
-
-  Avatars/Adults/$face/Export/${face}_facial.fbx
-  Avatars/Adults/$face/Textures/${face_tex}_head_color.tga
-  Avatars/Adults/$face/Textures/${face_tex}_head_normal.tga
-  Avatars/Adults/$face/Textures/${face_tex}_opacity_color.tga
 
   Avatars/Professions/$shen/Export/${shen}_facial.fbx
   Avatars/Professions/$shen/Textures/${shen_tex}_body_color.tga

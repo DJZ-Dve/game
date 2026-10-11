@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bclg4o7j5eaid"
-path="res://.godot/imported/crew_body_crew_lashes_alpha.png-844ac0b5d024ba2dbaf014eae4e765eb.ctex"
+uid="uid://uj1tur7y3uos"
+path="res://.godot/imported/crew_body_zhou_eye_color.png-d37995b0db7e9bdf17ba8f48d7564705.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "0552bb2df3bf83bcad629883978fe497"
+"md5": "794a929eb4052a42f92c54727f1c0830"
 }
 
 [deps]
 
-source_file="res://assets/models/crew_body_crew_lashes_alpha.png"
-dest_files=["res://.godot/imported/crew_body_crew_lashes_alpha.png-844ac0b5d024ba2dbaf014eae4e765eb.ctex"]
+source_file="res://assets/models/crew_body_zhou_eye_color.png"
+dest_files=["res://.godot/imported/crew_body_zhou_eye_color.png-d37995b0db7e9bdf17ba8f48d7564705.ctex"]
 
 [params]
 

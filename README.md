@@ -121,7 +121,8 @@ godot --headless --audio-driver Dummy --path . --max-fps 60 -- --join=127.0.0.1 
 - **步伐**：按实际挪动的距离走步伐相位，步频随速度变（走 1.25 米/秒约每秒 1.7 步，跑 2.5 米/秒约 2.6 步，和动作捕捉的动画一致）；
   起步迈出半步就落脚，停下时一步迈到一半以上的会把后脚收过来落一下。跑起来镜头起伏更大更尖、视野略宽；门洞跟前跑不起来
 - **身体**：低头看得见自己的身子、腿脚和双手——Microsoft Rocketbox 的角色（MIT），工装改成深海军蓝、劳保鞋改成黑皮靴
-  （`blender/scripts/gen_crew.py`，先跑 `tools/fetch_rocketbox.sh` 下载原始素材）。站、走、跑、坐四段动画，
+  （`blender/scripts/gen_crew.py`，先跑 `tools/fetch_rocketbox.sh` 下载原始素材）。头是 MPFB2 生成的周海生
+  （`blender/scripts/gen_head_mpfb.py`，先跑 `tools/fetch_mpfb.sh` 装扩展和素材包），只有镜子里看得见，调试用 `--blink=1` 看闭眼。站、走、跑、坐四段动画，
   走和跑按步伐相位定位到动画里对应的时刻，左右脚落地和脚步声对得上；坐在驾驶椅上是坐姿、手搭在腿上。
   每帧让模型的头骨落在眼睛后下方，头不渲染；身体不投影（会让照得到它的舱内灯每帧重画阴影图）
 - **开关门**：走到手轮跟前、低头探身，双手握在手轮上一把一把拧（`TwoBoneIK3D` 拉手臂，手掌转到握轮缘的朝向、手指弯起来），
@@ -211,7 +212,7 @@ tools/capture.sh shot.png --scene=office --at=0.3,-0.26 --yaw=0          # 岸�
 tools/record.sh .tmp/story 420 --scene=dorm --autoplay --no-hud           # 自动把序章、第一章走一遍录下来
 tools/glb_info.sh assets/models/submarine_cockpit.glb [网格名]            # 查看 glb 里的网格、顶点数
 tools/fetch_polyhaven.sh --models a,b --textures c,d                      # 下载 Poly Haven 素材（ambientCG 用 fetch_ambientcg.sh --ids）
-tools/fetch_rocketbox.sh && blender -b --factory-startup --python blender/scripts/gen_crew.py   # 重新生成第一人称的身体（npc 同理：gen_npc.py）
+tools/fetch_rocketbox.sh && tools/fetch_mpfb.sh && blender -b --factory-startup --python blender/scripts/gen_crew.py   # 重新生成第一人称的身体和周海生的头（npc 同理：gen_npc.py）
 python3 tools/gen_sfx.py [名字前缀...]                                   # 重新合成音效（之后让 Godot 导入一次：godot --headless --path . --import）
 tools/record.sh .tmp/door 12 --at=0,2.0 --yaw=180 --actions=30:interact   # 离线录一段画面+声音（.mp4/.wav/.log），不出声
 python3 tools/audio_report.py .tmp/door.wav --log .tmp/door.log --png .tmp/door.png   # 分析录音
