@@ -133,6 +133,11 @@ func _ready() -> void:
 	_connect_sonar.call_deferred()
 
 
+## 联机：别的船员也有脚步声（scripts/net/crew_puppet.gd 的 stepped 和本机相机的一样）
+func add_walker(walker: Node) -> void:
+	walker.stepped.connect(_on_step)
+
+
 ## 声呐是仪表脚本在 _ready 里现建的，等一帧再找
 func _connect_sonar() -> void:
 	_sonar = sub.find_child("Sonar", true, false)

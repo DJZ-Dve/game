@@ -32,6 +32,11 @@ var thrust_input := 0.0
 var lift_input := 0.0
 var yaw_speed := 0.0
 var external_view := false
+## 联机（scripts/net/sub_session.gd 挂上来；单独打开潜艇场景时是 null）。主机算物理，别人那边按主机的输入跟着算、再往主机的位置上拉
+var session: Node
+## 不读本机键盘、用这组输入（推进、升降、转向）：主机上是驾驶员发来的；别人那边是主机广播的
+var use_remote_input := false
+var remote_input := Vector3.ZERO
 
 var _floodlights: Array[SpotLight3D] = []
 var _lens: MeshInstance3D
@@ -201,6 +206,24 @@ func set_lights(on: bool) -> void:
 		_lens_material.emission_energy_multiplier = 6.0 if on else 0.0
 
 
+## 有人扳了探照灯开关（出声）
+func switch_lights(on: bool) -> void:
+	set_lights(on)
+	lights_switched.emit(lights_on)
+
+
+## 这一帧的操纵输入（推进、升降、转向）
+func steering() -> Vector3:
+	if use_remote_input:
+		return remote_input
+	# 舱外视角也能开（看艇怎么动）；联机时只有坐在驾驶椅上的人能开
+	var drive := piloting or (external_view and not Net.is_online())
+	if not drive:
+		return Vector3.ZERO
+	return Vector3(Input.get_axis("move_back", "move_forward"), Input.get_axis("descend", "ascend"),
+		Input.get_axis("turn_right", "turn_left"))
+
+
 func set_external_view(on: bool) -> void:
 	external_view = on
 	# 舱内的 VoxelGI 会渗到紧贴着耐压舱的艇身外表面上（黑漆被照成灰白），在舱外看时关掉；
@@ -215,17 +238,19 @@ func set_external_view(on: bool) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_lights"):
-		set_lights(not lights_on)
-		lights_switched.emit(lights_on)
+		if session:
+			session.request_lights(not lights_on)
+		else:
+			switch_lights(not lights_on)
 	elif event.is_action_pressed("toggle_view"):
 		set_external_view(not external_view)
 
 
 func _physics_process(delta: float) -> void:
-	var drive := piloting or external_view
-	thrust_input = Input.get_axis("move_back", "move_forward") if drive else 0.0
-	lift_input = Input.get_axis("descend", "ascend") if drive else 0.0
-	var turn := Input.get_axis("turn_right", "turn_left") if drive else 0.0
+	var steer := steering()
+	thrust_input = steer.x
+	lift_input = steer.y
+	var turn := steer.z
 	if DebugArgs.has("cruise"):
 		thrust_input = float(DebugArgs.get_arg("cruise"))
 

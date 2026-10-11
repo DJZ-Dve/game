@@ -24,8 +24,10 @@ const LOOK_DOWN_BACK := 0.06
 const HEAD_LAYER := 20
 
 @export var camera_path: NodePath
+## false：别的玩家的身体（联机时，camera_path 指向 scripts/net/crew_puppet.gd 的替身）——脸和头发照常画出来
+@export var first_person := true
 
-var _cam: Camera3D
+var _cam: Node3D
 var _skel: Skeleton3D
 var _head := -1
 var _face: MeshInstance3D
@@ -66,11 +68,13 @@ func _ready() -> void:
 	# 头和头发（周海生的脸）：相机在头里面，平时不画；只放在镜子那一层（PlanarMirror.HEAD_LAYER），
 	# 两种相机都不画这一层，只有镜子的反射相机画得出来
 	_face = model.find_child("Crew_Head", true, false) as MeshInstance3D
-	_cam.cull_mask &= ~(1 << (HEAD_LAYER - 1))
+	if first_person:
+		(_cam as Camera3D).cull_mask &= ~(1 << (HEAD_LAYER - 1))
 	for nm in ["Crew_Head", "Crew_Hair"]:
 		var mi := model.find_child(nm, true, false) as MeshInstance3D
 		if mi:
-			mi.layers = 1 << (HEAD_LAYER - 1)
+			if first_person:
+				mi.layers = 1 << (HEAD_LAYER - 1)
 			_setup_head_materials(mi)
 	var player := model.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
 	for n in ["idle", "walk", "run", "sit"]:
@@ -197,7 +201,7 @@ func _process(delta: float) -> void:
 	p.y = lerpf(_deck_y, p.y, sit)
 	position = p
 	_update_hands(delta)
-	if DebugArgs.has("body-preview"):
+	if first_person and DebugArgs.has("body-preview"):
 		# 调试：把身体摆到视线前方 1.3 米、转过来面朝相机，从外面看姿势和朝向
 		position += look * 1.3
 		rotation.y += PI

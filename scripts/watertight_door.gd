@@ -45,6 +45,10 @@ var unlatch := 0.0:
 ## 握住以后手跟着手轮转过 (手轮角度 - grip)，换手时 grip 跟上，手滑回原来的位置重新握
 var hands := false
 var grip := 0.0
+## 联机：开关门要先问主机（scripts/net/sub_session.gd 挂上来；单人、单独打开潜艇场景时是 null，直接动）
+var session: Node
+## 已经问了主机、还没回音（这期间算忙，开门的人站在门前等着）
+var pending := false
 
 var _hinge: Node3D
 var _wheel: Node3D
@@ -166,7 +170,21 @@ func _circle_hit(c1: Vector2, r1: float, c2: Vector2, r2: float, near: Vector2) 
 	return p1 if p1.distance_squared_to(near) < p2.distance_squared_to(near) else p2
 
 
+## 人去开关门：联机时问主机，主机让所有人这边同时 toggle()（门的动作各自在本机演，结果一样）
+func request_toggle() -> void:
+	if busy or pending or _hinge == null:
+		return
+	if session:
+		pending = true
+		session.request_door()
+		# 主机没回音（被别人抢先了、包丢了）就算了
+		get_tree().create_timer(1.5, false).timeout.connect(func() -> void: pending = false)
+	else:
+		toggle()
+
+
 func toggle() -> void:
+	pending = false
 	if busy or _hinge == null:
 		return
 	busy = true
@@ -404,6 +422,18 @@ func _swing_to(target: float, dur: float) -> void:
 
 func _wait(secs: float) -> void:
 	await get_tree().create_timer(secs, false).timeout
+
+
+## 直接摆到开着 / 关着（联机中途对不上时，按主机的状态校正；不出声、不演）
+func set_open_now(open: bool) -> void:
+	if busy or _hinge == null or open == is_open:
+		return
+	is_open = open
+	openness = 1.0 if open else 0.0
+	_hinge.rotation.y = deg_to_rad(OPEN_DEG) if open else -deg_to_rad(SEAT_DEG)
+	_wheel.rotation.z = TAU * WHEEL_TURNS if open else 0.0
+	unlatch = 1.0 if open else 0.0
+	state_changed.emit(is_open)
 
 
 func _finish() -> void:

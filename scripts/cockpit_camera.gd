@@ -50,6 +50,8 @@ const DOOR_STAND_SIDE := Vector2(0.4, 1.85)   # 离门轴 1 米多，门扇（�
 const DOOR_STAND_AFT := Vector2(0.0, 3.0)
 const DOOR_LOOK_PITCH := -0.95
 const DOOR_LEAN := Vector2(0.14, 0.07)  # 探身时眼睛往前、往下挪多少
+## 联机时两个人之间至少隔这么远（脚下位置），挤不过去就被推开（过道 1.1 米宽，两个人错得开身）
+const CREW_GAP := 0.42
 
 @export var door_path: NodePath
 
@@ -91,6 +93,9 @@ var _door_toggled := false
 var _door_t := 0.0
 var _auto_pos := Vector2.ZERO
 var _auto_aim := false
+## 联机（scripts/net/sub_session.gd 每帧更新）：驾驶椅上坐着别人；别的船员脚下的位置（挤不过去）
+var seat_taken := false
+var crew_obstacles: Array[Vector2] = []
 
 
 func configure(body: Node3D) -> void:
@@ -136,6 +141,26 @@ func is_seated() -> bool:
 	return mode == Mode.SEATED
 
 
+## 联机开局：不坐驾驶椅的人站在舱里各自的位置上
+func place_standing(p: Vector2, face_yaw: float) -> void:
+	mode = Mode.WALKING
+	_pos = p
+	_vel = Vector2.ZERO
+	yaw = face_yaw
+	pitch = 0.0
+	_blend = 1.0
+	seated_changed.emit(false)
+
+
+## 从驾驶椅上站起来（联机时两个人同时坐上去，主机判给了别人）
+func stand_up() -> void:
+	if mode == Mode.SEATED:
+		_switch(Mode.WALKING)
+		_pos = Vector2(_stand.origin.x, _stand.origin.z)
+		_vel = Vector2.ZERO
+		yaw = 0.0
+
+
 ## 给 crew_body.gd：脚下的位置（舱内局部 x、z）
 func feet() -> Vector2:
 	return _pos
@@ -171,11 +196,10 @@ func _interact() -> void:
 	if door_op:
 		return
 	if mode == Mode.SEATED:
-		_switch(Mode.WALKING)
-		_pos = Vector2(_stand.origin.x, _stand.origin.z)
-		_vel = Vector2.ZERO
-		yaw = 0.0
+		stand_up()
 	elif _near_seat():
+		if seat_taken:
+			return
 		_switch(Mode.SEATED)
 		yaw = 0.0
 		pitch = 0.0
@@ -234,7 +258,7 @@ func _door_choreo(delta: float) -> void:
 	if not _door_toggled:
 		if arrived or _door_t > 1.6:
 			_door_toggled = true
-			_door.toggle()
+			_door.request_toggle()
 		return
 	if not door_aft:
 		var h: float = _door.hinge_angle()
@@ -242,14 +266,14 @@ func _door_choreo(delta: float) -> void:
 			_go(DOOR_STAND_FRONT, PI)       # 关上了：上前一步拧紧
 		elif not _door.is_open and h > deg_to_rad(3.0) and _auto_pos != DOOR_STAND_SIDE:
 			_go(DOOR_STAND_SIDE, PI - 0.35)  # 门扇朝人甩过来：往右后方让开
-	if not _door.busy:
+	if not _door.busy and not _door.pending:
 		door_op = false
 		_auto_aim = false
 
 
 ## 站在水密门跟前（门两边都行）、脸朝着门
 func _facing_door() -> bool:
-	if _door == null or _door.busy or door_op:
+	if _door == null or _door.busy or _door.pending or door_op:
 		return false
 	var to: Vector2 = DOOR_POS - _pos
 	var look := Vector2(-sin(yaw), -cos(yaw))
@@ -285,7 +309,7 @@ func _process(delta: float) -> void:
 		if door_op:
 			prompt = ""
 		elif _near_seat():
-			prompt = "E 坐下驾驶"
+			prompt = "驾驶椅上有人" if seat_taken else "E 坐下驾驶"
 		elif vp >= 0 and lean < 0.5:
 			prompt = "按住右键 贴近舷窗"
 		elif _facing_door():
@@ -359,7 +383,7 @@ func _walk(delta: float) -> void:
 	if _door_open() and absf(_pos.y - DOOR_POS.y) < 0.6 and _vel.y * signf(DOOR_POS.y - _pos.y) > 0.05:
 		_pos.x = move_toward(_pos.x, DOOR_POS.x, absf(_vel.y) * delta * 1.2)
 	var before := _pos
-	_pos = _clamp_to_walkable(_pos + _vel * delta)
+	_pos = _clamp_to_walkable(_keep_apart(_pos + _vel * delta))
 	# 步伐按实际挪动的距离算：顶着墙走时人没动，不该原地踏步
 	var v := _pos.distance_to(before) / maxf(delta, 1e-4)
 	gait_speed = lerpf(gait_speed, v, 1.0 - exp(-delta * 12.0))
@@ -385,6 +409,18 @@ func _walk(delta: float) -> void:
 		if fposmod(gait_steps, 1.0) > 0.3:
 			gait_steps = ceilf(gait_steps)
 			_step(int(gait_steps), 0.35, &"settle")
+
+
+## 联机：别和别的船员站到一块儿去，挨得太近就被推开（贴着对方滑过去，不会卡死）
+func _keep_apart(p: Vector2) -> Vector2:
+	for o in crew_obstacles:
+		var d := p - o
+		var dist := d.length()
+		if dist < CREW_GAP:
+			# 正好重叠时往右舷让
+			var dir := d / dist if dist > 1e-4 else Vector2.RIGHT.rotated(-yaw)
+			p = o + dir * CREW_GAP
+	return p
 
 
 ## 落一步：偶数左脚、奇数右脚
