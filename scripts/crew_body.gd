@@ -112,8 +112,8 @@ func _setup_hands() -> void:
 	_skel.add_child(_grip)   # 排在 IK 后面：IK 先把手腕拉到位，再转手掌、弯手指
 
 
-## 镜子里的脸：皮肤透一点光（次表面散射），眼球湿的一层清漆，睫毛半透明，头发片裁切透明度、双面
-## （材质槽见 gen_crew.py：Crew_Head、Crew_Eyes、Crew_Lashes，头发 Crew_Hair）
+## 镜子里的脸：皮肤透一点光（次表面散射），眼球湿的一层清漆，睫毛、眉毛半透明，头发片裁切透明度、双面
+## （材质槽见 gen_head_mpfb.py：Crew_Head、Crew_Eyes、Crew_Lashes、Crew_Brows，头发 Crew_Hair）
 func _setup_head_materials(mi: MeshInstance3D) -> void:
 	for i in mi.get_surface_override_material_count():
 		var mat := mi.get_active_material(i) as StandardMaterial3D
@@ -130,7 +130,7 @@ func _setup_head_materials(mi: MeshInstance3D) -> void:
 			mat.clearcoat_enabled = true
 			mat.clearcoat = 1.0
 			mat.clearcoat_roughness = 0.05
-		elif n.ends_with("Lashes"):
+		elif n.ends_with("Lashes") or n.ends_with("Brows"):
 			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 			mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
@@ -214,6 +214,8 @@ func _update_blink(delta: float) -> void:
 		_blink_wait = randf_range(2.5, 5.5) if randf() > 0.15 else 0.35
 	_blink = maxf(_blink - delta, 0.0)
 	var k := sin(PI * _blink / 0.16) if _blink > 0.0 else 0.0
+	if DebugArgs.has("blink"):
+		k = float(DebugArgs.get_arg("blink"))   # 调试：眼睛停在这个开合（截图看眨眼时睫毛、眼皮对不对）
 	for nm in ["AK_09_EyeBlinkLeft", "AK_10_EyeBlinkRight"]:
 		var i := _face.find_blend_shape_by_name(nm)
 		if i >= 0:
