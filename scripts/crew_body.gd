@@ -66,11 +66,11 @@ func _ready() -> void:
 	# 头和头发（周海生的脸）：相机在头里面，平时不画；只放在镜子那一层（PlanarMirror.HEAD_LAYER），
 	# 两种相机都不画这一层，只有镜子的反射相机画得出来
 	_face = model.find_child("Crew_Head", true, false) as MeshInstance3D
+	_cam.cull_mask &= ~(1 << (HEAD_LAYER - 1))
 	for nm in ["Crew_Head", "Crew_Hair"]:
 		var mi := model.find_child(nm, true, false) as MeshInstance3D
 		if mi:
 			mi.layers = 1 << (HEAD_LAYER - 1)
-			_cam.cull_mask &= ~(1 << (HEAD_LAYER - 1))
 			_setup_head_materials(mi)
 	var player := model.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
 	for n in ["idle", "walk", "run", "sit"]:

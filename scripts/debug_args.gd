@@ -28,6 +28,8 @@ extends Node
 ##                     "gi": "lightmap" / "voxel" 就地切换间接光（同一个进程里轮流比两套 GI 的帧率）}
 ##   --shot-dir=目录   --shots 存到哪（<组名>_<name>.png，另写一份 <组名>_shots.json：每张的帧率、GPU 时间）
 ##   --shot-only=a,b   只拍这几个机位（按 name）
+##   --give=秒         办事处：进门这么多秒以后直接演一遍沈渡推平安符（office.gd 的 _give_talisman；配合 --sit / --at
+##                    和 tools/record.sh 录手推的 IK，不用从头走剧情签合同）
 ##   --gi=voxel|both   岸上房间的间接光：默认有烘好的光照贴图（assets/gi/<房间>.lmbake）就用 LightmapGI，
 ##                    voxel 强制用原来的 VoxelGI，both 两个都开（见 story_room.gd）
 ##   --lm-export       把房间导出成烘焙光照贴图用的场景后退出（tools/bake_lightmap.sh 第一步）；--lm-<属性>=值 改 LightmapGI 参数
@@ -77,6 +79,8 @@ func _ready() -> void:
 		_shots.call_deferred()
 	elif has("capture"):
 		_capture.call_deferred()
+	if has("give"):
+		_give.call_deferred()
 	if has("actions"):
 		for item in get_arg("actions").split(",", false):
 			var kv := item.split(":")
@@ -110,6 +114,19 @@ func _process(_delta: float) -> void:
 				_release.append(a[1])
 	if _actions.is_empty() and _release.is_empty():
 		set_process(false)
+
+
+## --give：等办事处成了当前场景，过几秒演一遍推平安符
+func _give() -> void:
+	var waited := 0
+	while not (get_tree().current_scene and get_tree().current_scene.has_method("_give_talisman")):
+		await get_tree().process_frame
+		waited += 1
+		if waited > 1200:
+			push_error("--give: 没等到办事处（要配 --scene=office）")
+			return
+	await get_tree().create_timer(float(get_arg("give", "1"))).timeout
+	get_tree().current_scene.call("_give_talisman")
 
 
 ## 音效日志（--sfx-log）

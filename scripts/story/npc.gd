@@ -6,7 +6,7 @@ extends Node3D
 ## - 说话时按台词对口型：没有拼音库，按每个字的编码挑一个声母、一个韵母的口型，一秒四五个字；标点处闭嘴停一下
 ## - 一直挂着一点客气的笑。眨眼的形态键有，故意不用——他不眨眼
 ## - reach()：右手伸过去按住桌上的东西（TwoBoneIK3D 拉肩—肘—腕，掌心朝下、手指朝前），东西挪到哪手跟到哪，
-##   够得远时上身往前探；release() 收回来。签完合同推平安符用（office.gd 的 _give_talisman）
+##   够得远时上身往前探；release() 先把手往回拖、再收回来。签完合同推平安符用（office.gd 的 _give_talisman）
 ## 节点原点放在臀部正下方的地面上，面朝 -Z。
 
 @export var model: PackedScene
@@ -45,6 +45,7 @@ var _reach_hand: PalmDown
 var _reach_lean: Lean
 var _reach_node: Node3D
 var _reach_w := 0.0
+var _reach_back := 0.0     # 收手时先往回拖了多远（米）
 var _reach_tw: Tween
 var _lean := 0.0
 var _shoulder_r := -1
@@ -189,19 +190,25 @@ func _setup_reach() -> void:
 ## 右手伸过去，掌心朝下按在 target 上方（target 动，手跟着动）；secs 秒渐入
 func reach(target: Node3D, secs := 0.4) -> void:
 	_reach_node = target
-	_tween_reach(1.0, secs)
+	_reach_back = 0.0
+	_new_reach_tween().tween_property(self, "_reach_w", 1.0, secs)
 
 
-## 手收回去（secs 秒渐出）
-func release(secs := 0.6) -> void:
-	_tween_reach(0.0, secs)
+## 手收回去（secs 秒）。back > 0：前一半时间先把手从东西上抬起一点、往自己这边拖回 back 米，后一半再渐出——
+## 直接渐出的话，手是从最远处斜着划回两手交叉的姿势，会扫过桌上别的东西（推平安符时扫过墨水瓶）
+func release(secs := 0.6, back := 0.0) -> void:
+	var tw := _new_reach_tween()
+	if back > 0.0:
+		tw.tween_property(self, "_reach_back", back, secs * 0.45)
+		secs *= 0.55
+	tw.tween_property(self, "_reach_w", 0.0, secs)
 
 
-func _tween_reach(to: float, secs: float) -> void:
+func _new_reach_tween() -> Tween:
 	if _reach_tw:
 		_reach_tw.kill()
-	_reach_tw = create_tween()
-	_reach_tw.tween_property(self, "_reach_w", to, secs).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_reach_tw = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	return _reach_tw
 
 
 func _update_reach(delta: float) -> void:
@@ -217,22 +224,27 @@ func _update_reach(delta: float) -> void:
 	_reach_hand.weight = w
 	var fwd := -global_basis.z
 	var right := global_basis.x
-	# 掌心在东西正上方 2 厘米，手腕在掌心后面 7 厘米、高出手掌厚度一点
-	var p := _reach_node.global_position
-	var wrist := p + Vector3.UP * 0.045 - fwd * 0.07
+	# 掌心在东西正上方 2 厘米，手腕在掌心后面 7 厘米、高出手掌厚度一点；收手往回拖时先抬起 2 厘米，不蹭着东西
+	var p := _reach_node.global_position - fwd * _reach_back + Vector3.UP * (0.02 * smoothstep(0.0, 0.05, _reach_back))
+	var wrist := p + Vector3.UP * 0.05 - fwd * 0.07
+	# 这一帧动画里的肩膀（_process 里读到的是修改器套上去之前的姿势，不含探身）
 	var shoulder := _skel.global_transform * _skel.get_bone_global_pose(_shoulder_r).origin
-	# 胳膊伸到八成以上就往前探身（探身在 IK 之前，肩膀先过去）；再远也只伸到九成八。
-	# 量的是探过身的肩膀，探身又让肩膀变近——慢慢跟过去，不然一帧探一帧缩来回抖
+	# 胳膊伸到八成以上就往前探身（探身在 IK 之前，肩膀先过去），平滑地跟过去
 	var d := shoulder.distance_to(wrist) / _arm_len
-	_lean = lerpf(_lean, w * smoothstep(0.82, 1.05, d + _lean * 0.15), 1.0 - exp(-delta * 4.0))
+	_lean = lerpf(_lean, w * smoothstep(0.8, 1.1, d), 1.0 - exp(-delta * 4.0))
 	_reach_lean.amount = _lean
 	_reach_lean.right = right
-	if d > 0.98:
-		wrist = shoulder + (wrist - shoulder).normalized() * _arm_len * 0.98
+	# 再远也只伸到九成八——按探过身以后的肩膀算（不然手总差着探身挪过去的那七八厘米，变成指尖顶着东西推）
+	var sh := _reach_lean.moved(_skel, shoulder)
+	if sh.distance_to(wrist) > _arm_len * 0.98:
+		wrist = sh + (wrist - sh).normalized() * _arm_len * 0.98
+	# 渐入渐出的半路上手腕往上提（IK 按权重在动画姿势和伸直的姿势之间转，半路手会往下沉、指头插进桌面）：
+	# 目标点提 0.2·(1-w)，乘上 IK 的权重 w，实际抬起来最多 5 厘米（w=0.5 时），两头都是 0
+	wrist += Vector3.UP * 0.2 * (1.0 - w)
 	_reach_target.global_position = wrist
 	# 肘往外、往下（坐着按桌面的姿势），不往身子里收
 	_reach_pole.global_position = shoulder + right * 0.4 + Vector3.DOWN * 0.4 - fwd * 0.1
-	_reach_hand.fingers = (fwd - Vector3.UP * 0.15).normalized()
+	_reach_hand.fingers = (fwd - Vector3.UP * 0.08).normalized()
 	_reach_hand.palm = Vector3.DOWN
 
 
@@ -438,7 +450,7 @@ class Gaze extends SkeletonModifier3D:
 
 ## 伸手按桌上东西时往前探身：三节脊柱各往前弯一点（绕身体的左右轴）。排在右臂 IK 前面
 class Lean extends SkeletonModifier3D:
-	const BONES := {"Bip01 Spine": 3.0, "Bip01 Spine1": 4.0, "Bip01 Spine2": 4.0}
+	const BONES := {"Bip01 Spine": 4.0, "Bip01 Spine1": 5.0, "Bip01 Spine2": 5.0}
 	var amount := 0.0
 	var right := Vector3.RIGHT
 
@@ -453,11 +465,26 @@ class Lean extends SkeletonModifier3D:
 			gp.basis = Basis(axis, -deg_to_rad(BONES[n]) * amount) * gp.basis
 			sk.set_bone_global_pose(b, gp)
 
+	## 上身的一点 p（世界坐标，没探身时的位置）探过身以后在哪：和上面一样从下往上绕每节脊柱转，后面几节的转轴跟着挪
+	func moved(sk: Skeleton3D, p: Vector3) -> Vector3:
+		var pivots: Array[Vector3] = []
+		for n: String in BONES:
+			pivots.append(sk.global_transform * sk.get_bone_global_pose(sk.find_bone(n)).origin)
+		var i := 0
+		for n: String in BONES:
+			var r := Basis(right.normalized(), -deg_to_rad(BONES[n]) * amount)
+			p = pivots[i] + r * (p - pivots[i])
+			for j in range(i + 1, pivots.size()):
+				pivots[j] = pivots[i] + r * (pivots[j] - pivots[i])
+			i += 1
+		return p
+
 
 ## 右手掌转到掌心朝下、手指朝前（按住东西推），手指伸开、只微微弯一点（坐着的动画里两手十指交叉，
 ## 手指是蜷着的，不放开的话按下去像鸡爪）。排在右臂 IK 后面
 class PalmDown extends SkeletonModifier3D:
-	const CURL := 8.0                 # 伸开以后每节手指再往掌心弯的度数
+	const CURL := 5.0                 # 伸开以后每节手指再往掌心弯的度数
+	const CLOSE := 0.6                # 手指往中指那边并拢多少（0 不动，1 全并到一个方向）
 	var weight := 0.0
 	var fingers := Vector3.FORWARD    # 目标：手指方向、掌心朝向（世界坐标）
 	var palm := Vector3.DOWN
@@ -505,9 +532,38 @@ class PalmDown extends SkeletonModifier3D:
 				sk.set_bone_pose_rotation(b, sk.get_bone_pose_rotation(b).slerp(rest, weight))
 		var hb := Basis(q)
 		var axis := (hb * fl).cross(hb * pl).normalized()
+		# 并拢：绑定姿势（T 字形）里五指张得很开，从正面看按着东西像爪子。食指、无名指、小指在手掌平面里往中指那边
+		# 转回 CLOSE 那么多，拇指转一半
+		var pn := (hb * pl).normalized()
+		var mid := _dir(sk, 1)
+		for k: int in [0, 2, 3]:
+			_close(sk, _chain[k * 3], mid, pn, CLOSE * weight)
+		if _thumb[0] >= 0 and _thumb[1] >= 0:
+			var td := sk.get_bone_global_pose(_thumb[1]).origin - sk.get_bone_global_pose(_thumb[0]).origin
+			_close(sk, _thumb[0], td.slide(pn).normalized().lerp(mid, 0.5).normalized(), pn, weight)
 		for b: int in _chain:
 			if b < 0:
 				continue
 			var gp := sk.get_bone_global_pose(b)
 			gp.basis = Basis(axis, deg_to_rad(CURL) * weight) * gp.basis
 			sk.set_bone_global_pose(b, gp)
+
+	## 第 i 根手指（0 食指…3 小指）第一节的方向，投到手掌平面里（骨骼坐标）
+	func _dir(sk: Skeleton3D, i: int) -> Vector3:
+		var a: int = _chain[i * 3]
+		var b: int = _chain[i * 3 + 1]
+		return (sk.get_bone_global_pose(b).origin - sk.get_bone_global_pose(a).origin).normalized()
+
+	## 骨头 b 绕掌心法线 pn 转，让它的方向往 to 靠 k（0~1）
+	func _close(sk: Skeleton3D, b: int, to: Vector3, pn: Vector3, k: float) -> void:
+		if b < 0:
+			return
+		var kids := sk.get_bone_children(b)
+		if kids.is_empty():
+			return
+		var gp := sk.get_bone_global_pose(b)
+		var d := (sk.get_bone_global_pose(kids[0]).origin - gp.origin).slide(pn).normalized()
+		var t := to.slide(pn).normalized()
+		var ang := d.signed_angle_to(t, pn) * k
+		gp.basis = Basis(pn, ang) * gp.basis
+		sk.set_bone_global_pose(b, gp)

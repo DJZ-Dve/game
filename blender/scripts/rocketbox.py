@@ -149,6 +149,8 @@ def eye_setup(ob, arm, eye_mat, lash_mat, length=0.0048):
     me = ob.data
     mw = ob.matrix_world
     inv = mw.inverted()
+    # 调用方按 0 脸、1 眼球、2 睫毛换材质：头原来只能有脸一个槽
+    assert len(me.materials) == 1, f"eye_setup: {ob.name} 原来有 {len(me.materials)} 个材质槽（应该只有脸一个）"
     me.materials.append(eye_mat)
     me.materials.append(lash_mat)
     i_eye, i_lash = len(me.materials) - 2, len(me.materials) - 1
@@ -174,6 +176,7 @@ def eye_setup(ob, arm, eye_mat, lash_mat, length=0.0048):
             for f in isl:
                 f.material_index = i_eye
             eye_faces.append(isl)
+    assert eye_faces, f"eye_setup: {ob.name} 在 EYE_UV_BOX 里没找到眼球（换了别的头要重新量眼球在贴图上的位置）"
     # 眼球贴图的坐标系：UV 中心、哪个 UV 方向是朝上、UV 上下坐标和世界高度的比例
     isl = eye_faces[0]
     ctr = sum((mw @ v.co for f in isl for v in f.verts), V()) / sum(len(f.verts) for f in isl)

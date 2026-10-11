@@ -463,25 +463,29 @@ func _show_pen(on: bool) -> void:
 func _give_talisman() -> void:
 	if _talisman == null:
 		return
-	# 平安符本来就在他右手跟前的桌上（坐着时右手腕在臀部前 0.34 米、偏右 0.1 米，见 npc_shen.json；再往前 8 厘米），
-	# 往来客那边推 0.24 米——再远他坐着够不着，得站起来
+	# 平安符从他右肩前方的桌上（臀部前 0.4 米、偏右 0.26 米）往来客那边推 0.22 米——再远他探着身也够不着，得站起来。
+	# 不能太靠里：偏右 0.1 米那条线正好穿过桌上的墨水瓶（gen_office.py：在他身前 0.5 米、偏右 0.12 米），
+	# 手腕和前臂会把瓶子整个吞进去；偏右 0.26 米走玻璃板底下那张海图上面，手离瓶子最近也有两三厘米，终点也碰不到合同
 	var par := _talisman.get_parent_node_3d()
 	var fwd := -shen.global_basis.z
-	var from := shen.global_position + shen.global_basis.x * 0.1 + fwd * 0.42
+	var from := shen.global_position + shen.global_basis.x * 0.26 + fwd * 0.4
 	from.y = par.to_global(_talisman.position).y
-	var end := par.to_local(from + fwd * 0.24)
+	var end := par.to_local(from + fwd * 0.22)
 	_talisman.position = par.to_local(from)
-	_talisman.visible = true
 	shen.look_at_target(_talisman)
 	shen.reach(_talisman, 0.4)
-	await get_tree().create_timer(0.5).timeout
+	# 手快到了（伸手过了七成）才露出来：像是从他掌心底下推出来的，不是先凭空出现在桌上
+	await get_tree().create_timer(0.25).timeout
+	_talisman.visible = true
+	await get_tree().create_timer(0.25).timeout
 	var tw := create_tween()
 	tw.tween_property(_talisman, "position", end, 1.2).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	await tw.finished
 	await get_tree().create_timer(0.15).timeout
-	shen.release(0.6)
+	# 手先往回拖到怀里再收：从推到的地方直接收回两手交叉的姿势会斜着扫过墨水瓶
+	shen.release(1.0, 0.28)
 	shen.look_at_target(null)
-	await get_tree().create_timer(0.3).timeout
+	await get_tree().create_timer(0.5).timeout
 	play("cloth")
 	await get_tree().create_timer(0.8).timeout
 	_talisman.visible = false

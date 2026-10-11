@@ -8,7 +8,7 @@
 - 动画：按世界空间朝向重定向到角色骨骼上（见 rocketbox.py 的 retarget）
 - 贴图：蓝色工装压成深海军蓝的作业服，磨旧、蹭脏一点；浅黄色劳保鞋改成黑皮靴；手不动
 - 头换成 Male_Adult_10（东亚面孔、偏瘦、短乱发——主角周海生的脸，见 docs/story.md），带头发片和眨眼、微笑的形态键；
-  肤色从发橙的黄调回来、下巴和上唇一层胡茬、眼下发暗（三十出头、跑船的、欠着债），眼球单独一个材质、加睫毛（rocketbox.eye_setup）；
+  肤色从发橙的黄调回来、下巴和上唇一层胡茬、眼下稍暗（三十出头、跑船的、欠着债），眼球单独一个材质、加睫毛（rocketbox.eye_setup）；
   头和头发各一块网格，Godot 里只有镜子看得见（第一人称看不见自己的脸），手的肤色往这张脸上靠。
   （以前用的 Police_Male_05 和沈渡 Business_Male_02 是 Rocketbox 里同一张扫描脸，镜子里看见的是摘了眼镜的沈渡）
 - 缩放到眼睛离地 1.62 米（和 cockpit_camera.gd 的 eye_height 一致），脸朝 Blender +Y（Godot 的 -Z）
@@ -68,8 +68,8 @@ def _blob(u, v, cu, cv, ru, rv):
 
 
 def face_texture(eyes):
-    """周海生的脸（m024 原来是二十出头的样子）：褪掉发橙的黄、下巴和上唇一层胡茬、眼下发暗；眼球上压一道眼睑的影子，
-    下眼睑缘压暗调糙。存成 blender/cache/rocketbox/crew_head_color.png 和 crew_head_orm.png（G 粗糙度），
+    """周海生的脸（m024 原来是二十出头的样子）：褪掉发橙的黄、下巴和上唇一层胡茬、眼下稍暗；眼球上压一道眼睑的影子，
+    下眼睑缘调糙（只压暗一点）。存成 blender/cache/rocketbox/crew_head_color.png 和 crew_head_orm.png（G 粗糙度），
     返回 (颜色图, ORM 图, 脸上皮肤的平均颜色)。"""
     img = bpy.data.images.load(os.path.join(SRC, f"{FACE_TEX}_head_color.tga"))
     w, h = img.size
@@ -91,10 +91,12 @@ def face_texture(eyes):
     rgb[:] = rgb * (1 - 0.3 * k[..., None]) + rgb * np.array([0.78, 0.82, 0.9], np.float32) * (0.3 * k[..., None])
     # 眼下发暗（熬夜、心事）
     under = (_blob(u, v, 0.41, 0.692, 0.035, 0.013) + _blob(u, v, 0.587, 0.692, 0.035, 0.013)) * face
-    rgb[:] *= (1 - 0.06 * np.clip(under, 0, 1))[..., None]
+    rgb[:] *= (1 - 0.04 * np.clip(under, 0, 1))[..., None]
     lid_shadow(px, eyes)
+    # 下眼睑缘只压一点点：沈渡那 45% 是给桌上纸面、台灯从下往上照出的白边用的；镜子前是顶上的日光灯，
+    # 压那么深反而像一圈眼线。防反光靠下面的粗糙度
     lid = lower_lid_band(px)
-    rgb[:] *= (1 - 0.45 * lid)[..., None]
+    rgb[:] *= (1 - 0.1 * lid)[..., None]
     px[..., :3] = np.clip(rgb, 0, 1)
     skin = px[int(h * 0.62):int(h * 0.72), int(w * 0.42):int(w * 0.58), :3].reshape(-1, 3).mean(0)
     img.pixels[:] = px.ravel()
