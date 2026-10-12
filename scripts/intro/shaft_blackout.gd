@@ -2,7 +2,9 @@ extends Node3D
 ## 开场镜头 3（docs/design.md「八、开场」）：冰井里，冰震，沿井壁一圈圈的灯从井底往上一圈圈灭，黑暗涨上来吞掉镜头。
 ## 场景全部由脚本搭：冰壁（程序生成的冰，assets/shaders/ice_wall.gdshader）、每 12 米一圈的环形走台
 ## （格栅、工字钢托梁和斜撑、栏杆、舱壁灯、洗墙灯）、圈与圈之间的护笼爬梯（从这圈走台的检修口下到下一圈，
-## 两个方位交替）、每圈冰壁上喷的深度标记、竖着贯穿整口井的加热管、电梯导轨、电缆桥架。
+## 两个方位交替）、每圈冰壁上喷的深度标记、竖着贯穿整口井的加热管、升降机导轨和齿条、滑触线、电缆桥架
+## （模型和材质在 scripts/shaft/shaft_kit.gd，和开局后的下井共用）。升降机的轿厢（scripts/shaft/lift_cab.gd）在镜头右下方
+## 顺着导轨往下走，冰裂时安全器刹死，黑暗涨过它时一起断电（_lift_y、_lift_power）。
 ## 冰壁按两圈走台中间切成一段段，每圈走台、爬梯是单独的几个节点（灯具、灯罩每圈一个 MultiMesh），按离镜头远近分三档细节：
 ## 引擎按段、按圈剔除，每盏投影灯只画它照得到的那一两圈。
 ## 灯光：洗墙灯（走台底下贴着冰往下照）、照走台的短射程灯（前几圈，镜头附近两圈投影）、往井里照的灯（照空气、汽）；
@@ -19,41 +21,25 @@ extends Node3D
 ##       --bench  量第 60~180 帧的平均帧间隔，打一行 BENCH 就退出
 ## 录像：tools/record.sh .tmp/shaft 36 --scene=shaft
 
-const R := 11.0                # 井的半径（米）
-const RING_STEP := 12.0        # 走台的间距
+# 冰井的尺寸、灯具、爬梯这些在 ShaftKit（scripts/shaft/shaft_kit.gd），这里只取用得着的
+const R := ShaftKit.R
+const RING_STEP := ShaftKit.RING_STEP
+const WALK_IN := ShaftKit.WALK_IN
+const LAMPS := ShaftKit.LAMPS
+const LAMP_H := ShaftKit.LAMP_H
+const LAMP_R := ShaftKit.LAMP_R
+const DECK_LIGHT := ShaftKit.DECK_LIGHT
+const WALL_GLOW := ShaftKit.WALL_GLOW
+const PIPE_ANGLES := ShaftKit.PIPE_ANGLES
+const PIPE_R := ShaftKit.PIPE_R
+const JBOX_ANGLE := ShaftKit.JBOX_ANGLE
+const LAMP_COLOR := ShaftKit.LAMP_COLOR
+const LAMP_COOL := ShaftKit.LAMP_COOL
 const RING_FIRST := -1         # 头顶那一圈
 const RING_LAST := 49
 const WALL_TOP := 24.0
 const DEPTH := 615.0           # 冰壁往下建到这么深（再往下早就黑了）
-const WALK_IN := R - 1.45      # 走台内沿（栏杆）
-const WALK_OUT := R - 0.06
-const GAP := 0.09              # 电梯导轨两边留出的空档（方位角 0 两侧，弧度；约一米）
-const LAMPS := 24              # 每圈几盏灯
-const LIFT := 3.0              # 掘进机每一节的高度（节与节之间一道台阶，冰壁着色器里也用）
-const LAMP_H := 1.24           # 灯罩中心在走台面上方多高（坐在从扶手伸出来的横臂上）
-const LAMP_R := WALK_IN - 0.17 # 灯罩中心的半径（扶手内侧，悬在井里）
-const RAIL_R := WALK_IN + 0.05 # 栏杆立柱、扶手的半径
-const RAIL_TOP := 1.08
 const NEAR_LIT := 4            # 前几圈（k <= NEAR_LIT）的灯真的打光照走台；再远的走台上的光斑在格栅着色器里算
-const DECK_LIGHT := 2.6        # 照走台的那盏灯的亮度
-const WALL_GLOW := 0.45        # 灯照在身后冰上的那圈光（ice_wall.gdshader 里算）
-const PIPE_ANGLES := [1.05, 2.62, 5.06]
-const PIPE_R := R + 0.01       # 加热管贴着井壁走，嵌在它自己化出来的浅槽里
-const TRAY_ANGLE := 3.9
-const JBOX_ANGLE := 3.66       # 每圈的接线箱（灯的电从这里接）
-# 护笼爬梯：第 n 圈走台到第 n+1 圈，在两根托梁中间的一格里（第几格见 _bay_a；偶数圈、奇数圈交替，隔四格、5.2 米，
-# 上一段梯子掉下来的人落在下一圈的走台上，不会顺着检修口一路掉到底）。避开管子、桥架、接线箱、电梯导轨
-const LADDER_BAYS := [34, 38]
-const LADDER_OFF := 0.2        # 踏棍中心离冰面多远
-const CAGE_FROM := 2.2         # 护笼从下面那圈走台面以上多高开始
-const HATCH_W := 0.42          # 检修口半宽（切向）
-const HATCH_IN := R - 0.94     # 检修口靠井轴那条边的半径（从这里到井壁都是口子）
-# 每圈的深度标记（「R07 / -84 m」，字高 0.42 米、一条三四米长：坐升降机的人隔着井也看得清）喷在哪几个方位角
-# （一条字的正中）：三条在开场镜头左边、上边、右边看得见的地方，一条在这圈两段爬梯正中间（4.458，两格的中点；
-# 爬上来、下去的人都看得见）；都避开管子、桥架、接线箱、爬梯。字的大小、样子在 ice_wall.gdshader 里
-const LABEL_ANGLES := [2.06, 3.142, 4.458, 5.62]
-const LAMP_COLOR := Color(1.0, 0.86, 0.68)   # 老的卤素灯
-const LAMP_COOL := Color(0.86, 0.93, 1.0)     # 后来换上的 LED
 const G := 1.315               # 欧罗巴的重力
 const SOUND_SPEED := 343.0
 const CAM_A := 1.35            # 镜头站在走台的哪个方位
@@ -80,15 +66,19 @@ const CAM_H := 1.55            # 镜头比第 0 圈走台面高多少
 const NEAR_HOLD := 1.9         # 黑暗涨到脚下那圈就停一下：镜头这圈的灯跟着电压往下沉、挣扎，然后才灭
 const PUSH_FRAME := 1.6        # 黑暗前沿涨近以后，那一圈最多占画面半高的 1/PUSH_FRAME（再近就拉回广角）
 const PUSH_FOV := 10.0         # 推长焦推到多少度
+# 升降机（scripts/shaft/lift_cab.gd）：开场时刚从第 1 圈走台下去，在画面右下方顺着导轨往下走；冰震时跟着晃、灯跟着电压沉；
+# 冰裂那一下安全器刹死（顿一下、在缓冲弹簧上弹两下，齿条上崩出火星），挂在那儿；黑暗涨过它的时候和那一圈的灯一起断电
+const LIFT_V := 4.5            # 往下走的速度（米/秒；20 公里单程一个多小时）
+const LIFT_Y0 := -12.5         # 开场时轿厢地板面的高度
+const LIFT_BRAKE_T := CRACK_T + 0.15
+const LIFT_DECEL := 9.0        # 安全器刹车的减速度
 
 var t := 0.0
 var _frozen := false
 var _rings: Array[Dictionary] = []   # {y, die, flick, lens, lights: [Light3D], base: [float]}
 var _events: Array = []              # [时刻, Callable]，按时刻排好
+var _kit: ShaftKit                  # 冰井的模型和材质（scripts/shaft/shaft_kit.gd，和下井共用）
 var _ice_mat: ShaderMaterial
-var _mat_steel: ShaderMaterial     # 冰井里钢件的材质变体（_build_materials）
-var _mat_rail: ShaderMaterial
-var _mat_lamp: ShaderMaterial
 var _wall_chunks: Array[Dictionary] = []   # 井壁的一段段：{node, top, bottom}
 var _cam: Camera3D
 var _cam_base: Transform3D
@@ -115,6 +105,8 @@ var _burst_at := Vector3.ZERO
 var _puff_tex: ImageTexture
 var _bench := Vector3(0, 0, -1)    # --bench：x = 开始量的时刻（微秒）；z < 0 = 不量
 var _bench_n := 0
+var _lift: LiftCab
+var _lift_die := 0.0               # 升降机断电的时刻
 
 
 func _ready() -> void:
@@ -128,10 +120,11 @@ func _ready() -> void:
 	RenderingServer.sub_surface_scattering_set_scale(0.06, 0.02)
 	_shadow_atlas(SHADOW_SUBDIV)
 	_build_environment()
-	_build_materials()
+	_kit = ShaftKit.new()
 	_build_wall()
 	_build_verticals()
 	_build_rings()
+	_build_lift()
 	_build_particles()
 	_build_steam()
 	_build_camera()
@@ -331,6 +324,7 @@ func _update(delta: float) -> void:
 		nsum += w
 	_env.ambient_light_energy = 0.03 * near / nsum
 	_hum.pitch_scale = 1.0 - 0.03 * minf(q, 1.0)
+	_update_lift(q)
 	# 掉下去的冰块（低重力，一点空气阻力）
 	if delta > 0.0 and not _frozen:
 		for c in _chunks:
@@ -367,12 +361,14 @@ func _schedule() -> void:
 		_play3d.bind("steam_burst", _burst_at, -2.0, 1.0, -5.0))
 	_at(CRACK_T + 9.5, _play2d.bind("steel_groan_2", -12.0, 0.75))
 	_at(CRACK_T + 14.0, func() -> void: _quake_dust.emitting = false)
+	# 升降机的安全器刹死：小齿轮在齿条上崩出一把火星
+	_at(LIFT_BRAKE_T, _sparks.bind(LiftCab.mount(R, 0.0, _lift_y(LIFT_BRAKE_T)) * Vector3(0.0, 0.7, LiftCab.OUT_Z + 0.12)))
 	for i in 9:
 		_at(CRACK_T + 0.3 + _rng.randf_range(0.0, 3.5), _drop_chunk)
 	# 每圈灯灭：接触器断开的声音，按距离晚到；最近几圈接线箱打火
 	for k in _rings.size():
 		var ring: Dictionary = _rings[k]
-		var jb := _pol(R - 0.42, JBOX_ANGLE, float(ring.y) + 1.3)
+		var jb := MeshKit.pol(R - 0.42, JBOX_ANGLE, float(ring.y) + 1.3)
 		var delay := jb.distance_to(_cam_base.origin) / SOUND_SPEED
 		_at(float(ring.die) + delay, _play_relay.bind(k, _rng.randf_range(0.96, 1.04)))
 		if k < 4:
@@ -383,6 +379,59 @@ func _schedule() -> void:
 	_at(end + 1.2, _play2d.bind("steel_groan_0", -16.0, 0.65))
 	_at(end + 4.0, _play2d.bind("ice_boom_1", -5.0, 0.7, -6.0))
 	_events.sort_custom(func(x: Array, y: Array) -> bool: return x[0] < y[0])
+
+
+# ---------------------------------------------------------------------------- 升降机
+func _build_lift() -> void:
+	_lift = LiftCab.new()
+	_lift.detail = 1
+	add_child(_lift)
+	# 断电的时刻：黑暗前沿涨过轿厢顶的时候（_front_dist 反过来算，和每圈的灯一样）
+	var dk := CAM_H - (_lift_y(LIFT_BRAKE_T + 5.0) + LiftCab.ROOF)
+	_lift_die = CASCADE_T + CASCADE_DUR * log(_d_bottom() / dk) / log(_d_bottom() / _d_near())
+
+
+## 轿厢地板面此刻的高度：匀速往下走 → 安全器刹死（减速 LIFT_DECEL）→ 在缓冲弹簧上弹两下
+func _lift_y(at: float) -> float:
+	if at < LIFT_BRAKE_T:
+		return LIFT_Y0 - LIFT_V * at
+	var stop := LIFT_V / LIFT_DECEL
+	var y0 := LIFT_Y0 - LIFT_V * LIFT_BRAKE_T
+	var tau := at - LIFT_BRAKE_T
+	if tau < stop:
+		return y0 - (LIFT_V * tau - 0.5 * LIFT_DECEL * tau * tau)
+	var u := tau - stop
+	return y0 - LIFT_V * stop * 0.5 - 0.06 * exp(-u / 0.45) * sin(TAU * 2.2 * u)
+
+
+## 轿厢里的电：跟着井里的电压沉、乱跳；刹死那一下猛地一暗（接触器被震开又合上）；断电前一阵乱闪
+func _lift_power(at: float) -> float:
+	if at >= _lift_die:
+		return 0.0
+	var p := 1.0
+	var q := _quake(at)
+	if q > 0.0:
+		p -= 0.22 * q * (0.5 + 0.5 * _shake.get_noise_2d(at * 6.0, 77.0))
+	var jolt := at - LIFT_BRAKE_T
+	if jolt > 0.0 and jolt < 0.7:
+		p *= 0.2 + 0.8 * smoothstep(0.08, 0.7, jolt)
+	if at >= _lift_die - 0.45:
+		var h := fposmod(sin(float(floori(at * 22.0)) * 12.9898 + 311.7) * 43758.5453, 1.0)
+		p *= 0.08 if h < 0.45 else 0.9
+	return clampf(p, 0.0, 1.6)
+
+
+func _update_lift(q: float) -> void:
+	var xf := LiftCab.mount(R, 0.0, _lift_y(t))
+	# 冰震时在导轨上抖；刹死以后往井心那边点一下头（导靴和导轨之间那点间隙）
+	var u := t - LIFT_BRAKE_T - LIFT_V / LIFT_DECEL
+	var nod := 0.01 * exp(-u / 0.5) * sin(TAU * 1.6 * u) if u > 0.0 else 0.0
+	var qq := minf(q, 1.0)
+	xf.basis = xf.basis * Basis.from_euler(Vector3(nod + _shake.get_noise_2d(t * 9.0, 41.0) * 0.004 * qq, 0.0,
+		_shake.get_noise_2d(t * 8.0, 43.0) * 0.003 * qq))
+	xf.origin += xf.basis.x * _shake.get_noise_2d(t * 11.0, 45.0) * 0.015 * qq
+	_lift.transform = xf
+	_lift.set_power(_lift_power(t))
 
 
 # ---------------------------------------------------------------------------- 声音
@@ -524,14 +573,14 @@ func _build_environment() -> void:
 func _build_camera() -> void:
 	# 站在第 0 圈走台上，扶着栏杆往井里探出身子，斜着往下看：脚边的栏杆和灯是虚的前景，
 	# 自己这一侧的井壁带着透视一路冲进下面的黑暗，一圈圈走台和灯排成往下缩的椭圆
-	# --cam=r,方位,高,看的点r,方位,高  调机位用（极坐标，和 _pol 一样）
+	# --cam=r,方位,高,看的点r,方位,高  调机位用（极坐标，和 MeshKit.pol 一样）
 	var c := [9.3, CAM_A, 1.55, 10.5, CAM_A + 2.25, -60.0]
 	if DebugArgs.has("cam"):
 		var parts := str(DebugArgs.get_arg("cam")).split(",")
 		for i in mini(parts.size(), 6):
 			c[i] = float(parts[i])
-	var pos := _pol(c[0], c[1], c[2])
-	var look := _pol(c[3], c[4], c[5])
+	var pos := MeshKit.pol(c[0], c[1], c[2])
+	var look := MeshKit.pol(c[3], c[4], c[5])
 	_cam = Camera3D.new()
 	_cam.fov = float(DebugArgs.get_arg("fov", str(FOV0)))
 	_cam.near = 0.03
@@ -539,8 +588,8 @@ func _build_camera() -> void:
 	if _lookdev:
 		# 看样机位：站在第 0 圈走台上，离井壁一米多，斜着看墙（调冰的材质用）
 		var off := float(DebugArgs.get_arg("lookdev", "0.12"))
-		pos = _pol(WALK_IN + 0.45, CAM_A, 1.65)
-		look = _pol(R, CAM_A + off, 0.9)
+		pos = MeshKit.pol(WALK_IN + 0.45, CAM_A, 1.65)
+		look = MeshKit.pol(R, CAM_A + off, 0.9)
 		_cam.fov = 62.0
 	elif DebugArgs.get_arg("dof") != "off":   # --dof=off：近景不虚（--cam 换到别的机位看细节用）
 		# 前景（栏杆、身边那盏灯）虚掉
@@ -690,10 +739,10 @@ func _drop_chunk() -> void:
 		var a := atan2(_cam_base.origin.z, _cam_base.origin.x) + PI + _rng.randf_range(-1.3, 1.3)
 		# 别从头顶那圈下来的爬梯的护笼里掉出来，也别落在这圈的检修口上悬着（挪开不再抽随机数，后面的随机序列不变）
 		for i in [RING_FIRST, RING_FIRST + 1]:
-			var la := _ladder_a(i)
+			var la := ShaftKit.ladder_a(i)
 			if absf(wrapf(a - la, -PI, PI)) < 0.1:
 				a = la + 0.1 * signf(wrapf(a - la, -PI, PI) + 1e-6)
-		node.position = _pol(R - 0.2, a, _rng.randf_range(3.5, 9.0))
+		node.position = MeshKit.pol(R - 0.2, a, _rng.randf_range(3.5, 9.0))
 		var inward := -Vector3(cos(a), 0, sin(a))
 		var push := _rng.randf_range(1.6, 2.2) if through else _rng.randf_range(0.05, 0.2)
 		c.vel = inward * push + Vector3(0, -_rng.randf_range(0.0, 0.4), 0)
@@ -809,11 +858,11 @@ func _build_steam() -> void:
 		wp.draw_pass_1 = q
 		wp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		# 贴着管子、在管子外侧（不然一半插在冰里）
-		wp.position = _pol(PIPE_R - 0.3, a, -20.0)
+		wp.position = MeshKit.pol(PIPE_R - 0.3, a, -20.0)
 		add_child(wp)
 	# 崩开的那根：冰裂把走台上面那道管卡扯开，一股汽横着往井里喷——正好在这圈灯照着的地方，底下是黑的走台
 	var ba: float = PIPE_ANGLES[BURST_PIPE]
-	_burst_at = _pol(PIPE_R - 0.09, ba, -float(BURST_RING) * RING_STEP + 0.5)
+	_burst_at = MeshKit.pol(PIPE_R - 0.09, ba, -float(BURST_RING) * RING_STEP + 0.5)
 	var inward := -Vector3(cos(ba), 0, sin(ba))
 	var cloud := FogVolume.new()
 	cloud.shape = RenderingServer.FOG_VOLUME_SHAPE_ELLIPSOID
@@ -946,68 +995,19 @@ func _puff_texture() -> ImageTexture:
 
 
 # ---------------------------------------------------------------------------- 材质
-## 冰井里的钢件都是这里的变体（不改共用的 .tres）：漆面不给金属度，掉漆露出红丹、再露出钢；朝上的面结一层霜
-func _build_materials() -> void:
-	var chip: Texture2D = load("res://assets/third_party/ambientcg/PaintedMetal005/PaintedMetal005_2K-JPG_Opacity.jpg")
-	var frost := Color(0.72, 0.78, 0.82)
-	_mat_steel = load("res://assets/materials/M_SteelOld.tres").duplicate()
-	_mat_steel.set_shader_parameter("paint_color", Color(0.3, 0.31, 0.3))
-	_mat_steel.set_shader_parameter("paint_metallic", 0.0)
-	_mat_steel.set_shader_parameter("paint_roughness", 0.62)
-	_mat_steel.set_shader_parameter("primer_amount", 0.4)
-	_mat_steel.set_shader_parameter("chip_tex", chip)
-	_mat_steel.set_shader_parameter("chip_amount", 0.45)
-	_mat_steel.set_shader_parameter("chip_scale", 3.0)
-	_mat_steel.set_shader_parameter("chip_cover", 0.35)
-	_mat_steel.set_shader_parameter("bare_rust", 0.8)
-	_mat_steel.set_shader_parameter("dust_color", frost)
-	_mat_steel.set_shader_parameter("dust_amount", 0.35)
-	_mat_steel.set_shader_parameter("floor_dirt", 0.0)
-	# 扶手：安全黄，旧了发脏；顶上被手磨出钢来（顶点色 R 按朝上的程度给），一段段磕掉漆
-	_mat_rail = load("res://assets/materials/M_Rail.tres").duplicate()
-	_mat_rail.set_shader_parameter("paint_color", Color(0.72, 0.52, 0.08))
-	_mat_rail.set_shader_parameter("paint_metallic", 0.0)
-	_mat_rail.set_shader_parameter("paint_roughness", 0.55)
-	_mat_rail.set_shader_parameter("paint_variation", 0.25)
-	_mat_rail.set_shader_parameter("edge_wear", 1.0)
-	_mat_rail.set_shader_parameter("primer_amount", 0.3)
-	_mat_rail.set_shader_parameter("chip_tex", chip)
-	_mat_rail.set_shader_parameter("chip_amount", 0.35)
-	_mat_rail.set_shader_parameter("chip_scale", 4.0)
-	_mat_rail.set_shader_parameter("chip_cover", 0.3)
-	_mat_rail.set_shader_parameter("bare_rust", 0.6)
-	_mat_rail.set_shader_parameter("bare_roughness", 0.3)
-	_mat_rail.set_shader_parameter("dust_color", frost)
-	_mat_rail.set_shader_parameter("dust_amount", 0.2)
-	_mat_rail.set_shader_parameter("floor_dirt", 0.0)
-	# 灯座：铸铝刷的灰绿漆
-	_mat_lamp = _mat_steel.duplicate()
-	_mat_lamp.set_shader_parameter("paint_color", Color(0.2, 0.24, 0.21))
-	_mat_lamp.set_shader_parameter("chip_amount", 0.3)
-	_mat_lamp.set_shader_parameter("dust_amount", 0.2)
-
-
 # ---------------------------------------------------------------------------- 冰壁
 func _build_wall() -> void:
-	_ice_mat = ShaderMaterial.new()
-	_ice_mat.shader = preload("res://assets/shaders/ice_wall.gdshader")
-	_ice_mat.set_shader_parameter("radius", R)
-	_ice_mat.set_shader_parameter("lift", LIFT)
-	# 冰里的东西用实拍的湖冰（ambientCG，CC0；tools/fetch_ambientcg.sh --ids Ice002,Ice004）
-	for pair in [["ice_a", "Ice002"], ["ice_b", "Ice004"]]:
-		var path := "res://assets/third_party/ambientcg/%s/%s_2K-JPG_Color.jpg" % [pair[1], pair[1]]
-		if ResourceLoader.exists(path):
-			_ice_mat.set_shader_parameter(pair[0], load(path))
-	if _ice_mat.get_shader_parameter("ice_b") == null:
-		_ice_mat.set_shader_parameter("ice_b", _ice_mat.get_shader_parameter("ice_a"))
-	_ice_mat.set_shader_parameter("pipe_angles", Vector3(PIPE_ANGLES[0], PIPE_ANGLES[1], PIPE_ANGLES[2]))
-	# 每圈的深度标记：模板字的距离场（tools/gen_stencil_glyphs.py），圈号、深度由着色器按每段井壁的 ring_y 算
-	_ice_mat.set_shader_parameter("stencil_glyphs", preload("res://assets/textures/stencil_glyphs.png"))
-	_ice_mat.set_shader_parameter("stencil_angles", Vector4(LABEL_ANGLES[0], LABEL_ANGLES[1], LABEL_ANGLES[2], LABEL_ANGLES[3]))
-	_ice_mat.set_shader_parameter("ring_step", RING_STEP)
+	_ice_mat = _kit.ice_mat
+	# 行距：镜头附近 25 厘米（节缝的台阶、贴着看的起伏），往下越来越疏
+	var ys: Array[float] = []
+	var y := WALL_TOP
+	while y > -DEPTH:
+		ys.append(y)
+		y -= 0.25 if y > -64.0 else (1.0 if y > -200.0 else 2.5)
+	ys.append(-DEPTH)
 	# 井壁在两圈走台正中间切开，一段 12 米：引擎按段剔除，每盏投影灯只画它照得到的那一两段。
 	# 冰壁不投影：灯都在井里，冰壁只会挡住它背后，那里什么都没有
-	for chunk in _wall_meshes():
+	for chunk in _kit.wall_chunks(ys, Vector2i(RING_FIRST, RING_LAST)):
 		var mi := MeshInstance3D.new()
 		mi.mesh = chunk.mesh
 		mi.material_override = _ice_mat
@@ -1016,143 +1016,11 @@ func _build_wall() -> void:
 		_wall_chunks.append({"node": mi, "top": chunk.top, "bottom": chunk.bottom})
 
 
-## 冰壁的半径起伏（热水钻出来的井：大块的鼓包凹坑 + 一圈圈的细波纹）
-func _wall_r(n1: FastNoiseLite, n2: FastNoiseLite, a: float, y: float) -> float:
-	var c := cos(a) * R
-	var s := sin(a) * R
-	# 每节掘进的半径差一点（刀盘每次重新对位的误差），节与节之间就是一道台阶
-	var step := (fposmod(sin(floorf(y / LIFT) * 91.7) * 4375.85, 1.0) - 0.5) * 0.025
-	var bump := 0.12 * n1.get_noise_3d(c, y * 0.6, s) + 0.03 * n2.get_noise_3d(c * 3.0, y * 2.0, s * 3.0) + step
-	# 走台的托梁、斜撑锚进冰里的那一圈（走台面上 0.45 米到下面 1.45 米）：装的时候把冰壁修平了，锚板贴得严
-	var rel := y - roundf(y / RING_STEP) * RING_STEP
-	var band := smoothstep(-1.95, -1.45, rel) * (1.0 - smoothstep(0.45, 0.95, rel))
-	# 爬梯背后竖着一条也修平了（支架的锚板贴得严）：这个高度是哪圈下去的那段梯子
-	var li := floori(-y / RING_STEP)
-	if li >= RING_FIRST and li < RING_LAST:
-		band = maxf(band, 1.0 - smoothstep(0.45, 0.85, absf(wrapf(a - _ladder_a(li), -PI, PI)) * R))
-	var r := R + bump * (1.0 - band)
-	# 加热管把贴着它的冰化开又冻上：沿着管子一道浅槽（光滑透亮，见着色器的 wet）
-	for pa in PIPE_ANGLES:
-		var d := absf(wrapf(a - pa, -PI, PI)) * R
-		r += 0.15 * exp(-d * d / 0.09)
-	return r
-
-
-## 冰壁的网格，按段切开（见 _build_wall）：[{mesh, top, bottom}]
-func _wall_meshes() -> Array[Dictionary]:
-	var n1 := FastNoiseLite.new()
-	n1.seed = 7
-	n1.frequency = 0.3
-	n1.fractal_octaves = 3
-	var n2 := FastNoiseLite.new()
-	n2.seed = 11
-	n2.frequency = 0.5
-	var cols := 360
-	# 行距：镜头附近 25 厘米（节缝的台阶、贴着看的起伏），往下越来越疏
-	var ys: Array[float] = []
-	var y := WALL_TOP
-	while y > -DEPTH:
-		ys.append(y)
-		y -= 0.25 if y > -64.0 else (1.0 if y > -200.0 else 2.5)
-	ys.append(-DEPTH)
-	var w := cols + 1
-	var pos: Array[Vector3] = []
-	for yy in ys:
-		for c in w:
-			var a := TAU * c / cols
-			pos.append(_pol(_wall_r(n1, n2, a, yy), a, yy))
-	var nrm: Array[Vector3] = []
-	for r in ys.size():
-		for c in w:
-			var p := pos[r * w + c]
-			var pa := pos[r * w + (c + 1) % w] if c < cols else pos[r * w + 1]
-			var pb := pos[mini(r + 1, ys.size() - 1) * w + c]
-			var pc := pos[maxi(r - 1, 0) * w + c]
-			var n := (pa - p).cross(pc - pb).normalized()
-			if n.dot(-Vector3(p.x, 0, p.z)) < 0.0:
-				n = -n
-			nrm.append(n)
-	var out: Array[Dictionary] = []
-	var r0 := 0
-	while r0 < ys.size() - 1:
-		# 往下第一道切口（两圈走台正中间：走台面上方 6 米）
-		var cut := floorf((ys[r0] - 6.0 - 0.001) / RING_STEP) * RING_STEP + 6.0
-		var r1 := r0 + 1
-		while r1 < ys.size() - 1 and ys[r1] > cut + 0.001:
-			r1 += 1
-		var st := SurfaceTool.new()
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		st.set_color(Color(0, 0, 0, 1))
-		for r in range(r0, r1 + 1):
-			for c in w:
-				st.set_normal(nrm[r * w + c])
-				st.add_vertex(pos[r * w + c])
-		var sub := pos.slice(r0 * w, (r1 + 1) * w)
-		for r in r1 - r0:
-			for c in cols:
-				var i00 := r * w + c
-				_index_tri(st, sub, i00, i00 + w, i00 + w + 1)
-				_index_tri(st, sub, i00, i00 + w + 1, i00 + 1)
-		out.append({"mesh": st.commit(), "top": ys[r0], "bottom": ys[r1]})
-		r0 = r1
-	return out
-
-
-## 朝着井轴的三角形（Godot 的正面是顺时针：(b-a)×(c-a) 要背着视线，也就是背着井轴）
-func _index_tri(st: SurfaceTool, pos: Array[Vector3], a: int, b: int, c: int) -> void:
-	var n := (pos[b] - pos[a]).cross(pos[c] - pos[a])
-	var inward := -Vector3(pos[a].x, 0, pos[a].z)
-	if n.dot(inward) > 0.0:
-		var tmp := b
-		b = c
-		c = tmp
-	st.add_index(a)
-	st.add_index(b)
-	st.add_index(c)
-
-
 # ---------------------------------------------------------------------------- 竖着贯穿整口井的：加热管、电梯导轨、电缆桥架
-## （管子的法兰、导轨的支架这些一段段的零件放在每圈走台的网格里，跟着走台一起按圈剔除，见 _ring_parts）
+## 竖着贯穿整口井的：加热管、升降机导轨和齿条、滑触线、电缆桥架（ShaftKit.verticals）
 func _build_verticals() -> void:
-	var y0 := WALL_TOP
-	var y1 := -DEPTH
-	var pipes := SurfaceTool.new()
-	pipes.begin(Mesh.PRIMITIVE_TRIANGLES)
-	pipes.set_color(Color(0.15, 0.2, 0, 1))
-	for a in PIPE_ANGLES:
-		_cyl(pipes, _pol(PIPE_R, a, y0), _pol(PIPE_R, a, y1), 0.075, 14, false)
-	_add_mesh(pipes.commit(), load("res://assets/materials/M_PipeRed.tres"))
-	var steel := SurfaceTool.new()
-	steel.begin(Mesh.PRIMITIVE_TRIANGLES)
-	steel.set_color(Color(0.3, 0.25, 0, 1))
-	var length := y0 - y1
-	var mid := (y0 + y1) * 0.5
-	# 电梯导轨的安装底板：整条井壁上一道钢板（走台在这里断开，从上往下看缺口里露出的是钢板，不是被照亮的冰）
-	_box(steel, Transform3D(_radial_basis(0.0), _pol(R - 0.16, 0.0, mid)), Vector3(1.7, length, 0.02))
-	# 电梯的两根 T 形导轨（方位角 0 两侧）
-	for side in [-1.0, 1.0]:
-		var a: float = side * 0.05
-		var b := _radial_basis(a)
-		_box(steel, Transform3D(b, _pol(R - 0.2, a, mid)), Vector3(0.018, length, 0.11))
-		_box(steel, Transform3D(b, _pol(R - 0.135, a, mid)), Vector3(0.12, length, 0.018))
-	# 电缆桥架：背板 + 两条侧边
-	var tb := _radial_basis(TRAY_ANGLE)
-	_box(steel, Transform3D(tb, _pol(R - 0.07, TRAY_ANGLE, mid)), Vector3(0.56, length, 0.012))
-	for side in [-1.0, 1.0]:
-		_box(steel, Transform3D(tb, _pol(R - 0.12, TRAY_ANGLE, mid) + tb.x * 0.28 * side), Vector3(0.012, length, 0.1))
-	_add_mesh(steel.commit(), _mat_steel)
-	# 桥架里的电缆（黑、橙两种）
-	for mat in ["res://assets/materials/M_CableBlack.tres", "res://assets/materials/M_CableOrange.tres"]:
-		var cab := SurfaceTool.new()
-		cab.begin(Mesh.PRIMITIVE_TRIANGLES)
-		for k in 6:
-			if (k % 3 == 1) != mat.ends_with("Orange.tres"):
-				continue
-			var off := -0.22 + k * 0.088
-			var rr := 0.026 + 0.008 * (k % 2)
-			var p := _pol(R - 0.11, TRAY_ANGLE, 0.0) + tb.x * off
-			_cyl(cab, Vector3(p.x, y0, p.z), Vector3(p.x, y1, p.z), rr, 8, false)
-		_add_mesh(cab.commit(), load(mat))
+	for m in _kit.verticals(WALL_TOP, -DEPTH):
+		_add_mesh(m[0], m[1])
 
 
 func _add_mesh(mesh: Mesh, mat: Material) -> MeshInstance3D:
@@ -1172,54 +1040,21 @@ func _build_rings() -> void:
 	var ys: Array[float] = []
 	for i in range(RING_FIRST, RING_LAST + 1):
 		ys.append(-i * RING_STEP)
-	# 格栅、扶手每档细节一套；钢结构每档细节 × 检修口在哪（两个方位交替，最底下那圈没有）一套：
-	# 检修口那里外圈箱形梁断开、加一圈口框
-	var grates: Array = [_ring_grating_rail(0), _ring_grating_rail(1), _ring_grating_rail(2)]
-	var steels := {}
-	var ladders: Array[ArrayMesh] = [_ladder_mesh(0), _ladder_mesh(1), _ladder_mesh(2)]
-	var fixtures: Array[ArrayMesh] = [_fixture_mesh(true), _fixture_mesh(false)]
-	var wash_mesh := _wash_mesh()
-	var globe_mesh: Array[SphereMesh] = []
-	for detail in [true, false]:
-		var g := SphereMesh.new()
-		g.radius = 0.075
-		g.height = 0.17
-		g.radial_segments = 16 if detail else 8
-		g.rings = 8 if detail else 4
-		globe_mesh.append(g)
-	var spacing := (TAU - 2.0 * GAP - 1.2 / R) / LAMPS
-	var lamp_a0 := GAP + 0.6 / R
-	var grate_mat := ShaderMaterial.new()
-	grate_mat.shader = preload("res://assets/shaders/bar_grating.gdshader")
-	grate_mat.set_shader_parameter("radius", R)
-	grate_mat.set_shader_parameter("hatch_w", HATCH_W)
-	grate_mat.set_shader_parameter("hatch_in", HATCH_IN)
-	for mat in [grate_mat, _ice_mat]:
-		mat.set_shader_parameter("lamp_r", LAMP_R)
-		mat.set_shader_parameter("lamp_h", LAMP_H)
-		mat.set_shader_parameter("lamp_start", lamp_a0)
-		mat.set_shader_parameter("lamp_step", spacing)
-		mat.set_shader_parameter("lamp_count", float(LAMPS))
-		mat.set_shader_parameter("lamp_color", LAMP_COLOR)
-	var lens_mat := ShaderMaterial.new()
-	lens_mat.shader = preload("res://assets/shaders/lamp_lens.gdshader")
-	lens_mat.set_shader_parameter("lit_color", LAMP_COLOR)
-	lens_mat.set_shader_parameter("cool_color", LAMP_COOL)
+	# 格栅、扶手、爬梯、灯具每档细节一套；钢结构每档细节 × 检修口在哪（两个方位交替，最底下那圈没有）一套（ShaftKit）
+	var spacing := ShaftKit.lamp_spacing()
+	var lamp_a0 := ShaftKit.lamp_a0()
 	var near_lit := int(DebugArgs.get_arg("near-lit", str(NEAR_LIT)))
 	var shadows := DebugArgs.get_arg("shadows") != "off"
 	for k in ys.size():
 		var y := ys[k]
 		var lod := 0 if k <= 2 else (1 if k <= 10 else 2)
 		# 这圈的检修口（爬梯从这里下到下一圈）
-		var hatch := _ladder_a(k + RING_FIRST) if k < ys.size() - 1 else -1.0
-		var skey := "%d/%.3f" % [lod, hatch]
-		if not steels.has(skey):
-			steels[skey] = _ring_steel(lod, hatch)
+		var hatch := ShaftKit.ladder_a(k + RING_FIRST) if k < ys.size() - 1 else -1.0
 		var nodes: Array[MeshInstance3D] = []
 		for i in 3:
 			var mi := MeshInstance3D.new()
-			mi.mesh = [grates[lod][0], steels[skey], grates[lod][1]][i]
-			mi.material_override = [grate_mat, _mat_steel, _mat_rail][i]
+			mi.mesh = [_kit.grates[lod][0], _kit.steel(lod, hatch), _kit.grates[lod][1]][i]
+			mi.material_override = [_kit.grate_mat, _kit.mat_steel, _kit.mat_rail][i]
 			mi.position = Vector3(0, y, 0)
 			add_child(mi)
 			nodes.append(mi)
@@ -1227,7 +1062,7 @@ func _build_rings() -> void:
 			nodes[0].set_instance_shader_parameter("hatch_a", hatch)
 			# 这圈下到下一圈的爬梯：单独一个节点（一样按圈剔除、按档细节），网格是方位角 0 处的，转过去
 			var lad := MeshInstance3D.new()
-			lad.mesh = ladders[lod]
+			lad.mesh = _kit.ladders[lod]
 			lad.transform = Transform3D(Basis(Vector3.UP, -hatch), Vector3(0, y, 0))
 			add_child(lad)
 		# 从井底往上灭：黑暗前沿涨过哪一圈，那一圈就灭（_front_dist 反过来算）；涨到脚下那圈（k = 2）停一下，
@@ -1246,17 +1081,17 @@ func _build_rings() -> void:
 		var ring_off := _rng.randf()
 		var fix_mm := MultiMesh.new()
 		fix_mm.transform_format = MultiMesh.TRANSFORM_3D
-		fix_mm.mesh = fixtures[0 if k <= 3 else 1]
+		fix_mm.mesh = _kit.fixtures[0 if k <= 3 else 1]
 		fix_mm.instance_count = LAMPS
 		var wash_mm := MultiMesh.new()
 		wash_mm.transform_format = MultiMesh.TRANSFORM_3D
-		wash_mm.mesh = wash_mesh
+		wash_mm.mesh = _kit.wash
 		wash_mm.instance_count = LAMPS / 2
 		# 灯罩：每个实例的自定义数据 r = 亮度、g = 余辉、b = 色温（lamp_lens.gdshader）
 		var globes := MultiMesh.new()
 		globes.transform_format = MultiMesh.TRANSFORM_3D
 		globes.use_custom_data = true
-		globes.mesh = globe_mesh[0 if k <= 3 else 1]
+		globes.mesh = _kit.globes[0 if k <= 3 else 1]
 		globes.instance_count = LAMPS
 		var lamps: Array[Dictionary] = []
 		for j in LAMPS:
@@ -1264,8 +1099,8 @@ func _build_rings() -> void:
 			var rot := Basis(Vector3.UP, -la)
 			fix_mm.set_instance_transform(j, Transform3D(rot, Vector3(0, y, 0)))
 			if j % 2 == 0:
-				wash_mm.set_instance_transform(j / 2, Transform3D(Basis(Vector3.UP, -_wash_a(la, hatch)), Vector3(0, y, 0)))
-			var p := _pol(LAMP_R, la, LAMP_H + y)
+				wash_mm.set_instance_transform(j / 2, Transform3D(Basis(Vector3.UP, -ShaftKit.wash_a(la, hatch)), Vector3(0, y, 0)))
+			var p := MeshKit.pol(LAMP_R, la, LAMP_H + y)
 			# 老设施：少数几盏早就坏了（罩子碎了，灯座沿上只剩一圈碴子），几盏接触不良一直在跳，换过的几盏是冷白的 LED
 			var dead := _rng.randf() < 0.05 and k != 1
 			var faulty := not dead and _rng.randf() < 0.04
@@ -1281,14 +1116,14 @@ func _build_rings() -> void:
 		for mm_ in [fix_mm, wash_mm]:
 			var mmi := MultiMeshInstance3D.new()
 			mmi.multimesh = mm_
-			mmi.material_override = _mat_lamp
+			mmi.material_override = _kit.mat_lamp
 			# 灯具不投影：照走台的那盏光从罩子中心发出来，灯座就在它正下方，投影的话脚下整片都被灯座挡黑
 			if mm_ == fix_mm:
 				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(mmi)
 		var gi := MultiMeshInstance3D.new()
 		gi.multimesh = globes
-		gi.material_override = lens_mat
+		gi.material_override = _kit.lens_mat
 		gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(gi)
 		var lights: Array[Light3D] = []
@@ -1305,11 +1140,11 @@ func _build_rings() -> void:
 				if j % 2 == 0:
 					# 洗墙灯：朝下、略往井壁偏，光贴着冰面扫下去——切削纹、台阶、崩口全靠这道掠射光显出来。
 					# 挂在两根斜撑正中间（不然斜撑在冰上拖出一道长影子）；光斑边缘软（冰把光散开），每盏亮度、朝向差一点
-					var wa := _wash_a(la, hatch)
+					var wa := ShaftKit.wash_a(la, hatch)
 					var wr := Vector3(cos(wa), 0, sin(wa))
 					var wl := SpotLight3D.new()
-					var wdir := (wr * (0.22 + 0.06 * _hash(k, j, 1)) + Vector3.DOWN).normalized()
-					wl.transform = Transform3D(Basis.looking_at(wdir, wr), _pol(R - 0.55, wa, y - 0.58))
+					var wdir := (wr * (0.22 + 0.06 * ShaftKit.hash3(k, j, 1)) + Vector3.DOWN).normalized()
+					wl.transform = Transform3D(Basis.looking_at(wdir, wr), MeshKit.pol(R - 0.55, wa, y - 0.58))
 					wl.light_color = col
 					wl.spot_range = 15.0
 					wl.spot_angle = 58.0
@@ -1321,7 +1156,7 @@ func _build_rings() -> void:
 					add_child(wl)
 					lights.append(wl)
 					lamp_of.append(j)
-					base.append(7.0 * (0.8 + 0.35 * _hash(k, j, 2)))   # 光锥放宽、边缘放软以后，总光量和原来差不多
+					base.append(7.0 * (0.8 + 0.35 * ShaftKit.hash3(k, j, 2)))   # 光锥放宽、边缘放软以后，总光量和原来差不多
 				if k <= near_lit and j % 2 == 1:
 					# 灯罩往下照：只管脚下这一片格栅、扶手、踢脚板（射程短：不然光穿过格栅的孔，把底下的冰壁也照亮了）；
 					# 身后冰上的那圈光在 ice_wall.gdshader 里算
@@ -1360,11 +1195,11 @@ func _build_rings() -> void:
 		elif k <= 16:
 			# 中间几圈：每四盏灯一个洗墙灯，井壁上照出一块一块的光，两圈之间是暗的
 			for j in range(2, LAMPS, 4):   # 离电梯导轨那道缺口远一点（不然缺口两头的走台断面被照成一串亮点）
-				var la := _off_hatch(lamps[j].a, hatch)
+				var la := ShaftKit.off_hatch(lamps[j].a, hatch)
 				var radial := Vector3(cos(la), 0, sin(la))
 				var wl := SpotLight3D.new()
 				var wdir := (radial * 0.3 + Vector3.DOWN).normalized()
-				wl.transform = Transform3D(Basis.looking_at(wdir, radial), _pol(R - 0.7, la, y - 0.58))
+				wl.transform = Transform3D(Basis.looking_at(wdir, radial), MeshKit.pol(R - 0.7, la, y - 0.58))
 				wl.light_color = LAMP_COLOR
 				wl.spot_range = 16.0
 				wl.spot_angle = 60.0
@@ -1378,9 +1213,9 @@ func _build_rings() -> void:
 		else:
 			# 远处：每圈三盏贴着井壁的全向灯，远看是一圈光带
 			for j in [4, 12, 20]:
-				var la := _off_hatch(lamps[j].a, hatch)
+				var la := ShaftKit.off_hatch(lamps[j].a, hatch)
 				var ol := OmniLight3D.new()
-				ol.position = _pol(R - 1.1, la, y - 2.0)
+				ol.position = MeshKit.pol(R - 1.1, la, y - 2.0)
 				ol.light_color = LAMP_COLOR
 				ol.omni_range = 16.0
 				ol.omni_attenuation = 1.2
@@ -1401,502 +1236,6 @@ func _build_rings() -> void:
 				wall.set_instance_shader_parameter("ring_phase", ring_off)
 		_rings.append({"y": y, "die": die, "lamps": lamps, "lights": lights, "lamp_of": lamp_of, "base": base, "avg": 1.0,
 			"globes": globes, "grating": nodes[0], "pool": pool, "wall": wall})
-
-
-## 离方位角 a 最近的两根托梁（斜撑）正中间的方位角
-func _between_joists(a: float) -> float:
-	var a0 := GAP + 0.6 / R
-	var step := 1.3 / R
-	return a0 + (floorf((a - a0) / step) + 0.5) * step
-
-
-## 第 m 格（第 m、m+1 根托梁中间）正中的方位角
-func _bay_a(m: int) -> float:
-	return GAP + 0.6 / R + (m + 0.5) * 1.3 / R
-
-
-## 第 i 圈下到第 i+1 圈的爬梯（也就是第 i 圈的检修口）在哪个方位角：偶数圈、奇数圈交替
-func _ladder_a(i: int) -> float:
-	return _bay_a(LADDER_BAYS[posmod(i, 2)])
-
-
-## 方位角 la 那盏灯底下的洗墙灯挂在哪：两根斜撑正中间。离这圈的检修口不到两格的挪到隔两格的地方：
-## 爬梯从那一格下去；洗墙灯照在走台底下冰上的那块最亮的光斑平时被走台挡着，从检修口露出来就是远处一块块刺眼的白方块
-func _wash_a(la: float, hatch: float) -> float:
-	var wa := _between_joists(la)
-	if hatch >= 0.0:
-		var d := wrapf(wa - hatch, -PI, PI) / (1.3 / R)   # 隔几格
-		if absf(d) < 1.5:
-			wa = hatch + 2.6 / R * (signf(d) if absf(d) > 0.5 else signf(wrapf(la - hatch, -PI, PI) + 1e-6))
-	return wa
-
-
-## 远处几圈走台底下那几盏代表一片灯的光源（不在格子里）：离检修口近的也挪开两格（同上，不然从检修口露出亮斑）
-func _off_hatch(a: float, hatch: float) -> float:
-	var d := wrapf(a - hatch, -PI, PI)
-	if hatch >= 0.0 and absf(d) * R < 2.0:
-		return hatch + 2.6 / R * signf(d + 1e-6)
-	return a
-
-
-## 0~1 的伪随机数（按圈号、灯号；不动 _rng，免得后面的随机序列全变，灯的排布跟着变）
-func _hash(k: int, j: int, salt: int) -> float:
-	return fposmod(sin(float(k) * 12.9898 + float(j) * 78.233 + float(salt) * 37.719) * 43758.5453, 1.0)
-
-
-## 一圈走台的格栅、扶手（lod 0 最细）：[格栅, 扶手]。检修口在格栅着色器里切（hatch_a）
-func _ring_grating_rail(lod: int) -> Array[ArrayMesh]:
-	var segs: int = [330, 120, 60][lod]
-	var sides: int = [8, 6, 5][lod]
-	var grating := SurfaceTool.new()
-	grating.begin(Mesh.PRIMITIVE_TRIANGLES)
-	grating.set_color(Color(0.06, 0.2, 0, 1))
-	_arc_box(grating, WALK_IN, WALK_OUT, -0.045, 0.0, GAP, TAU - GAP, segs)
-	var rail := SurfaceTool.new()
-	rail.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_arc_tube(rail, RAIL_R, RAIL_TOP, GAP, TAU - GAP, 0.026, segs, sides)
-	_arc_tube(rail, RAIL_R, 0.56, GAP, TAU - GAP, 0.019, segs, sides)
-	return [grating.commit(), rail.commit()]
-
-
-## 一圈走台的钢结构（lod 0 最细）。也放这一圈上下几米里一段段的零件（管子的法兰、导轨的支架）。
-## hatch >= 0：这个方位角有检修口（爬梯从这里下到下一圈）：外圈箱形梁在口子两边断开，补口框和两根短梁（_hatch_frame）
-func _ring_steel(lod: int, hatch: float) -> ArrayMesh:
-	var segs: int = [330, 120, 60][lod]
-	var sides: int = [8, 6, 5][lod]
-	var steel := SurfaceTool.new()
-	steel.begin(Mesh.PRIMITIVE_TRIANGLES)
-	steel.set_color(Color(0.12, 0.25, 0, 1))
-	# 走台内沿的边梁是槽钢：腹板往上伸出 10 厘米当踢脚板，底下一道翼缘；里圈、外圈（靠井壁）各一道箱形梁
-	_arc_box(steel, WALK_IN - 0.006, WALK_IN, -0.2, 0.1, GAP, TAU - GAP, segs)
-	_arc_box(steel, WALK_IN - 0.006, WALK_IN + 0.07, -0.212, -0.2, GAP, TAU - GAP, segs)
-	_arc_box(steel, WALK_IN + 0.02, WALK_IN + 0.16, -0.36, -0.045, GAP, TAU - GAP, segs)
-	if hatch < 0.0:
-		_arc_box(steel, R - 0.32, R - 0.18, -0.36, -0.045, GAP, TAU - GAP, segs)
-	else:
-		# 断到口子两边短梁的腹板上
-		var cut := (HATCH_W + 0.036) / (R - 0.25)
-		var span := TAU - 2.0 * GAP
-		_arc_box(steel, R - 0.32, R - 0.18, -0.36, -0.045, GAP, hatch - cut, maxi(4, roundi(segs * (hatch - cut - GAP) / span)))
-		_arc_box(steel, R - 0.32, R - 0.18, -0.36, -0.045, hatch + cut, TAU - GAP,
-			maxi(4, roundi(segs * (TAU - GAP - hatch - cut) / span)))
-		_hatch_frame(steel, lod, hatch)
-	# 径向托梁（每 1.3 米一根，工字钢，一头插进冰里，根上一块锚板）+ 斜撑（三角托架：从托梁里头那端斜着撑到
-	# 下面的井壁上，底下也压一块锚板）。锚板背面正好贴着冰：那一圈冰壁修平了（_wall_r）
-	var a := GAP + 0.6 / R
-	while a < TAU - GAP:
-		var b := _radial_basis(a)
-		var r0 := WALK_IN + 0.02
-		var r1 := R + 0.25
-		var mid := _pol((r0 + r1) * 0.5, a, 0.0)
-		_box(steel, Transform3D(b, mid + Vector3(0, -0.051, 0)), Vector3(0.1, 0.012, r1 - r0))
-		_box(steel, Transform3D(b, mid + Vector3(0, -0.2, 0)), Vector3(0.008, 0.286, r1 - r0))
-		_box(steel, Transform3D(b, mid + Vector3(0, -0.349, 0)), Vector3(0.1, 0.012, r1 - r0))
-		_box(steel, Transform3D(b, _pol(R - 0.012, a, -0.2)), Vector3(0.24, 0.5, 0.024))
-		if lod < 2:
-			_beam(steel, _pol(WALK_IN + 0.32, a, -0.355), _pol(R - 0.03, a, -1.2), Vector2(0.06, 0.06), b.x)
-			_box(steel, Transform3D(b, _pol(R - 0.012, a, -1.22)), Vector3(0.2, 0.32, 0.024))
-		a += 1.3 / R
-	# 栏杆立柱（每 1.5 米一根），底下一块法兰压在格栅边上
-	a = GAP + 0.03 / R
-	while a < TAU - GAP + 0.01:
-		_cyl(steel, _pol(RAIL_R, a, 0.0), _pol(RAIL_R, a, RAIL_TOP), 0.021, sides, true)
-		if lod == 0:
-			_box(steel, Transform3D(_radial_basis(a), _pol(RAIL_R, a, 0.006)), Vector3(0.11, 0.012, 0.09))
-		a += 1.5 / R
-	# 管卡（从走台外沿伸过去抱住加热管）、桥架卡子、接线箱（灯的电从这里接，架在走台外沿的角钢上，离冰面留一点）
-	for pa in PIPE_ANGLES:
-		_box(steel, Transform3D(_radial_basis(pa), _pol(PIPE_R - 0.08, pa, 0.45)), Vector3(0.22, 0.06, 0.26))
-	_box(steel, Transform3D(_radial_basis(TRAY_ANGLE), _pol(R - 0.12, TRAY_ANGLE, 0.6)), Vector3(0.62, 0.05, 0.14))
-	_box(steel, Transform3D(_radial_basis(JBOX_ANGLE), _pol(R - 0.3, JBOX_ANGLE, 1.3)), Vector3(0.42, 0.55, 0.2))
-	_box(steel, Transform3D(_radial_basis(JBOX_ANGLE), _pol(R - 0.3, JBOX_ANGLE, 0.5)), Vector3(0.05, 1.0, 0.05))
-	# 竖着的东西上一段段的零件：加热管每 6 米一道法兰（这圈上下各 3 米），电梯导轨每 3 米一道支架
-	if lod < 2:
-		for dy in [3.0, -3.0]:
-			for pa in PIPE_ANGLES:
-				_cyl(steel, _pol(PIPE_R, pa, dy - 0.025), _pol(PIPE_R, pa, dy + 0.025), 0.11, 14 if lod == 0 else 8, true)
-		for dy in [4.5, 1.5, -1.5, -4.5]:
-			for side in [-1.0, 1.0]:
-				var ga: float = side * 0.05
-				_box(steel, Transform3D(_radial_basis(ga), _pol(R - 0.2, ga, dy)), Vector3(0.16, 0.08, 0.1))
-	return steel.commit()
-
-
-## 检修口的口框（方位角 hatch；口子径向从 HATCH_IN 到走台外沿，切向 ±HATCH_W）：一圈 L50×50×6 角钢，竖肢朝着口子、
-## 顶面和格栅齐平，平肢伸到格栅底下托着切断的扁钢。近处还有两边的短梁（槽钢）：从里圈箱形梁伸进冰里，
-## 托住口框、接住断开的外圈箱形梁，根上一块锚板
-func _hatch_frame(st: SurfaceTool, lod: int, hatch: float) -> void:
-	var hb := Basis(Vector3.UP, -hatch)   # 局部 x 径向朝外、z 切向（方位角 0 处），转到 hatch
-	var box := func(c: Vector3, sz: Vector3) -> void: _box(st, Transform3D(hb, hb * c), sz)
-	var x0 := HATCH_IN
-	var x1 := WALK_OUT
-	var w := HATCH_W
-	var t := 0.006
-	var xm := (x0 + x1) * 0.5
-	# 竖肢（高 51 毫米，顶面齐着格栅）
-	box.call(Vector3(x0 - t * 0.5, -0.0255, 0.0), Vector3(t, 0.051, 2.0 * w + 2.0 * t))
-	box.call(Vector3(x1 + t * 0.5, -0.0255, 0.0), Vector3(t, 0.051, 2.0 * w + 2.0 * t))
-	for s in [-1.0, 1.0]:
-		box.call(Vector3(xm, -0.0255, s * (w + t * 0.5)), Vector3(x1 - x0 + 2.0 * t, 0.051, t))
-	if lod == 2:
-		return
-	# 平肢（在格栅底下，往口子外面伸）
-	box.call(Vector3(x0 - t - 0.025, -0.048, 0.0), Vector3(0.05, t, 2.0 * w + 2.0 * t))
-	box.call(Vector3(x1 + t + 0.022, -0.048, 0.0), Vector3(0.044, t, 2.0 * w + 2.0 * t))
-	for s in [-1.0, 1.0]:
-		box.call(Vector3(xm, -0.048, s * (w + t + 0.025)), Vector3(x1 - x0 + 2.0 * t, t, 0.05))
-		# 短梁：腹板贴着口框外侧，上下翼缘朝外
-		var xa := WALK_IN + 0.16
-		var xb := R + 0.1
-		var zw: float = s * (w + 0.04)
-		box.call(Vector3((xa + xb) * 0.5, -0.2055, zw), Vector3(xb - xa, 0.309, 0.008))
-		for fy in [-0.056, -0.355]:
-			box.call(Vector3((xa + xb) * 0.5, fy, zw + s * 0.032), Vector3(xb - xa, 0.01, 0.064))
-		box.call(Vector3(R - 0.012, -0.2, zw + s * 0.03), Vector3(0.024, 0.42, 0.18))
-
-
-## 一盏舱壁灯（老式的井用防爆灯）：卡在扶手上的抱箍，一根方管横臂伸到井里，臂头上坐着铸铝灯座，
-## 灯座上拧着磨砂玻璃罩（罩子朝上：镜头从上往下看，看得见发光的罩子；另一个 MultiMesh，亮度单独控制），
-## 外面一个护罩：四根筋从灯座沿上来兜住罩子，腰上一道箍，顶上一个小圈（顶上不封，从上往下看得见罩子）。
-## 方位角 0 处的局部坐标
-func _fixture_mesh(detail: bool) -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_color(Color(0.3, 0.3, 0, 1))
-	var c := _pol(LAMP_R, 0.0, LAMP_H)   # 罩子的中心
-	var arm_y := LAMP_H - 0.165
-	_box(st, Transform3D(_radial_basis(0.0), _pol(RAIL_R, 0.0, RAIL_TOP)), Vector3(0.05, 0.075, 0.075))
-	_beam(st, _pol(RAIL_R + 0.02, 0.0, arm_y), _pol(LAMP_R - 0.03, 0.0, arm_y), Vector2(0.03, 0.03), Vector3(0, 0, 1))
-	if detail:
-		# 抱箍到横臂的短立板
-		_box(st, Transform3D(_radial_basis(0.0), _pol(RAIL_R, 0.0, (RAIL_TOP + arm_y) * 0.5)), Vector3(0.04, absf(RAIL_TOP - arm_y) + 0.04, 0.01))
-	# 灯座：铸铝，下面接横臂，上面一道螺口压着罩子（剖面：半径, 离罩子中心的高度；从顶上的轴往外、往下）
-	var prof: Array[Vector2] = [Vector2(0.0, -0.06), Vector2(0.047, -0.06), Vector2(0.05, -0.068), Vector2(0.062, -0.074),
-		Vector2(0.067, -0.09), Vector2(0.067, -0.132), Vector2(0.06, -0.148), Vector2(0.0, -0.15)]
-	if not detail:
-		prof = [Vector2(0.0, -0.06), Vector2(0.06, -0.07), Vector2(0.067, -0.13), Vector2(0.0, -0.15)]
-	_lathe(st, c, prof, 16 if detail else 6)
-	if detail:
-		# 护罩
-		var guard: Array[Vector2] = [Vector2(0.064, -0.074), Vector2(0.079, -0.058), Vector2(0.085, -0.02), Vector2(0.085, 0.02),
-			Vector2(0.078, 0.056), Vector2(0.058, 0.086), Vector2(0.032, 0.099)]
-		for g in 4:
-			var ga := TAU * g / 4.0 + PI / 4.0
-			var gd := Vector3(cos(ga), 0, sin(ga))
-			var pts: Array[Vector3] = []
-			for q in guard:
-				pts.append(c + gd * q.x + Vector3(0, q.y, 0))
-			_tube(st, pts, 0.0032, 4)
-		_ring_tube(st, c, 0.0855, 0.0032, 24, 4)
-		_ring_tube(st, c + Vector3(0, 0.099, 0), 0.032, 0.004, 12, 4)
-	else:
-		_ring_tube(st, c + Vector3(0, 0.099, 0), 0.032, 0.005, 6, 3)
-	return st.commit()
-
-
-## 走台底下的洗墙灯灯壳：吊在托梁底下，朝下那面是玻璃（看不见）
-func _wash_mesh() -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_color(Color(0.3, 0.3, 0, 1))
-	var b0 := _radial_basis(0.0)
-	_box(st, Transform3D(b0, _pol(R - 0.55, 0.0, -0.48)), Vector3(0.4, 0.16, 0.22))
-	for side in [-1.0, 1.0]:
-		_box(st, Transform3D(b0, _pol(R - 0.55, 0.0, -0.38) + b0.x * 0.15 * side), Vector3(0.025, 0.06, 0.025))
-	return st.commit()
-
-
-## 一段护笼爬梯：从这圈走台的检修口下到下一圈。方位角 0 处的局部坐标（x 径向朝外、z 切向），这圈走台面是 y = 0，
-## 下面那圈是 y = -RING_STEP。两根扁钢梯梁（60×12）从下面那圈的走台面一直伸到这圈走台面以上 1.1 米当扶手；
-## 圆钢踏棍每 0.3 米一根，最上面一根和这圈走台面齐平，顶上被鞋底磨出钢来（顶点色）；每 3 米一对扁钢支架伸到冰上，
-## 锚板贴着修平的那条冰（_wall_r）。下面那圈走台面以上 CAGE_FROM 起护笼：扁钢箍每 0.9 米一道
-## （从梯梁外侧往外张开、再绕半圈，前沿离踏棍 0.7 米），里面贴 5 根竖向扁钢，最上面一道箍在检修口里。
-## 整副梯子连支架、锚板一起刷安全黄（_mat_rail），一个面：每圈只多一次绘制
-func _ladder_mesh(lod: int) -> ArrayMesh:
-	var x := R - LADDER_OFF
-	var y0 := -RING_STEP
-	var zs := 0.235                    # 梯梁中心离中线（内净宽 0.458）
-	var yel := SurfaceTool.new()
-	yel.begin(Mesh.PRIMITIVE_TRIANGLES)
-	yel.set_color(Color(0.12, 0.25, 0, 1))
-	var id := Basis()
-	for s in [-1.0, 1.0]:
-		_box(yel, Transform3D(id, Vector3(x, (y0 + 1.1) * 0.5, s * zs)), Vector3(0.06, 1.1 - y0, 0.012))
-		if lod < 2:
-			# 脚板：梯梁落在下面那圈的格栅上，螺栓压住
-			_box(yel, Transform3D(id, Vector3(x, y0 + 0.004, s * (zs + 0.03))), Vector3(0.1, 0.008, 0.07))
-	# 护笼的箍：扁钢 50×6 竖着放；半圆的圆心离踏棍 0.34 米
-	var xc := x - 0.34
-	var rho := 0.36
-	var arc: int = [12, 6, 4][lod]
-	var hoop: Array[Vector3] = [Vector3(x - 0.025, 0, zs + 0.009)]
-	for i in arc + 1:
-		var th := PI * 0.5 - PI * i / arc
-		hoop.append(Vector3(xc - rho * cos(th), 0, rho * sin(th)))
-	hoop.append(Vector3(x - 0.025, 0, -zs - 0.009))
-	var hy: Array[float] = []
-	var h := y0 + CAGE_FROM
-	while h <= -0.75:
-		hy.append(h)
-		h += 0.9 if lod < 2 else 1.8   # 远档隔一道画一道（远了 0.9 米的间距只剩一两个像素，糊成一片）
-	hy.append(-0.12)   # 最上面一道在检修口里，焊在口框底下
-	for yy in hy:
-		var pts: Array[Vector3] = []
-		for q in hoop:
-			pts.append(q + Vector3(0, yy, 0))
-		_strip(yel, pts, 0.006, 0.05, lod == 0)
-	# 竖向扁钢：贴在箍里面
-	var top := hy[-1] + 0.025
-	var bot := hy[0] - 0.025
-	for i in 5:
-		var th := PI * 0.5 - PI * i / 4.0
-		var c := Vector3(xc - (rho - 0.006) * cos(th), (top + bot) * 0.5, (rho - 0.006) * sin(th))
-		_box(yel, Transform3D(Basis(Vector3(sin(th), 0, cos(th)), Vector3.UP, Vector3(-cos(th), 0, sin(th))), c),
-			Vector3(0.05, top - bot, 0.006))
-	# 支架：每 3 米一对，扁钢贴着梯梁外侧伸到冰上，锚板，近处看得见两颗锚栓的螺母
-	var yb := y0 + 1.5
-	while yb < 0.0:
-		for s in [-1.0, 1.0]:
-			var z: float = s * (zs + 0.011)
-			var xa := x - 0.03
-			var xb := R - 0.012
-			_box(yel, Transform3D(id, Vector3((xa + xb) * 0.5, yb, z)), Vector3(xb - xa, 0.05, 0.01))
-			_box(yel, Transform3D(id, Vector3(R - 0.006, yb, z)), Vector3(0.012, 0.16, 0.12))
-			if lod == 0:
-				for dy in [-0.055, 0.055]:
-					_box(yel, Transform3D(id, Vector3(R - 0.019, yb + dy, z)), Vector3(0.014, 0.024, 0.024))
-		yb += 3.0
-	# 踏棍放最后画（顶点色按朝上的程度给，会改 SurfaceTool 当前的颜色）；远档细得比像素还细，不画
-	if lod < 2:
-		for i in range(1, roundi(RING_STEP / 0.3) + 1):
-			var yy := y0 + 0.3 * i
-			_cyl(yel, Vector3(x, yy, -zs + 0.006), Vector3(x, yy, zs - 0.006), 0.011, 8 if lod == 0 else 4, false, true)
-	var mesh := yel.commit()
-	mesh.surface_set_material(0, _mat_rail)
-	return mesh
-
-
-# ---------------------------------------------------------------------------- 网格小工具（SurfaceTool；worn_surface 要顶点色：R 棱边磨损、G 凹槽积垢）
-func _pol(r: float, a: float, y: float) -> Vector3:
-	return Vector3(r * cos(a), y, r * sin(a))
-
-
-## 在方位角 a 处：x 沿切向、y 朝上、z 朝外（背着井轴）
-func _radial_basis(a: float) -> Basis:
-	var radial := Vector3(cos(a), 0, sin(a))
-	return Basis(Vector3(-sin(a), 0, cos(a)), Vector3.UP, radial)
-
-
-func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, na: Vector3, nb: Vector3, nc: Vector3) -> void:
-	if (b - a).cross(c - a).dot(na + nb + nc) > 0.0:
-		var tp := b
-		b = c
-		c = tp
-		var tn := nb
-		nb = nc
-		nc = tn
-	st.set_normal(na)
-	st.add_vertex(a)
-	st.set_normal(nb)
-	st.add_vertex(b)
-	st.set_normal(nc)
-	st.add_vertex(c)
-
-
-func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: Vector3) -> void:
-	_tri(st, a, b, c, n, n, n)
-	_tri(st, a, c, d, n, n, n)
-
-
-func _box(st: SurfaceTool, xf: Transform3D, s: Vector3) -> void:
-	var h := s * 0.5
-	var axes := [Vector3.RIGHT, Vector3.UP, Vector3.BACK]
-	for k in 3:
-		for sgn in [-1.0, 1.0]:
-			var n: Vector3 = axes[k] * sgn
-			var u: Vector3 = axes[(k + 1) % 3]
-			var v: Vector3 = axes[(k + 2) % 3]
-			var c: Vector3 = n * h[k]
-			var du: Vector3 = u * h[(k + 1) % 3]
-			var dv: Vector3 = v * h[(k + 2) % 3]
-			var wn := (xf.basis * n).normalized()
-			_quad(st, xf * (c - du - dv), xf * (c + du - dv), xf * (c + du + dv), xf * (c - du + dv), wn)
-
-
-## 圆柱（worn：顶点色按朝上的程度给，见 _tri_worn——踏棍顶上被鞋底磨出钢来；会改 SurfaceTool 当前的颜色）
-func _cyl(st: SurfaceTool, a: Vector3, b: Vector3, r: float, sides: int, caps: bool, worn := false) -> void:
-	var ax := (b - a).normalized()
-	var u := ax.cross(Vector3.UP if absf(ax.y) < 0.9 else Vector3.RIGHT).normalized()
-	var v := ax.cross(u)
-	var tri := _tri_worn if worn else _tri
-	for k in sides:
-		var a0 := TAU * k / sides
-		var a1 := TAU * (k + 1) / sides
-		var n0 := u * cos(a0) + v * sin(a0)
-		var n1 := u * cos(a1) + v * sin(a1)
-		tri.call(st, a + n0 * r, b + n0 * r, b + n1 * r, n0, n0, n1)
-		tri.call(st, a + n0 * r, b + n1 * r, a + n1 * r, n0, n1, n1)
-		if caps:
-			_tri(st, a, a + n0 * r, a + n1 * r, -ax, -ax, -ax)
-			_tri(st, b, b + n1 * r, b + n0 * r, ax, ax, ax)
-
-
-## 沿水平折线扫一条竖着放的扁钢（厚 th、高 h：护笼的箍）。侧面按顶点算法线（弯的那段看着是圆的），
-## 每个节点的截面放在前后两段的平均方向上；ends = false 不画顶面、底面（远了几毫米宽的面看不见）
-func _strip(st: SurfaceTool, pts: Array[Vector3], th: float, h: float, ends := true) -> void:
-	var n := pts.size()
-	var side: Array[Vector3] = []
-	for i in n:
-		var d := pts[mini(i + 1, n - 1)] - pts[maxi(i - 1, 0)]
-		side.append(Vector3(-d.z, 0.0, d.x).normalized())
-	var up := Vector3(0, h * 0.5, 0)
-	for i in n - 1:
-		var a := pts[i]
-		var b := pts[i + 1]
-		var sa := side[i] * th * 0.5
-		var sb := side[i + 1] * th * 0.5
-		for sg in [1.0, -1.0]:
-			var na: Vector3 = side[i] * sg
-			var nb: Vector3 = side[i + 1] * sg
-			_tri(st, a + sa * sg - up, b + sb * sg - up, b + sb * sg + up, na, nb, nb)
-			_tri(st, a + sa * sg - up, b + sb * sg + up, a + sa * sg + up, na, nb, na)
-		if ends:
-			_quad(st, a - sa + up, a + sa + up, b + sb + up, b - sb + up, Vector3.UP)
-			_quad(st, a - sa - up, b - sb - up, b + sb - up, a + sa - up, Vector3.DOWN)
-
-
-## 两点之间一根方钢（截面 size：x 沿 side 方向）
-func _beam(st: SurfaceTool, a: Vector3, b: Vector3, size: Vector2, side: Vector3) -> void:
-	var z := (b - a).normalized()
-	var x := (side - z * side.dot(z)).normalized()
-	_box(st, Transform3D(Basis(x, z.cross(x), z), (a + b) * 0.5), Vector3(size.x, size.y, a.distance_to(b)))
-
-
-## 沿折线扫一根圆管：每个节点一圈顶点，截面放在前后两段的平均方向上（拐弯处不留缝），截面的朝向顺着折线平移（不打扭）
-func _tube(st: SurfaceTool, pts: Array[Vector3], r: float, sides: int) -> void:
-	var n := pts.size()
-	var rings: Array = []
-	var u := Vector3.ZERO
-	for i in n:
-		var t: Vector3
-		if i == 0:
-			t = (pts[1] - pts[0]).normalized()
-		elif i == n - 1:
-			t = (pts[i] - pts[i - 1]).normalized()
-		else:
-			t = ((pts[i] - pts[i - 1]).normalized() + (pts[i + 1] - pts[i]).normalized()).normalized()
-		if i == 0:
-			u = t.cross(Vector3.UP if absf(t.y) < 0.9 else Vector3.RIGHT).normalized()
-		else:
-			u = (u - t * u.dot(t)).normalized()
-		var v := t.cross(u)
-		var ring: Array[Vector3] = []
-		for k in sides:
-			var ang := TAU * k / sides
-			ring.append(u * cos(ang) + v * sin(ang))
-		rings.append(ring)
-	for i in n - 1:
-		var ra: Array[Vector3] = rings[i]
-		var rb: Array[Vector3] = rings[i + 1]
-		for k in sides:
-			var k1 := (k + 1) % sides
-			_tri(st, pts[i] + ra[k] * r, pts[i + 1] + rb[k] * r, pts[i + 1] + rb[k1] * r, ra[k], rb[k], rb[k1])
-			_tri(st, pts[i] + ra[k] * r, pts[i + 1] + rb[k1] * r, pts[i] + ra[k1] * r, ra[k], rb[k1], ra[k1])
-
-
-## 一圈水平的圆环管（护罩腰上的箍）
-func _ring_tube(st: SurfaceTool, c: Vector3, rr: float, tr: float, segs: int, sides: int) -> void:
-	var pts: Array[Vector3] = []
-	for i in segs + 1:
-		var ang := TAU * i / segs
-		pts.append(c + Vector3(cos(ang), 0, sin(ang)) * rr)
-	_tube(st, pts, tr, sides)
-
-
-## 车床回转体：prof 是 (半径, 高) 的折线，从轴上的顶点往外、往下走（这样算出来的法线朝外）；绕着过 c 的竖直轴转一圈
-func _lathe(st: SurfaceTool, c: Vector3, prof: Array[Vector2], sides: int) -> void:
-	for i in prof.size() - 1:
-		var p0 := prof[i]
-		var p1 := prof[i + 1]
-		var e := p1 - p0
-		var pn := Vector2(-e.y, e.x).normalized()
-		for k in sides:
-			var f0 := TAU * k / sides
-			var f1 := TAU * (k + 1) / sides
-			var d0 := Vector3(cos(f0), 0, sin(f0))
-			var d1 := Vector3(cos(f1), 0, sin(f1))
-			var n0 := d0 * pn.x + Vector3(0, pn.y, 0)
-			var n1 := d1 * pn.x + Vector3(0, pn.y, 0)
-			var a0 := c + d0 * p0.x + Vector3(0, p0.y, 0)
-			var a1 := c + d1 * p0.x + Vector3(0, p0.y, 0)
-			var b0 := c + d0 * p1.x + Vector3(0, p1.y, 0)
-			var b1 := c + d1 * p1.x + Vector3(0, p1.y, 0)
-			_tri(st, a0, b0, b1, n0, n0, n1)
-			_tri(st, a0, b1, a1, n0, n1, n1)
-
-
-## 一段环形的管子（栏杆扶手）：沿半径 rr、高 y 的圆弧扫一个圆截面，两头封口。
-## 顶点色 R（棱边磨损）按朝上的程度给：扶手顶上被手磨亮，底下没人碰
-func _arc_tube(st: SurfaceTool, rr: float, y: float, a0: float, a1: float, tr: float, segs: int, sides := 8) -> void:
-	for s in segs:
-		var t0 := lerpf(a0, a1, float(s) / segs)
-		var t1 := lerpf(a0, a1, float(s + 1) / segs)
-		for k in sides:
-			var b0 := TAU * k / sides
-			var b1 := TAU * (k + 1) / sides
-			var n00 := Vector3(cos(t0) * cos(b0), sin(b0), sin(t0) * cos(b0))
-			var n01 := Vector3(cos(t0) * cos(b1), sin(b1), sin(t0) * cos(b1))
-			var n10 := Vector3(cos(t1) * cos(b0), sin(b0), sin(t1) * cos(b0))
-			var n11 := Vector3(cos(t1) * cos(b1), sin(b1), sin(t1) * cos(b1))
-			var p00 := _pol(rr, t0, y) + n00 * tr
-			var p01 := _pol(rr, t0, y) + n01 * tr
-			var p10 := _pol(rr, t1, y) + n10 * tr
-			var p11 := _pol(rr, t1, y) + n11 * tr
-			_tri_worn(st, p00, p10, p11, n00, n10, n11)
-			_tri_worn(st, p00, p11, p01, n00, n11, n01)
-	for end in [[a0, -1.0], [a1, 1.0]]:
-		var ea: float = end[0]
-		var tn := Vector3(-sin(ea), 0, cos(ea)) * float(end[1])
-		var c := _pol(rr, ea, y)
-		for k in sides:
-			var b0 := TAU * k / sides
-			var b1 := TAU * (k + 1) / sides
-			var q0 := c + (Vector3(cos(ea), 0, sin(ea)) * cos(b0) + Vector3.UP * sin(b0)) * tr
-			var q1 := c + (Vector3(cos(ea), 0, sin(ea)) * cos(b1) + Vector3.UP * sin(b1)) * tr
-			_tri_worn(st, c, q0, q1, tn, tn, tn)
-
-
-## 带磨损顶点色的三角形（朝上的顶点 R 大）
-func _tri_worn(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, na: Vector3, nb: Vector3, nc: Vector3) -> void:
-	if (b - a).cross(c - a).dot(na + nb + nc) > 0.0:
-		var tp := b
-		b = c
-		c = tp
-		var tn := nb
-		nb = nc
-		nc = tn
-	for v in [[a, na], [b, nb], [c, nc]]:
-		var n: Vector3 = v[1]
-		st.set_color(Color(0.12 + 0.62 * pow(maxf(n.y, 0.0), 3.0), 0.12, 0, 1))
-		st.set_normal(n)
-		st.add_vertex(v[0])
-
-
-## 环形扇区的盒子（走台面、梁、踢脚板）：半径 r0~r1、高 y0~y1、方位 a0~a1
-func _arc_box(st: SurfaceTool, r0: float, r1: float, y0: float, y1: float, a0: float, a1: float, segs: int) -> void:
-	for s in segs:
-		var t0 := lerpf(a0, a1, float(s) / segs)
-		var t1 := lerpf(a0, a1, float(s + 1) / segs)
-		var tm := (t0 + t1) * 0.5
-		var radial := Vector3(cos(tm), 0, sin(tm))
-		_quad(st, _pol(r0, t0, y1), _pol(r1, t0, y1), _pol(r1, t1, y1), _pol(r0, t1, y1), Vector3.UP)
-		_quad(st, _pol(r0, t0, y0), _pol(r0, t1, y0), _pol(r1, t1, y0), _pol(r1, t0, y0), Vector3.DOWN)
-		_quad(st, _pol(r0, t0, y0), _pol(r0, t0, y1), _pol(r0, t1, y1), _pol(r0, t1, y0), -radial)
-		_quad(st, _pol(r1, t0, y0), _pol(r1, t1, y0), _pol(r1, t1, y1), _pol(r1, t0, y1), radial)
-	for end in [[a0, -1.0], [a1, 1.0]]:
-		var ea: float = end[0]
-		var tn := Vector3(-sin(ea), 0, cos(ea)) * float(end[1])
-		_quad(st, _pol(r0, ea, y0), _pol(r1, ea, y0), _pol(r1, ea, y1), _pol(r0, ea, y1), tn)
 
 
 ## 一块冰：二十面体细分两次，按噪声把顶点往里往外推，再压扁一点

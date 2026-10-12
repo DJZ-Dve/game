@@ -18,6 +18,9 @@ signal status(text: String)
 ## 这一局的场景谁加载好了（之后才能给他发舱内的状态）
 signal peer_loaded(id: int)
 signal peer_left(id: int)
+## 下井（加载画面，scripts/shaft/lift_ride.gd）：别人的视线（相对他座位的朝向）；主机说到站了
+signal ride_look(id: int, yaw_off: float, pitch: float)
+signal ride_arrive
 
 enum Role { PILOT, SONAR, ENGINEER, DIVER }
 const ROLE_NAMES := ["驾驶", "声呐", "轮机", "潜水员"]
@@ -29,6 +32,8 @@ const ROLE_HINTS := [
 ]
 const MAX_PLAYERS := 4
 const LOBBY_SCENE := "res://scenes/lobby.tscn"
+## 开局先进下井（坐升降机下冰井，这一段就是加载画面），后台加载好 GAME_SCENE、所有人都好了再进去
+const RIDE_SCENE := "res://scenes/lift_ride.tscn"
 const GAME_SCENE := "res://scenes/deep_sea.tscn"
 const JOIN_TIMEOUT := 10.0
 const SETTINGS := "user://settings.cfg"
@@ -47,6 +52,7 @@ var last_message := ""
 var connecting := false
 
 var _loaded := {}
+var _ride_ready := {}
 var _join_serial := 0
 var _want_role := -1
 
@@ -168,6 +174,7 @@ func leave(reason := "") -> void:
 		multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	players.clear()
 	_loaded.clear()
+	_ride_ready.clear()
 	if not reason.is_empty():
 		last_message = reason
 		status.emit(reason)
@@ -185,7 +192,7 @@ func set_role(role: int) -> void:
 		_request_role.rpc_id(1, role)
 
 
-## 主机：开局，所有人一起进潜艇
+## 主机：开局，所有人一起下井（加载画面），再一起进潜艇
 func start_game() -> void:
 	if is_host() and not in_game:
 		_begin.rpc()
@@ -197,6 +204,42 @@ func mark_loaded() -> void:
 		_on_loaded(1)
 	else:
 		_peer_loaded.rpc_id(1)
+
+
+# ---------------------------------------------------------------------------- 下井（加载画面）
+## 自己这边下一个场景加载好了：告诉主机
+func ride_mark_ready() -> void:
+	if is_host():
+		_ride_set_ready(1)
+	else:
+		_ride_ready_msg.rpc_id(1)
+
+
+## 名单上的人是不是都加载好了（主机把名单广播给大家，谁那边都能问）
+func ride_all_ready() -> bool:
+	for id: int in players:
+		if not _ride_ready.has(id):
+			return false
+	return true
+
+
+## 主机：到站，所有人一起进下一个场景
+func ride_go() -> void:
+	if is_host():
+		_ride_go.rpc()
+
+
+## 自己的视线（相对座位朝向的偏转、俯仰）发给别人，别人那边的替身跟着转头；丢了也不要紧
+func send_ride_look(yaw_off: float, pitch: float) -> void:
+	if is_online():
+		_ride_look.rpc(yaw_off, pitch)
+
+
+func _ride_set_ready(id: int) -> void:
+	_ride_ready[id] = true
+	log_event("ride ready %d" % id)
+	if is_online():
+		_ride_ready_set.rpc(_ride_ready.keys())
 
 
 func _check_autostart() -> void:
@@ -295,8 +338,33 @@ func _request_role(role: int) -> void:
 func _begin() -> void:
 	in_game = true
 	_loaded.clear()
+	_ride_ready.clear()
 	last_message = ""
-	Story.goto_scene(GAME_SCENE, "镇 海 号", "白沙门外海 · 一百四十海里")
+	Story.goto_scene(RIDE_SCENE)
+
+
+@rpc("any_peer", "reliable")
+func _ride_ready_msg() -> void:
+	if is_host():
+		_ride_set_ready(multiplayer.get_remote_sender_id())
+
+
+@rpc("authority", "reliable")
+func _ride_ready_set(ids: Array) -> void:
+	_ride_ready.clear()
+	for id: int in ids:
+		_ride_ready[id] = true
+
+
+@rpc("authority", "call_local", "reliable")
+func _ride_go() -> void:
+	log_event("ride go")
+	ride_arrive.emit()
+
+
+@rpc("any_peer", "unreliable")
+func _ride_look(yaw_off: float, pitch: float) -> void:
+	ride_look.emit(multiplayer.get_remote_sender_id(), yaw_off, pitch)
 
 
 @rpc("any_peer", "reliable")

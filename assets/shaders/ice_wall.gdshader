@@ -50,9 +50,13 @@ uniform float lamp_start = 0.14;
 uniform float lamp_step = 0.25;
 uniform float lamp_count = 24.0;
 uniform vec4 lamp_color : source_color = vec4(1.0, 0.86, 0.68, 1.0);
-instance uniform float ring_y = 0.0;       // 这圈走台面的高度（世界坐标）
+instance uniform float ring_y = 0.0;       // 这圈走台面的高度（物体坐标 + tex_y；开场镜头里就是世界坐标）
 instance uniform float ring_phase = 0.0;   // 这圈的灯整体错开了几盏（0~1）
 instance uniform float ring_power = 0.0;   // 这圈灯此刻的平均亮度 × 强度
+// 下井（scripts/shaft/lift_ride.gd）：一段段冰壁的网格循环拼着用，tex_y 把这段挪回它真正的高度（取模过，免得精度不够），
+// 冰里的花纹在段与段之间接得上；ring_y 也在挪过以后的坐标里。ring_base：圈号要再加多少（标记写真正的圈号、深度）
+instance uniform float tex_y = 0.0;
+instance uniform float ring_base = 0.0;
 
 // 深度标记
 uniform sampler2D stencil_glyphs : hint_default_black, filter_linear_mipmap, repeat_disable;
@@ -78,7 +82,7 @@ varying vec2 g_w;
 varying float paint_v;   // 这里有多少是漆（不透光：light() 里不加透出来的蓝光）
 
 void vertex() {
-	p_obj = VERTEX;
+	p_obj = VERTEX + vec3(0.0, tex_y, 0.0);
 }
 
 float hash11(float x) {
@@ -180,35 +184,46 @@ vec3 glint_facet(vec3 cell, vec3 n, float spread) {
 	return normalize(n + (t * cos(phi) + b * sin(phi)) * tan(spread * sqrt(h1)));
 }
 
-// 第 n 圈深度标记「R07 / -84 m」的第 c 个字：图集里第几格；-1 = 空格，-2 = 写完了
+int digit_count(int v) {
+	return v >= 10000 ? 5 : (v >= 1000 ? 4 : (v >= 100 ? 3 : (v >= 10 ? 2 : 1)));
+}
+
+// v（nd 位）从左数第 k 位
+int digit_at(int v, int nd, int k) {
+	int div = 1;
+	for (int i = 0; i < nd - 1 - k; i++) {
+		div *= 10;
+	}
+	return (v / div) % 10;
+}
+
+// 第 n 圈深度标记「R07 / -84 m」（深处「R1666 / -19992 m」）的第 c 个字：图集里第几格；-1 = 空格，-2 = 写完了
 int stencil_char(int n, int c) {
 	if (c == 0) {
 		return 10;
 	}
-	if (c == 1) {
-		return (n / 10) % 10;
+	int nr = max(digit_count(n), 2);
+	if (c <= nr) {
+		return digit_at(n, nr, c - 1);
 	}
-	if (c == 2) {
-		return n % 10;
-	}
-	if (c == 3 || c == 5) {
+	int k = c - nr - 1;
+	if (k == 0 || k == 2) {
 		return -1;
 	}
-	if (c == 4) {
+	if (k == 1) {
 		return 11;
 	}
 	int depth = n * int(ring_step + 0.5);
-	int k = c - 6;
+	k -= 3;
 	if (depth > 0) {
 		if (k == 0) {
 			return 12;
 		}
 		k -= 1;
 	}
-	int nd = depth >= 100 ? 3 : (depth >= 10 ? 2 : 1);
+	int nd = digit_count(depth);
 	if (k < nd) {
-		int div = k == nd - 1 ? 1 : (k == nd - 2 ? 10 : 100);
-		return (depth / div) % 10;
+		return digit_at(depth, nd, k);
 	}
 	if (k == nd) {
 		return -1;
@@ -224,7 +239,7 @@ float stencil_adv(int g) {
 // gx、gy：luv 的屏幕导数（每个字只是平移，所以共用一组；由分支外面求好的 dFdx(p)、dFdy(p) 换算）
 float stencil_sdf(int n, vec2 luv, vec2 gx, vec2 gy) {
 	float w = -STENCIL_TRACK;
-	for (int c = 0; c < 14; c++) {
+	for (int c = 0; c < 18; c++) {
 		int g = stencil_char(n, c);
 		if (g == -2) {
 			break;
@@ -233,7 +248,7 @@ float stencil_sdf(int n, vec2 luv, vec2 gx, vec2 gy) {
 	}
 	float pen = -0.5 * w;
 	float sd = 0.0;
-	for (int c = 0; c < 14; c++) {
+	for (int c = 0; c < 18; c++) {
 		int g = stencil_char(n, c);
 		if (g == -2) {
 			break;
@@ -342,7 +357,7 @@ void fragment() {
 	float em = stencil_cap / STENCIL_CAP_EM;
 	float paint = 0.0;
 	float pfrost = 0.0;
-	int ring_no = int(round(-ring_y / ring_step));
+	int ring_no = int(round(-ring_y / ring_step)) + int(round(ring_base));
 	float lv = (rel - stencil_base) / em;
 	if (lv > -0.3 && lv < 1.0 && ring_no >= 0) {
 		float da = 10.0;
@@ -354,7 +369,7 @@ void fragment() {
 		float rr = dot(p.xz, p.xz);
 		vec2 lgx = vec2((p.x * dpx.z - p.z * dpx.x) / rr * radius, dpx.y) / em;
 		vec2 lgy = vec2((p.x * dpy.z - p.z * dpy.x) / rr * radius, dpy.y) / em;
-		float sd = abs(luv.x) < 3.8 ? stencil_sdf(ring_no, luv, lgx, lgy) : 0.0;
+		float sd = abs(luv.x) < 5.6 ? stencil_sdf(ring_no, luv, lgx, lgy) : 0.0;
 		if (sd > 0.2) {   // 字上、字边上（飞边伸到字外 0.06 em）
 			// 抗锯齿：距离场每 em 变 5，一个像素宽是多少（字小到几个像素时边自然变虚）
 			float aa = 3.8 * max(length(lgx), length(lgy)) + 0.01;

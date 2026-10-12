@@ -17,6 +17,7 @@ const SCENES := {
 	"office": "res://scenes/office.tscn",
 	"deep_sea": "res://scenes/deep_sea.tscn",
 	"shaft": "res://scenes/intro/shaft_blackout.tscn",
+	"lift": "res://scenes/lift_ride.tscn",
 }
 ## 普通话大约一秒四五个字
 const SPEECH_RATE := 4.6
@@ -84,13 +85,17 @@ func set_flag(name: String, value := true) -> void:
 	flags[name] = value
 
 
-## 转场：黑场 →（章节字幕）→ 换场景 → 亮起来
-func goto_scene(key: String, title := "", sub := "") -> void:
+## 转场：黑场 →（章节字幕）→ 换场景 → 亮起来。key 是 SCENES 里的名字、res:// 路径，或者已经加载好的 PackedScene
+## （下井的时候在后台加载好的）
+func goto_scene(key: Variant, title := "", sub := "") -> void:
 	busy = true
 	await ui.fade_out(1.4)
 	if not title.is_empty():
 		await ui.show_card(title, sub)
-	get_tree().change_scene_to_file(SCENES.get(key, key))
+	if key is PackedScene:
+		get_tree().change_scene_to_packed(key)
+	else:
+		get_tree().change_scene_to_file(SCENES.get(key, key))
 	ui.set_prompt("", false, false)
 	ui.clear_line()
 	for i in 3:
