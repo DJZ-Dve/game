@@ -1114,13 +1114,6 @@ def shaft_hum(rng):
     return unit(y) + unit(buzz) * db(-26)
 
 
-def heater_tick(rng):
-    """加热管热胀冷缩“嗒”的一下：小冲击敲响管壁的几个中高频模态，再带一点管子本身的低频。"""
-    ir = modes(0.5, logu(rng, 900, 5200, 8), rng.uniform(0.02, 0.09, 8), rng.uniform(0.3, 1, 8))
-    low = modes(0.3, [rng.uniform(180, 260)], [0.05], [0.4])
-    return mix(fftconv(pulse(0.25), ir), low)
-
-
 def ice_boom(rng):
     """冰震：几公里外的冰壳在断裂，经过冰和钢架传进井里——先是越来越响的次声轰鸣，中间夹着远处冰层
     噼噼啪啪的碎裂（隔得远，只剩闷的），最后一声低吼往下滑着沉下去。"""
@@ -1142,45 +1135,30 @@ def ice_boom(rng):
     return unit(rumble) + unit(groan) * db(-8) + unit(crk) * db(-14)
 
 
-def ice_crack(rng):
-    """冰裂：一声脆响，紧跟着冰里特有的“啾——”。冰层里传的弯曲波，群速度和频率的平方根成正比——高频跑得快、
-    低频跑得慢，同一下断裂传过来就被拉成一声从高往低滑的哨音（结冰的湖面上听得到，像科幻片里的激光枪）。
-    到达时间 t = k/√f，所以瞬时频率 f(t) = (k/t)²；k 越大（越远）拉得越长。两三条路径各来一声，最后一下冰壳的闷响。"""
-    n = int(3.0 * SR)
-    y = np.zeros(n)
-    place(y, unit(burst(rng.uniform(1.5, 4.0), lambda f: bp(f, 400, 12000, 2), rng)), 0)
-    at = 0.004
-    for j in range(int(rng.integers(2, 4))):
-        k = rng.uniform(7, 14) * (1 + 0.6 * j)
-        f_hi, f_lo = rng.uniform(5000, 8000), rng.uniform(180, 350)
-        ts, te = k / np.sqrt(f_hi), k / np.sqrt(f_lo)
-        m = int((te - ts) * SR)
-        tt = ts + np.arange(m) / SR
-        ph = 2 * np.pi * np.cumsum((k / tt) ** 2) / SR
-        a = np.exp(-(tt - ts) / ((te - ts) * 0.45)) * np.minimum(1, np.arange(m) / (0.002 * SR))
-        place(y, np.sin(ph) * a * db(-4 * j) * 0.8, int(at * SR))
-        at += rng.uniform(0.05, 0.18)
-    thump = modes(1.2, [rng.uniform(40, 70), rng.uniform(90, 140)], [0.25, 0.12], [1.0, 0.4])
-    return mix(y, fftconv(pulse(2.0), thump) * db(-4))
+BREAKER_WAV = OUT.parent / "third_party" / "freesound" / "131599__echocinematics__kill-switch-large-breaker-switch.wav"
+
+
+def load_recording(path):
+    """读一段外部录音（用 ffmpeg 解码，什么格式都行），转成 48 kHz 浮点、按声道排的数组。"""
+    import subprocess
+    ch = int(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=channels", "-of", "csv=p=0", str(path)],
+                            capture_output=True, text=True, check=True).stdout.split()[0])
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-ar", str(SR), "-f", "f32le", "-acodec", "pcm_f32le", "-"],
+                         capture_output=True, check=True).stdout
+    return np.frombuffer(raw, "<f4").astype(np.float64).reshape(-1, ch)
 
 
 def relay_drop(rng):
-    """一圈灯的电源跳掉：接触器断开“咔嚓”一声（衔铁撞回去：两下挨得很近的金属撞击 + 铁壳的闷响），
-    触点拉出一小段电弧的“滋”，镇流器的嗡声跟着往下一沉就没了。"""
-    n = int(1.8 * SR)
-    t = taxis(n)
-    y = np.zeros(n)
-    hit_ir = modes(0.6, logu(rng, 1200, 6000, 10), rng.uniform(0.01, 0.06, 10), rng.uniform(0.3, 1, 10))
-    box_ir = modes(0.5, logu(rng, 140, 420, 4), rng.uniform(0.03, 0.09, 4), rng.uniform(0.5, 1, 4))
-    clack = unit(mix(fftconv(pulse(0.2), hit_ir), fftconv(pulse(1.2), box_ir) * 1.2))
-    t0 = 0.05
-    place(y, clack, int(t0 * SR))
-    place(y, clack * 0.45, int((t0 + rng.uniform(0.006, 0.012)) * SR))
-    place(y, unit(burst(rng.uniform(20, 45), lambda f: bp(f, 2500, 11000, 2), rng)) * db(-6), int((t0 - 0.002) * SR))
-    env = np.where(t < t0, np.minimum(1, t / 0.02), np.exp(-(t - t0) / 0.12))
-    ph = 2 * np.pi * np.cumsum(100 - 18 * (1 - np.minimum(env, 1))) / SR
-    hum = (np.sin(ph) + 0.4 * np.sin(3 * ph)) * env
-    return unit(y) + unit(hum) * db(-14)
+    """一圈灯的电闸断开：用实录的大电闸（Freesound 131599，EchoCinematics，CC0；5.1 声道的文件，只有左右两声道有声音），
+    从“咔嚓”前 10 毫秒剪起，连着它自己两秒的余响。三个变体音调各差一点（变慢 / 原样 / 变快），游戏里再随机变一点调。"""
+    x = load_recording(BREAKER_WAV)[:, :2]
+    on = int(np.argmax(np.abs(x).max(axis=1) > 0.05 * np.abs(x).max()))
+    x = x[max(0, on - int(0.01 * SR)):]
+    ratio = [0.93, 1.0, 1.06][_VARIANT % 3]
+    n = int(len(x) / ratio)
+    src = np.arange(n) * ratio
+    y = np.stack([np.interp(src, np.arange(len(x)), x[:, c]) for c in range(2)], axis=1)
+    return fade(y, 0.002, 0.0)
 
 
 def steel_groan(rng):
@@ -1195,17 +1173,6 @@ def steel_groan(rng):
     return fftconv(exc, ir)
 
 
-def ice_impact(rng):
-    """一块冰砸在下面的格栅走台上：冰碎开的一阵沙沙脆响 + 格栅钢板被砸响的“哐”。"""
-    n = int(2.0 * SR)
-    shatter = np.zeros(n)
-    for tt in rng.uniform(0, 0.07, 40):
-        place(shatter, burst(rng.uniform(0.3, 2.0), lambda f: bp(f, 1500, 12000, 2), rng) * rng.uniform(0.2, 1),
-              int(tt * SR))
-    ir = modes(1.6, logu(rng, 280, 3500, 12), rng.uniform(0.05, 0.4, 12), rng.uniform(0.3, 1, 12))
-    return mix(unit(shatter) * db(-3), unit(fftconv(pulse(0.6), ir)))
-
-
 def spark_crackle(rng):
     """断开的电缆头打火：一串越来越稀的“噼啪”，每一下是零点几毫秒的高频爆。"""
     n = int(1.4 * SR)
@@ -1216,6 +1183,123 @@ def spark_crackle(rng):
               * np.exp(-tt / 0.5), int(tt * SR))
         tt += rng.exponential(0.008 + tt * 0.05)
     return y
+
+
+# ---------------------------------------------------------------------------- 冰井的声学（给上面这些冰井的声音烘焙回声）
+# 一口直径 22 米、几百米深的竖井，井壁是冰（几乎全反射），和普通大厅的混响很不一样：
+# - 颤动回声：声音在两边井壁之间来回弹。镜头站在走台上、离井壁不到两米，所以先是贴身那面墙 10 毫秒的回声，
+#   然后对面那面墙每 128 毫秒（来回 44 米）一簇：118、128、138 毫秒（一维的镜像声源），一簇比一簇糊、一簇比一簇闷；
+#   圆形的井壁还会把声音往井轴上聚（焦散），中间夹着一串 64 毫秒的弱一点的回声。
+#   上下每 12 米一圈走台，格栅、托梁又散射回来一串 70 毫秒的回声。几串周期差一点点，叠起来是冰井特有的金属“嗡嗡”声
+# - 低频的尾巴很长（几秒），高频散得快（冰面的细碎起伏、格栅散射、空气吸收）
+# 烘焙出来的“_wet”文件只有回声（干声由游戏里的 3D 播放器放；RMS 和干声一样，比例在游戏里配）。
+# 每一圈灯的电闸声更讲究：按 tools/bake_shaft_rir.py（pyroomacoustics）算的 RIR 一圈一圈卷出来，见 relay_ring。
+SHAFT_R = 11.0
+C_AIR = 343.0
+_VARIANT = 0
+
+
+def _shift(x, sec):
+    """把一段声音往后挪 sec 秒（亚采样精度，频域相移）。"""
+    n = len(x)
+    f = np.fft.rfftfreq(n, 1 / SR)
+    return np.fft.irfft(np.fft.rfft(x) * np.exp(-2j * np.pi * f * sec), n)
+
+
+def _bands_decay(n, rng, rt_lo, rt_mid, rt_hi, onset=0.03):
+    """三段频带各自按 RT60 衰减的噪声尾巴（低 < 250 Hz < 中 < 2.5 kHz < 高）。"""
+    t = taxis(n)
+    ramp = 1 - np.exp(-t / onset)
+    y = np.zeros(n)
+    for lo, hi, rt in [(None, 250, rt_lo), (250, 2500, rt_mid), (2500, None, rt_hi)]:
+        y += filt(rng.standard_normal(n), lambda f, lo=lo, hi=hi: bp(f, lo, hi, 3)) * np.exp(-6.9 * t / rt)
+    return y * ramp
+
+
+def shaft_ir(rng, dur=5.0, listener=1.75):
+    """镜头那个位置（离井壁 listener 米）的冰井冲激响应，立体声，不含直达声。"""
+    n = int(dur * SR)
+    out = []
+    for ch in range(2):
+        y = np.zeros(n)
+        def tap(at, amp, blur_ms, lp):
+            # 一次反射：一小段按 blur_ms 摊开的脉冲（能量归一：amp² 就是这次反射的能量占比）
+            w = max(4, int(blur_ms * SR / 1000))
+            h = filt(np.hanning(w) * (1 + 0.6 * rng.standard_normal(w)), lambda f: bp(f, 60, lp, 2))
+            place(y, amp * h / np.sqrt(np.sum(h ** 2)), int(at * SR))
+        # 贴身那面墙
+        tap(2 * listener / C_AIR + rng.uniform(-3e-4, 3e-4), 0.55, 1.5, 9000)
+        L = 2 * SHAFT_R
+        for k in range(1, 40):
+            loss = db(-1.6 * k)           # 每来回一趟：冰面散射、格栅、托梁、栏杆挡掉一些
+            lp = 9000 / (1 + 0.45 * k)     # 一趟比一趟闷
+            blur = 1.5 + 2.2 * k           # 一簇比一簇糊（井壁不是正圆、表面有起伏）
+            for img, a in [(2 * k * L - 2 * listener, 0.8), (2 * k * L, 1.0), (2 * k * L + 2 * listener, 0.7)]:
+                at = img / C_AIR + rng.uniform(-6e-4, 6e-4) * k
+                if at < dur - 0.1:
+                    tap(at, 0.5 * a * loss, blur, lp)
+            # 往井轴聚的那一串（每 64 毫秒，弱一点）
+            at = (2 * k - 1) * L / C_AIR + rng.uniform(-8e-4, 8e-4) * k
+            if at < dur - 0.1:
+                tap(at, 0.22 * loss, blur * 1.3, lp * 0.8)
+        # 上下一圈圈走台散射回来的（每 70 毫秒，越远越弱，糊）
+        for k in range(1, 30):
+            at = 2 * 12.0 * k / C_AIR * rng.uniform(0.98, 1.02)
+            if at < dur - 0.1:
+                tap(at, 0.18 * db(-2.2 * k), 6 + 3 * k, 5000 / (1 + 0.3 * k))
+        tail = _bands_decay(n, rng, 6.0, 3.2, 1.1, onset=0.12)
+        y += tail / np.sqrt(np.sum(tail ** 2)) * 0.8   # 扩散的尾巴，能量和前面那串回声差不多
+        out.append(y)
+    return np.stack(out, axis=1)
+
+
+def _dry(fn, base):
+    """按 base 的名字重新合成一遍干声（和 assets/audio/ 里那个文件一模一样，归一到 -3 dBFS）。"""
+    name = f"{base}_{_VARIANT}"
+    return finish(fn(np.random.default_rng(zlib.crc32(name.encode()))), False)
+
+
+def wet_of(fn, base, gain_db=0.0):
+    """base 的第 _VARIANT 个变体在冰井里的回声（不含干声）。"""
+    def make(rng):
+        x = _dry(fn, base)
+        if x.ndim == 2:
+            x = x.mean(axis=1)
+        ir = shaft_ir(rng)
+        y = np.stack([fftconv(x, ir[:, c]) for c in range(2)], axis=1)
+        # 回声的电平：RMS 和干声一样（只算干声那么长的一段），游戏里再按距离配比
+        return y * (rms(x) / rms(y[: len(x)])) * db(gain_db)
+    return make
+
+
+# ---------------------------------------------------------------------------- 每一圈的电闸声（按 pyroomacoustics 算的 RIR）
+SHAFT_RIR = OUT.parent.parent / ".tmp" / "shaft_rir.npz"
+_RING_GAIN = None
+
+
+def _ring_raw(k):
+    """第 k 圈的电闸声传到镜头：原声（三个变体轮着用）卷上这一圈到镜头的 RIR，去掉直达声之前的传播时间（游戏里另外延迟）。"""
+    d = np.load(SHAFT_RIR)
+    rir = d[f"rir_{k}"].astype(np.float64)
+    dist = float(d[f"dist_{k}"])
+    global _VARIANT
+    keep = _VARIANT
+    _VARIANT = k % 3
+    x = _dry(relay_drop, "relay_drop").mean(axis=1)
+    _VARIANT = keep
+    y = np.stack([fftconv(x, rir[c]) for c in range(2)], axis=1)
+    y = y[max(0, int((dist / C_AIR - 0.006) * SR)):]
+    return fade(y[: int(7.0 * SR)], 0.0, 1.5)
+
+
+def relay_ring(rng):
+    """第 _VARIANT 圈（0 = 头顶那圈）的电闸声，从近到远同一套算法（tools/bake_shaft_rir.py）。
+    各圈之间的响度差是算出来的（不各自归一化）：整套乘同一个增益，最响的那圈峰值 -3 dB。"""
+    global _RING_GAIN
+    if _RING_GAIN is None:
+        n = len([k for k in np.load(SHAFT_RIR).files if k.startswith("rir_") and k[4:].isdigit()])
+        _RING_GAIN = db(-3) / max(np.abs(_ring_raw(k)).max() for k in range(n))
+    return _ring_raw(_VARIANT) * _RING_GAIN
 
 
 # 名字 -> (函数, 是否循环, 变体个数)
@@ -1288,13 +1372,16 @@ SOUNDS = {
     # 冰井（开场）
     "shaft_air": (shaft_air, True, 1),
     "shaft_hum": (shaft_hum, True, 1),
-    "heater_tick": (heater_tick, False, 4),
     "ice_boom": (ice_boom, False, 2),
-    "ice_crack": (ice_crack, False, 4),
     "relay_drop": (relay_drop, False, 3),
     "steel_groan": (steel_groan, False, 3),
-    "ice_impact": (ice_impact, False, 3),
     "spark_crackle": (spark_crackle, False, 2),
+    # 冰井里的回声（KEEP_LEVEL：不归一化，保留和干声的比例）
+    "ice_boom_wet": (wet_of(ice_boom, "ice_boom"), False, 2),
+    "steel_groan_wet": (wet_of(steel_groan, "steel_groan"), False, 3),
+    "spark_crackle_wet": (wet_of(spark_crackle, "spark_crackle"), False, 2),
+    # 每一圈的电闸声（要先跑 tools/bake_shaft_rir.py 算 RIR）
+    "relay_ring": (relay_ring, False, 51),
 }
 
 
@@ -1334,16 +1421,30 @@ def import_pcm(path):
         imp.write_text('[remap]\n\nimporter="wav"\ntype="AudioStreamWAV"\n\n[params]\n\ncompress/mode=0\n')
 
 
-def finish(x, loop):
+KEEP_LEVEL = ("_wet", "relay_ring")
+
+
+def finish(x, loop, keep=False):
     x = np.asarray(x, dtype=np.float64)
     assert np.all(np.isfinite(x))
+    if keep:
+        x = fade(filt(x, lambda f: bp(f, 18, None, 2)) if x.ndim == 1 else
+                 np.stack([filt(x[:, c], lambda f: bp(f, 18, None, 2)) for c in range(x.shape[1])], axis=1),
+                 0.0003, len(x) / SR * 0.05)
+        peak = np.abs(x).max()
+        if peak > db(-1):
+            print(f"  （电平太高 {20 * np.log10(peak):.1f} dB，压到 -1 dB；和干声的比例变了）")
+            x *= db(-1) / peak
+        return np.concatenate([x, np.zeros((int(0.05 * SR),) + x.shape[1:])])
     if loop:
         x = x * (db(-20) / rms(x))
         if np.abs(x).max() > db(-1):
             x *= db(-1) / np.abs(x).max()
     else:
         # 去掉直流和次声（零相位高通），开头 0.3 ms、结尾 5% 渐变，首尾都落在 0 上，播放器起停时不咔哒
-        x = fade(filt(x, lambda f: bp(f, 18, None, 2)), 0.0003, len(x) / SR * 0.05)
+        hp = lambda v: filt(v, lambda f: bp(f, 18, None, 2))
+        x = hp(x) if x.ndim == 1 else np.stack([hp(x[:, c]) for c in range(x.shape[1])], axis=1)
+        x = fade(x, 0.0003, len(x) / SR * 0.05)
         x = x * (db(-3) / np.abs(x).max())
         # 尾巴补 50 ms 的数字静音：播放器变调重采样时会读到数据末尾之后，别让它读到垃圾
         x = np.concatenate([x, np.zeros((int(0.05 * SR),) + x.shape[1:])])
@@ -1365,9 +1466,11 @@ def main():
         if want and not any(name.startswith(w) for w in want):
             continue
         for k in range(count):
+            global _VARIANT
+            _VARIANT = k
             fname = name if count == 1 else f"{name}_{k}"
             rng = np.random.default_rng(zlib.crc32(fname.encode()))
-            x = finish(fn(rng), loop)
+            x = finish(fn(rng), loop, any(m in name for m in KEEP_LEVEL))
             write_wav(OUT / f"{fname}.wav", x, loop)
             if loop:
                 import_pcm(OUT / f"{fname}.wav")

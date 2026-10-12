@@ -27,6 +27,8 @@ uniform float wet_width = 0.6;
 uniform float crack : hint_range(0.0, 1.0) = 0.0;
 uniform float bump_strength = 1.0;
 uniform float sss = 0.25;
+uniform float translucency = 0.7;   // 光钻进冰里再透出来的那部分（见 light()）
+uniform vec4 glow_color : source_color = vec4(0.42, 0.72, 1.0, 1.0);
 
 varying vec3 p_obj;
 
@@ -145,7 +147,7 @@ void fragment() {
 	// 大部分是刀具啃过的毛面；一部分被融水、升华磨光了，透亮、看得进去
 	// 磨光透亮的地方顺着融水往下流的方向长：竖着的一道道，上宽下窄、断断续续
 	float melt = fbm(vec3(s * 1.1, p.y * 0.07, 0.0) + vec3(0.0, 0.0, 3.0)) + (vnoise(p * vec3(0.4, 0.9, 0.4)) - 0.5) * 0.25;
-	float milk = (1.0 - smoothstep(0.62, 0.72, melt) * 0.85) * milk_amount;
+	float milk = (1.0 - smoothstep(0.58, 0.8, melt) * 0.75) * milk_amount;
 	float dmin = 1e3;
 	for (int i = 0; i < 3; i++) {
 		float da = abs(mod(ang - pipe_angles[i] + PI, TAU) - PI);
@@ -185,7 +187,7 @@ void fragment() {
 	float grain = ice_layer(ice_a, uv, 0.7, 0.4);
 	vec3 milky = milk_color.rgb * (0.78 + 0.12 * big + 0.1 * lbig + 0.22 * grain + 0.04 * scratch);
 	milky = mix(milky, cavity_color.rgb, clamp((1.0 - groove) * gdepth * 0.45 + seam * 0.5, 0.0, 1.0));
-	vec3 col = mix(inside, milky, milk);
+	vec3 col = mix(inside * 1.4, milky, milk);
 	col = mix(col, vec3(0.95, 0.98, 1.0), cracked * 0.9);
 	ALBEDO = col;
 	ROUGHNESS = mix(0.05, 0.48, milk) - scratch * 0.08 * milk + gouge * 0.2;
@@ -195,4 +197,27 @@ void fragment() {
 
 	float h = groove * gdepth * 0.15 + grain * 0.12 + big * 0.6 - seam * 0.8 - gouge * 0.6 - cracked * 0.3 + scratch * 0.04 + l1 * 0.05 * (1.0 - milk);
 	NORMAL = bump_normal(NORMAL, VERTEX, h * 0.022 * bump_strength);
+}
+
+// 冰的光照：表面的漫反射 + 光钻进冰里散开再透出来的蓝光。洗墙灯几乎贴着冰面掠过去，只算表面的话
+// 冰面大半是暗的（像石板）；冰会把照进去的光在里面散开，灯照到的那一片整片往外透蓝光，
+// 掠射、甚至稍微背着光的地方也亮（包裹光照，颜色往蓝偏：红光在冰里走不远）。高光按 GGX 自己算
+void light() {
+	float ndl = dot(NORMAL, LIGHT);
+	vec3 lc = LIGHT_COLOR * ATTENUATION / PI;
+	DIFFUSE_LIGHT += lc * max(ndl, 0.0);
+	float wrap = clamp((ndl + 0.7) / 1.7, 0.0, 1.0);
+	DIFFUSE_LIGHT += lc * wrap * wrap * glow_color.rgb * translucency;
+	vec3 h = normalize(LIGHT + VIEW);
+	float ndh = max(dot(NORMAL, h), 0.0);
+	float a = max(ROUGHNESS * ROUGHNESS, 0.002);
+	float a2 = a * a;
+	float d = ndh * ndh * (a2 - 1.0) + 1.0;
+	float dd = a2 / (PI * d * d);
+	float ndv = max(dot(NORMAL, VIEW), 1e-3);
+	float nl = max(ndl, 0.0);
+	float k = a * 0.5;
+	float vis = 0.25 / ((nl * (1.0 - k) + k) * (ndv * (1.0 - k) + k));
+	float f = 0.02 + 0.98 * pow(1.0 - max(dot(VIEW, h), 0.0), 5.0);
+	SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * nl * dd * vis * f;
 }

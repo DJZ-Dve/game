@@ -3,8 +3,10 @@ extends Node3D
 ## 场景全部由脚本搭：冰壁（程序生成的冰，assets/shaders/ice_wall.gdshader）、每 10 米一圈的环形走台
 ## （格栅、栏杆、投光灯）、竖着贯穿整口井的加热管、电梯导轨、电缆桥架。一圈的零件合成一个网格，用 MultiMesh 摆满。
 ## 坐标：井轴是 Y 轴，方位角 a = atan2(z, x)（和冰壁着色器一致）；第 i 圈走台面在 y = -i * RING_STEP（i 从 -1 开始，头顶还有一圈）。
-## 声音是 tools/gen_sfx.py 合成的（shaft_*、ice_*、relay_drop……）。每圈灯的继电器声按距离晚到（声速 343 m/s），
-## 远的更闷（AudioStreamPlayer3D 的距离滤波）、混响更多（Shaft 总线）。
+## 声音：井里的空气、灯的嗡声、冰震、钢架呻吟、打火是 tools/gen_sfx.py 合成的，冰井的回声烘焙在 *_wet_* 里；
+## 每圈灯的电闸是实录卷上 pyroomacoustics 算的冲激响应（relay_ring_*，见 _play_relay），按距离晚到（声速 343 m/s）。
+## 机位：站在第 0 圈走台上扶着栏杆往下探（--cam=r,方位,高,看的点r,方位,高 可以临时换机位）；灯往下灭时
+##       镜头按时间线算出的黑暗前沿往下追、推长焦。
 ## 调试：--shot-t=秒  定在这个时刻（截图看某一刻；时间不再走）；--shot-run 从这个时刻开始照常往下走。
 ##       --lookdev[=弧度]  站在走台上近看井壁（调冰的材质用；数字是视线往旁边偏多少）
 ## 录像：tools/record.sh .tmp/shaft 36 --scene=shaft
@@ -24,9 +26,12 @@ const LAMP_H := 1.22           # 灯在走台面上方多高（挂在扶手内�
 const PIPE_ANGLES := [1.05, 2.62, 5.06]
 const TRAY_ANGLE := 3.9
 const JBOX_ANGLE := 3.66       # 每圈的接线箱（灯的电从这里接）
-const LAMP_COLOR := Color(1.0, 0.9, 0.78)
+const LAMP_COLOR := Color(1.0, 0.86, 0.68)   # 老的卤素灯
+const LAMP_COOL := Color(0.86, 0.93, 1.0)     # 后来换上的 LED
 const G := 1.315               # 欧罗巴的重力
 const SOUND_SPEED := 343.0
+const CAM_A := 1.35            # 镜头站在走台的哪个方位
+const FOV0 := 50.0
 
 # 时间线（秒）
 const FADE_IN := 2.5
@@ -54,7 +59,7 @@ var _lookdev := DebugArgs.has("lookdev")
 var _chunks: Array[Dictionary] = []  # {node, vel, spin}
 var _rng := RandomNumberGenerator.new()
 var _streams := {}
-var _fov := 52.0
+var _fov := FOV0
 var _aim := Vector3.ZERO           # 镜头看着的点（推长焦时移到还亮着那一圈的中心）
 var _aim0 := Vector3.ZERO
 var _hum_lvl := 1.0
@@ -106,11 +111,18 @@ func _quake(at: float) -> float:
 ## 第 k 圈第 j 盏灯此刻的亮度（x）和灯丝的余辉（y）
 func _lamp_power(k: int, j: int, at: float) -> Vector2:
 	var lamp: Dictionary = _rings[k].lamps[j]
+	if lamp.dead:
+		return Vector2.ZERO
 	var die: float = lamp.die
 	var flick: float = lamp.flick
 	if at >= die:
 		return Vector2(0.0, exp(-(at - die) / 0.35))
 	var p := 1.0
+	if lamp.faulty:
+		# 接触不良：大部分时间亮着，隔一阵子“噗噗”掉两下
+		var nz := _shake.get_noise_2d(at * 3.5, float(lamp.idx) * 1.7)
+		if nz < -0.18:
+			p = 0.04 if fposmod(at * 17.0 + float(lamp.idx), 1.0) < 0.6 else 0.6
 	var q := _quake(at)
 	if q > 0.0:
 		# 电压跟着往下沉、乱跳（整口井一起，各圈各盏差一点点）
@@ -123,10 +135,6 @@ func _lamp_power(k: int, j: int, at: float) -> Vector2:
 		if at > die - 0.05:
 			p = 1.7
 	return Vector2(clampf(p, 0.0, 1.8), 0.0)
-
-
-func _lamp_angle(j: int) -> float:
-	return GAP + 0.6 / R + (TAU - 2.0 * GAP - 1.2 / R) * j / float(LAMPS - 1)
 
 
 func _update(delta: float) -> void:
@@ -156,29 +164,31 @@ func _update(delta: float) -> void:
 	_ice_mat.set_shader_parameter("crack", pow(smoothstep(CRACK_T - 0.2, CRACK_T + 7.0, t), 0.6))
 	# 镜头：很慢地往栏杆外探一点 + 手持的微晃 + 冰震的抖
 	var q := _quake(t)
-	var lean := smoothstep(0.0, 14.0, t) * 0.22
-	var xf := _cam_base.translated_local(Vector3(0, -lean * 0.3, -lean))
-	# 灯往下灭的时候，镜头推长焦一路追着下面还亮着的那几圈（让它们一直占着画面中间那一块）
-	var target := 52.0
-	var aim := _aim0
-	for k in _rings.size():
-		var ry: float = _rings[k].y
-		if ry < _cam_base.origin.y - 6.0 and float(_rings[k].avg) > 0.05:
-			if k > 1:
-				target = clampf(2.0 * rad_to_deg(atan(R * 1.7 / (_cam_base.origin.y - ry + 3.0))), 3.5, 52.0)
-				aim = Vector3(0.0, ry - 12.0, 0.0)
-			break
-		if k == _rings.size() - 1:
-			target = _fov
-			aim = _aim
-	var follow := 1.0 if _frozen else 1.0 - exp(-delta * 1.3)
-	_fov = lerpf(_fov, target, follow)
-	_aim = _aim.lerp(aim, follow)
+	var lean := smoothstep(0.0, 16.0, t) * 0.28
+	var xf := _cam_base
+	xf.origin += -Vector3(_cam_base.origin.x, 0, _cam_base.origin.z).normalized() * lean + Vector3(0, -lean * 0.4, 0)
+	# 灯往下灭的时候，镜头一路往下追着黑暗的前沿：看的点从井壁上的构图点移到井轴上（各圈都以井轴为中心，
+	# 看着井轴，下面还亮着的那几圈总在画面正中），焦距随前沿的深度推长，让最外面那圈还亮着的灯一直差不多大——
+	# 下面一圈套一圈的灯像隧道，黑暗从外往里一圈圈吃进来。前沿的位置直接由时间线算（第 n 圈在 CASCADE_T + K√n 灭），
+	# 不靠跟随：越往下灭得越快（底下每秒八十来米），跟随总是落后，亮的那块就会越来越小、漂到一边
+	var chase := smoothstep(float(_rings[1].die) + 0.3, float(_rings[1].die) + 3.0, t)
+	var nf := pow(maxf(t - CASCADE_T, 0.0) / CASCADE_K, 2.0)
+	var bottom: float = _rings[-1].y
+	var front := maxf(_rings[0].y - RING_STEP * nf, bottom)
+	# 镜头不在井轴上（离轴九米多），越深的圈在画面上越往“正下方”那个灭点挤；看的点往前沿和井底之间挪一点，
+	# 前沿那圈和下面一串都框得住、大致居中
+	var fdepth := maxf(minf(front - 10.0, _aim0.y), bottom - 6.0)
+	var depth := lerpf(_aim0.y, lerpf(fdepth, bottom, 0.3) if fdepth > bottom else fdepth, chase)
+	var dist := xf.origin.y - fdepth
+	_aim = _aim0.lerp(Vector3(0.0, depth, 0.0), chase)
+	_aim.y = depth
+	var tele := clampf(2.0 * rad_to_deg(atan((R * 1.25 + 4.0) / dist)), 2.6, FOV0)
+	_fov = exp(lerpf(log(FOV0), log(tele), chase))
 	xf.basis = Basis.looking_at(_aim - xf.origin, _cam_base.basis.y)  # 几乎正对下方：拿原来的“上”当参考，免得滚转乱跳
 	if not _lookdev:
 		_cam.fov = _fov
-	var zoom := _fov / 52.0
-	var hand := (0.0025 + 0.012 * q) * zoom
+	var zoom := _fov / FOV0
+	var hand := (0.003 + 0.012 * q) * zoom
 	var shake_pos := 0.006 + 0.03 * q
 	xf.basis = xf.basis * Basis.from_euler(Vector3(
 		_shake.get_noise_2d(t * 0.7, 1.0) * hand + _shake.get_noise_2d(t * 9.0, 5.0) * 0.006 * q * zoom,
@@ -187,6 +197,8 @@ func _update(delta: float) -> void:
 	xf.origin += Vector3(_shake.get_noise_2d(t * 11.0, 7.0), _shake.get_noise_2d(t * 10.0, 8.0),
 		_shake.get_noise_2d(t * 12.0, 9.0)) * shake_pos * minf(q, 1.0)
 	_cam.transform = _cam_base if _lookdev else xf
+	# 身边的灯灭了以后眼睛慢慢适应黑暗：曝光往上抬，下面远处的灯显得更亮、光晕更大
+	_env.tonemap_exposure = 1.0 + 0.9 * smoothstep(CASCADE_T + 2.0, CASCADE_T + 9.0, t)
 	# 黑场淡入
 	_fade.color.a = 1.0 - smoothstep(0.0, FADE_IN, t)
 	# 灯的嗡声：按还亮着的灯（近的权重大）
@@ -206,7 +218,7 @@ func _update(delta: float) -> void:
 		var w := exp(-absf(float(_rings[k].y) - _cam_base.origin.y) / 14.0)
 		near += clampf(float(_rings[k].avg), 0.0, 1.0) * w
 		nsum += w
-	_env.ambient_light_energy = 0.12 * near / nsum
+	_env.ambient_light_energy = 0.03 * near / nsum
 	_hum.pitch_scale = 1.0 - 0.03 * minf(q, 1.0)
 	# 掉下去的冰块（低重力，一点空气阻力）
 	if delta > 0.0 and not _frozen:
@@ -224,8 +236,7 @@ func _update(delta: float) -> void:
 				node.visible = false
 			if c.land and node.position.y < 0.15:
 				node.position.y = 0.15
-				c.rest = true
-				_play3d("ice_impact_%d" % _rng.randi_range(0, 2), node.position, -3.0, _rng.randf_range(0.9, 1.2))
+				c.rest = true   # 落到走台上不出声（冰砸铁格栅的声音合成、找实录都不像，2026-10-12 决定不要）
 
 
 func _at(when: float, fn: Callable) -> void:
@@ -235,21 +246,12 @@ func _at(when: float, fn: Callable) -> void:
 
 
 func _schedule() -> void:
-	# 冰震之前：加热管偶尔“嗒”一声
-	for i in 5:
-		var when := 0.8 + i * 1.3 + _rng.randf_range(0.0, 0.8)
-		var a: float = PIPE_ANGLES[i % 3]
-		_at(when, _play3d.bind("heater_tick_%d" % (i % 4), _pol(R - 0.2, a, 1.0 - _rng.randf_range(0, 6)), -14.0, _rng.randf_range(0.9, 1.1)))
-	_at(QUAKE_T, _play2d.bind("ice_boom_0", -1.0, 1.0))
+	_at(QUAKE_T, _play2d.bind("ice_boom_0", -1.0, 1.0, -8.0))
 	_at(QUAKE_T, func() -> void: _quake_dust.emitting = true)
 	_at(QUAKE_T + 2.2, _play2d.bind("steel_groan_0", -9.0, 0.85))
-	_at(CRACK_T, _play2d.bind("ice_crack_0", -1.0, 1.0))
-	_at(CRACK_T + 0.15, _play2d.bind("ice_boom_1", -5.0, 1.15))
-	_at(CRACK_T + 0.8, _play2d.bind("ice_crack_1", -8.0, 0.9))
+	_at(CRACK_T + 0.15, _play2d.bind("ice_boom_1", -5.0, 1.15, -8.0))
 	_at(CRACK_T + 3.1, _play2d.bind("steel_groan_1", -8.0, 0.8))
-	_at(CRACK_T + 5.4, _play2d.bind("ice_crack_2", -11.0, 0.85))
 	_at(CRACK_T + 9.5, _play2d.bind("steel_groan_2", -12.0, 0.75))
-	_at(CRACK_T + 11.0, _play2d.bind("ice_crack_3", -16.0, 0.8))
 	_at(CRACK_T + 14.0, func() -> void: _quake_dust.emitting = false)
 	for i in 9:
 		_at(CRACK_T + 0.3 + _rng.randf_range(0.0, 3.5), _drop_chunk)
@@ -258,15 +260,14 @@ func _schedule() -> void:
 		var ring: Dictionary = _rings[k]
 		var jb := _pol(R - 0.25, JBOX_ANGLE, float(ring.y) + 1.3)
 		var delay := jb.distance_to(_cam_base.origin) / SOUND_SPEED
-		_at(float(ring.die) + delay, _play3d.bind("relay_drop_%d" % (k % 3), jb, 4.0, _rng.randf_range(0.9, 1.08)))
+		_at(float(ring.die) + delay, _play_relay.bind(k, _rng.randf_range(0.96, 1.04)))
 		if k < 4:
 			_at(float(ring.die), _sparks.bind(jb))
 			_at(float(ring.die) + delay, _play3d.bind("spark_crackle_%d" % (k % 2), jb, -4.0, 1.0))
-	# 全黑以后：冰还在挤，下面很远的地方有东西砸下去，最后一声闷响
+	# 全黑以后：冰还在挤，钢架呻吟，最后一声闷响
 	var end: float = _rings[-1].die
 	_at(end + 1.2, _play2d.bind("steel_groan_0", -16.0, 0.65))
-	_at(end + 2.6, _play3d.bind("ice_impact_0", Vector3(0, -180, 0), 6.0, 0.8))
-	_at(end + 4.0, _play2d.bind("ice_boom_1", -5.0, 0.7))
+	_at(end + 4.0, _play2d.bind("ice_boom_1", -5.0, 0.7, -6.0))
 	_events.sort_custom(func(x: Array, y: Array) -> bool: return x[0] < y[0])
 
 
@@ -281,10 +282,11 @@ func _build_audio() -> void:
 		rv.room_size = 0.92
 		rv.damping = 0.3
 		rv.spread = 1.0
-		rv.wet = 0.36
-		rv.dry = 0.9
-		rv.predelay_msec = 70.0
-		rv.predelay_feedback = 0.45
+		# 回声已经烘焙进各个声音里了（*_wet），这里只给灯的嗡声和井里的空气加一点点空间感
+		rv.wet = 0.1
+		rv.dry = 1.0
+		rv.predelay_msec = 20.0
+		rv.predelay_feedback = 0.0
 		rv.hipass = 0.05
 		AudioServer.add_bus_effect(idx, rv)
 	_air = AudioStreamPlayer.new()
@@ -305,7 +307,20 @@ func _stream(sfx: String) -> AudioStream:
 	return _streams[sfx]
 
 
-func _play2d(sfx: String, vol_db: float, pitch: float) -> void:
+## 冰井里的回声是 tools/gen_sfx.py 按这口井的几何烘焙好的（<名字>_wet_<k>：只有回声，RMS 和干声一样），
+## 这里跟着干声一起放；wet 是回声比干声低多少 dB（<= -60 不放回声）
+func _wet_name(sfx: String) -> String:
+	var i := sfx.rfind("_")
+	return sfx.substr(0, i) + "_wet" + sfx.substr(i)
+
+
+func _play2d(sfx: String, vol_db: float, pitch: float, wet := -3.0) -> void:
+	_player2d(sfx, vol_db, pitch)
+	if wet > -60.0:
+		_player2d(_wet_name(sfx), vol_db + wet, pitch)
+
+
+func _player2d(sfx: String, vol_db: float, pitch: float) -> void:
 	var p := AudioStreamPlayer.new()
 	p.stream = _stream(sfx)
 	p.volume_db = vol_db
@@ -317,7 +332,7 @@ func _play2d(sfx: String, vol_db: float, pitch: float) -> void:
 	DebugArgs.log_sfx(sfx)
 
 
-func _play3d(sfx: String, pos: Vector3, vol_db: float, pitch: float) -> void:
+func _play3d(sfx: String, pos: Vector3, vol_db: float, pitch: float, wet := -3.0) -> void:
 	var p := AudioStreamPlayer3D.new()
 	p.stream = _stream(sfx)
 	p.position = pos
@@ -333,6 +348,15 @@ func _play3d(sfx: String, pos: Vector3, vol_db: float, pitch: float) -> void:
 	p.play()
 	p.finished.connect(p.queue_free)
 	DebugArgs.log_sfx(sfx)
+	if wet > -60.0:
+		_player2d(_wet_name(sfx), vol_db + wet, pitch)
+
+
+## 第 k 圈灯的电闸“咔嚓”：每一圈都有自己烘焙好的一条（relay_ring_<k>）——实录的大电闸卷上 pyroomacoustics
+## 按冰井的真实尺寸算的、这一圈接线箱到镜头的冲激响应（tools/bake_shaft_rir.py）。近的、远的同一套算法，
+## 响度、闷的程度、回声的多少都是算出来的、从近到远连续变化；直达声之前的传播时间由调用的地方按距离延迟
+func _play_relay(k: int, pitch: float) -> void:
+	_player2d("relay_ring_%d" % k, 0.0, pitch)
 
 
 # ---------------------------------------------------------------------------- 画面：环境、镜头、叠层
@@ -379,20 +403,34 @@ func _build_environment() -> void:
 
 
 func _build_camera() -> void:
-	# 吊在井中间偏一点的地方往下看：一圈圈走台、灯排成一条隧道，一直缩进下面的黑暗里
-	var ca := 1.35
-	var pos := _pol(2.6, ca, 4.5)
-	var look := Vector3(0.0, -90.0, 0.0) + _pol(1.2, ca + PI, 0.0)
+	# 站在第 0 圈走台上，扶着栏杆往井里探出身子，斜着往下看：脚边的栏杆和灯是虚的前景，
+	# 自己这一侧的井壁带着透视一路冲进下面的黑暗，一圈圈走台和灯排成往下缩的椭圆
+	# --cam=r,方位,高,看的点r,方位,高  调机位用（极坐标，和 _pol 一样）
+	var c := [9.3, CAM_A, 1.55, 10.5, CAM_A + 2.25, -60.0]
+	if DebugArgs.has("cam"):
+		var parts := str(DebugArgs.get_arg("cam")).split(",")
+		for i in mini(parts.size(), 6):
+			c[i] = float(parts[i])
+	var pos := _pol(c[0], c[1], c[2])
+	var look := _pol(c[3], c[4], c[5])
 	_cam = Camera3D.new()
-	_cam.fov = 52.0
+	_cam.fov = FOV0
 	_cam.near = 0.03
-	_cam.far = 900.0
+	_cam.far = 1200.0
 	if _lookdev:
 		# 看样机位：站在第 0 圈走台上，离井壁一米多，斜着看墙（调冰的材质用）
 		var off := float(DebugArgs.get_arg("lookdev", "0.12"))
-		pos = _pol(WALK_IN + 0.45, ca, 1.65)
-		look = _pol(R, ca + off, 0.9)
+		pos = _pol(WALK_IN + 0.45, CAM_A, 1.65)
+		look = _pol(R, CAM_A + off, 0.9)
 		_cam.fov = 62.0
+	else:
+		# 前景（栏杆、身边那盏灯）虚掉
+		var ca := CameraAttributesPractical.new()
+		ca.dof_blur_near_enabled = true
+		ca.dof_blur_near_distance = 1.6
+		ca.dof_blur_near_transition = 1.0
+		ca.dof_blur_amount = 0.12
+		_cam.attributes = ca
 	_cam_base = Transform3D(Basis.looking_at(look - pos, Vector3.UP), pos)
 	_aim0 = look
 	_aim = look
@@ -537,7 +575,6 @@ func _drop_chunk() -> void:
 		c.spin = _rng.randf_range(0.6, 2.4)
 		c.spin_axis = Vector3(_rng.randf_range(-1, 1), _rng.randf_range(-1, 1), _rng.randf_range(-1, 1)).normalized()
 		node.visible = true
-		_play3d("ice_crack_%d" % _rng.randi_range(1, 3), node.position, -14.0, _rng.randf_range(1.2, 1.6))
 		return
 
 
@@ -698,6 +735,8 @@ func _build_verticals() -> void:
 	steel.set_color(Color(0.3, 0.25, 0, 1))
 	var length := y0 - y1
 	var mid := (y0 + y1) * 0.5
+	# 电梯导轨的安装底板：整条井壁上一道钢板（走台在这里断开，从上往下看缺口里露出的是钢板，不是被照亮的冰）
+	_box(steel, Transform3D(_radial_basis(0.0), _pol(R - 0.16, 0.0, mid)), Vector3(1.7, length, 0.02))
 	# 电梯的两根 T 形导轨（方位角 0 两侧）
 	for side in [-1.0, 1.0]:
 		var a: float = side * 0.05
@@ -765,27 +804,6 @@ func _build_rings() -> void:
 		_box(steel, Transform3D(_radial_basis(pa), _pol(R - 0.12, pa, 0.45)), Vector3(0.24, 0.06, 0.2))
 	_box(steel, Transform3D(_radial_basis(TRAY_ANGLE), _pol(R - 0.12, TRAY_ANGLE, 0.6)), Vector3(0.62, 0.05, 0.14))
 	_box(steel, Transform3D(_radial_basis(JBOX_ANGLE), _pol(R - 0.16, JBOX_ANGLE, 1.3)), Vector3(0.42, 0.55, 0.2))
-	# 舱壁灯：从扶手上往井里伸出一根短臂，吊着一个带护罩的玻璃球。
-	# 必须挂在扶手内侧：装在井壁上的话，从上面往下看远处的灯，视线会被上一圈走台挡住
-	var lamp_pos: Array[Vector3] = []
-	for j in LAMPS:
-		var la := _lamp_angle(j)
-		var b := _radial_basis(la)
-		var p := _pol(WALK_IN - 0.17, la, LAMP_H)
-		lamp_pos.append(p)
-		_box(steel, Transform3D(b, _pol(WALK_IN - 0.06, la, LAMP_H + 0.13)), Vector3(0.035, 0.035, 0.26))
-		_cyl(steel, p + Vector3(0, 0.08, 0), p + Vector3(0, 0.13, 0), 0.012, 6, false)
-		_box(steel, Transform3D(b, p + b.z * 0.12), Vector3(0.24, 0.26, 0.012))  # 反光背板（挡着井壁那一侧）
-		# 护罩：四根竖条 + 顶上一个小帽、下面一块托板（顶上不能盖严，从上往下看得见灯泡）
-		for c in 4:
-			var ca := TAU * c / 4.0 + PI / 4.0
-			var off := (b.x * cos(ca) + b.z * sin(ca)) * 0.105
-			_cyl(steel, p + off + Vector3(0, -0.1, 0), p + off + Vector3(0, 0.1, 0), 0.006, 5, false)
-		_box(steel, Transform3D(b, p + Vector3(0, 0.11, 0)), Vector3(0.05, 0.015, 0.05))
-		_box(steel, Transform3D(b, p + Vector3(0, -0.11, 0)), Vector3(0.12, 0.02, 0.12))
-		# 走台底下的洗墙灯（每两盏球灯配一个）：灯壳挂在外梁下面，朝下贴着井壁照
-		if j % 2 == 0:
-			_box(steel, Transform3D(b, _pol(R - 0.55, la, -0.48)), Vector3(0.4, 0.16, 0.22))
 	var rail := SurfaceTool.new()
 	rail.begin(Mesh.PRIMITIVE_TRIANGLES)
 	rail.set_color(Color(0.12, 0.15, 0, 1))
@@ -797,15 +815,52 @@ func _build_rings() -> void:
 		ys.append(-i * RING_STEP)
 	var rail_mat: ShaderMaterial = load("res://assets/materials/M_Rail.tres").duplicate()
 	rail_mat.set_shader_parameter("paint_color", Color(0.5, 0.36, 0.06))
-	var grate_mat: ShaderMaterial = load("res://assets/materials/M_Grating.tres").duplicate()
-	grate_mat.set_shader_parameter("paint_color", Color(0.13, 0.13, 0.125))
-	grate_mat.set_shader_parameter("rust_amount", 0.15)
-	grate_mat.set_shader_parameter("tex_scale", 7.0)
+	var grate_mat := ShaderMaterial.new()
+	grate_mat.shader = preload("res://assets/shaders/bar_grating.gdshader")
+	grate_mat.set_shader_parameter("radius", R)
+	var steel_mat: Material = load("res://assets/materials/M_SteelOld.tres")
 	_multi(grating.commit(), grate_mat, ys)
-	_multi(steel.commit(), load("res://assets/materials/M_SteelOld.tres"), ys)
+	_multi(steel.commit(), steel_mat, ys)
 	_multi(rail.commit(), rail_mat, ys)
 
-	# 所有灯泡放进一个 MultiMesh：每个实例的自定义数据 r = 亮度、g = 余辉（lamp_lens.gdshader）
+	# 灯具：从扶手上往井里伸出一根短臂，吊着一个带护罩的玻璃球（必须挂在扶手内侧：装在井壁上的话，
+	# 从上面往下看远处的灯，视线会被上一圈走台挡住）；一半的灯在走台底下配一个洗墙灯壳。
+	# 先在方位角 0 做好一套，每盏灯按自己的方位角转过去摆。每圈的灯整体错开一个随机角度、每盏再偏一点
+	# （不然推长焦时各圈的灯上下对齐，排成一条条放射线）
+	var fix := SurfaceTool.new()
+	fix.begin(Mesh.PRIMITIVE_TRIANGLES)
+	fix.set_color(Color(0.12, 0.25, 0, 1))
+	var b0 := _radial_basis(0.0)
+	var p0 := _pol(WALK_IN - 0.17, 0.0, LAMP_H)
+	_box(fix, Transform3D(b0, _pol(WALK_IN - 0.06, 0.0, LAMP_H + 0.13)), Vector3(0.035, 0.035, 0.26))
+	_cyl(fix, p0 + Vector3(0, 0.08, 0), p0 + Vector3(0, 0.13, 0), 0.012, 6, false)
+	_box(fix, Transform3D(b0, p0 + b0.z * 0.12), Vector3(0.24, 0.26, 0.012))  # 反光背板（挡着井壁那一侧）
+	# 护罩：四根竖条 + 顶上一个小帽、下面一块托板（顶上不能盖严，从上往下看得见灯泡）
+	for c in 4:
+		var ca := TAU * c / 4.0 + PI / 4.0
+		var off := (b0.x * cos(ca) + b0.z * sin(ca)) * 0.105
+		_cyl(fix, p0 + off + Vector3(0, -0.1, 0), p0 + off + Vector3(0, 0.1, 0), 0.006, 5, false)
+	_box(fix, Transform3D(b0, p0 + Vector3(0, 0.11, 0)), Vector3(0.05, 0.015, 0.05))
+	_box(fix, Transform3D(b0, p0 + Vector3(0, -0.11, 0)), Vector3(0.12, 0.02, 0.12))
+	var wash := SurfaceTool.new()
+	wash.begin(Mesh.PRIMITIVE_TRIANGLES)
+	wash.set_color(Color(0.12, 0.25, 0, 1))
+	_box(wash, Transform3D(b0, _pol(R - 0.55, 0.0, -0.48)), Vector3(0.4, 0.16, 0.22))
+	var fix_mm := MultiMesh.new()
+	fix_mm.transform_format = MultiMesh.TRANSFORM_3D
+	fix_mm.mesh = fix.commit()
+	fix_mm.instance_count = ys.size() * LAMPS
+	var wash_mm := MultiMesh.new()
+	wash_mm.transform_format = MultiMesh.TRANSFORM_3D
+	wash_mm.mesh = wash.commit()
+	wash_mm.instance_count = ys.size() * LAMPS / 2
+	for mm_ in [fix_mm, wash_mm]:
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm_
+		mmi.material_override = steel_mat
+		add_child(mmi)
+
+	# 所有灯泡放进一个 MultiMesh：每个实例的自定义数据 r = 亮度、g = 余辉、b = 色温（lamp_lens.gdshader）
 	var globe := SphereMesh.new()
 	globe.radius = 0.085
 	globe.height = 0.17
@@ -814,6 +869,7 @@ func _build_rings() -> void:
 	var lens_mat := ShaderMaterial.new()
 	lens_mat.shader = preload("res://assets/shaders/lamp_lens.gdshader")
 	lens_mat.set_shader_parameter("lit_color", LAMP_COLOR)
+	lens_mat.set_shader_parameter("cool_color", LAMP_COOL)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
@@ -824,6 +880,7 @@ func _build_rings() -> void:
 	_globes.material_override = lens_mat
 	_globes.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_globes)
+	var spacing := (TAU - 2.0 * GAP - 1.2 / R) / LAMPS
 	for k in ys.size():
 		var y := ys[k]
 		var n := float(k)
@@ -832,66 +889,99 @@ func _build_rings() -> void:
 		# 一圈里也是一盏接一盏灭：从随机的一盏开始，顺着圈扫过去（灯多了，扫得快一点）
 		var first := _rng.randi_range(0, LAMPS - 1)
 		var sweep := _rng.randf_range(0.012, 0.02) * (2.5 if last else 1.0)
+		var ring_off := _rng.randf()
 		var lamps: Array[Dictionary] = []
 		for j in LAMPS:
+			var la := GAP + 0.6 / R + spacing * (j + ring_off + _rng.randf_range(-0.12, 0.12))
+			var rot := Basis(Vector3.UP, -la)
 			var idx := k * LAMPS + j
-			mm.set_instance_transform(idx, Transform3D(Basis(), lamp_pos[j] + Vector3(0, y, 0)))
-			mm.set_instance_custom_data(idx, Color(1, 0, 0, 0))
+			fix_mm.set_instance_transform(idx, Transform3D(rot, Vector3(0, y, 0)))
+			if j % 2 == 0:
+				wash_mm.set_instance_transform(idx / 2, Transform3D(rot, Vector3(0, y, 0)))
+			var p := _pol(WALK_IN - 0.17, la, LAMP_H + y)
+			# 老设施：少数几盏早就坏了（球罩碎了），几盏接触不良一直在跳，换过的几盏是冷白的 LED
+			var dead := _rng.randf() < 0.05 and k != 1
+			var faulty := not dead and _rng.randf() < 0.04
+			var tint := 1.0 if _rng.randf() < 0.12 else _rng.randf_range(-0.15, 0.15)
+			mm.set_instance_transform(idx, Transform3D(Basis(), p) if not dead else Transform3D(Basis().scaled(Vector3(0.4, 0.3, 0.4)), p + Vector3(0, -0.07, 0)))
+			mm.set_instance_custom_data(idx, Color(0 if dead else 1, 0, maxf(tint, 0.0), 0))
 			var order := (j - first + LAMPS) % LAMPS
 			var hold := LAST_HOLD if last else 0.0
-			lamps.append({"idx": idx, "die": die + order * sweep + hold, "flick": _rng.randf_range(0.15, 0.5) + hold})
+			lamps.append({"idx": idx, "a": la, "pos": p, "dead": dead, "faulty": faulty, "tint": maxf(tint, 0.0),
+				"die": die + order * sweep + hold, "flick": _rng.randf_range(0.15, 0.5) + hold})
 		var lights: Array[Light3D] = []
 		var lamp_of: Array[int] = []   # 每个光源跟着哪盏灯（-1 = 跟着这一圈的平均亮度）
 		var base: Array[float] = []
 		if k <= 5:
 			for j in LAMPS:
-				var la := _lamp_angle(j)
+				var lamp: Dictionary = lamps[j]
+				if lamp.dead:
+					continue
+				var la: float = lamp.a
+				var col := LAMP_COLOR.lerp(LAMP_COOL, lamp.tint)
 				var radial := Vector3(cos(la), 0, sin(la))
 				if j % 2 == 0:
 					# 洗墙灯：朝下、略往井壁偏，光贴着冰面扫下去——切削纹、台阶、崩口全靠这道掠射光显出来
 					var wl := SpotLight3D.new()
 					var wdir := (radial * 0.22 + Vector3.DOWN).normalized()
 					wl.transform = Transform3D(Basis.looking_at(wdir, radial), _pol(R - 0.55, la, y - 0.58))
-					wl.light_color = LAMP_COLOR
-					wl.spot_range = 16.0
-					wl.spot_angle = 48.0
-					wl.spot_attenuation = 0.8
+					wl.light_color = col
+					wl.spot_range = 15.0
+					wl.spot_angle = 46.0
+					wl.spot_attenuation = 1.2
 					wl.light_size = 0.15
-					wl.shadow_enabled = k <= 1 and j % 4 == 0
-					wl.light_volumetric_fog_energy = 0.6
+					wl.shadow_enabled = k <= 2 and j % 4 == 0
+					wl.light_volumetric_fog_energy = 0.8
 					add_child(wl)
 					lights.append(wl)
 					lamp_of.append(j)
-					base.append(8.0)
-				if j % 4 == 1:
+					base.append(9.0)
+				if j % 4 == 1 or (k == 1 and j % 2 == 1):
 					# 球灯朝井里的光（照走台、栏杆和空气里的冰晶；背后有反光板，不照身后的井壁）
 					var sl := SpotLight3D.new()
 					var dir := (-radial + Vector3(0, -0.45, 0)).normalized()
-					sl.transform = Transform3D(Basis.looking_at(dir, Vector3.UP), lamp_pos[j] + Vector3(0, y, 0))
-					sl.light_color = LAMP_COLOR
-					sl.spot_range = 16.0
+					sl.transform = Transform3D(Basis.looking_at(dir, Vector3.UP), lamp.pos)
+					sl.light_color = col
+					sl.spot_range = 14.0
 					sl.spot_angle = 75.0
-					sl.spot_attenuation = 1.0
+					sl.spot_attenuation = 1.4
 					sl.light_size = 0.09
-					sl.light_volumetric_fog_energy = 1.4
+					sl.light_volumetric_fog_energy = 1.6
 					add_child(sl)
 					lights.append(sl)
 					lamp_of.append(j)
-					base.append(2.4)
+					base.append(2.2)
+		elif k <= 16:
+			# 中间几圈：每四盏灯一个洗墙灯，井壁上照出一块一块的光，两圈之间是暗的
+			for j in range(2, LAMPS, 4):   # 离电梯导轨那道缺口远一点（不然缺口两头的走台断面被照成一串亮点）
+				var la: float = lamps[j].a
+				var radial := Vector3(cos(la), 0, sin(la))
+				var wl := SpotLight3D.new()
+				var wdir := (radial * 0.3 + Vector3.DOWN).normalized()
+				wl.transform = Transform3D(Basis.looking_at(wdir, radial), _pol(R - 0.7, la, y - 0.58))
+				wl.light_color = LAMP_COLOR
+				wl.spot_range = 16.0
+				wl.spot_angle = 60.0
+				wl.spot_attenuation = 1.2
+				wl.light_volumetric_fog_energy = 1.0
+				add_child(wl)
+				lights.append(wl)
+				lamp_of.append(-1)
+				base.append(28.0)
 		else:
 			# 远处：每圈三盏贴着井壁的全向灯，远看是一圈光带
-			for j in [0, 8, 16]:
-				var la := _lamp_angle(j)
+			for j in [4, 12, 20]:
+				var la: float = lamps[j].a
 				var ol := OmniLight3D.new()
 				ol.position = _pol(R - 1.1, la, y - 2.0)
 				ol.light_color = LAMP_COLOR
-				ol.omni_range = 17.0
-				ol.omni_attenuation = 1.0
-				ol.light_volumetric_fog_energy = 1.0
+				ol.omni_range = 16.0
+				ol.omni_attenuation = 1.2
+				ol.light_volumetric_fog_energy = 1.2
 				add_child(ol)
 				lights.append(ol)
 				lamp_of.append(-1)
-				base.append(14.0)
+				base.append(30.0)
 		_rings.append({"y": y, "die": die, "lamps": lamps, "lights": lights, "lamp_of": lamp_of, "base": base, "avg": 1.0})
 
 
