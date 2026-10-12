@@ -75,23 +75,33 @@ def from_lat_lon(lat, lon):
 # ---------------------------------------------------------------------------- 眼睛
 EYE_CENTER = V((0.0, AY * 0.62, 0.3))   # 眼球往前鼓出身体约 1.3 米
 EYE_R = 4.4                      # 眼球半径
-SOCKET_ANGLE = math.radians(56)  # 从身体中心看，离 +Y 方向这个角度以内是眼窝（不长甲；肉质眼窝 + 眼睑）
+SOCKET_ANGLE = math.radians(48)  # 眼窝最窄处（两侧）：从身体中心看，离 +Y 方向这个角度以内不长甲（肉质眼窝 + 眼睑）
 EYE_TURN_MAX = math.radians(25)  # 眼球在眼窝里最多转多少（动作用；眼窝要留够空隙）
 LID_CLOSE = math.radians(75)     # 眼睑从睁开到闭合转多少（上眼睑往下、下眼睑往上，绕过眼球中心的 X 轴）
 
 
+def socket_rim(be):
+    """甲缘（眼眶那圈甲的前缘）离 +Y 的角度（从身体中心看，弧度），随方位变：两侧 48°，上 52°、下 52°。
+    be：绕 Y 轴的方位，0 = +X（右），90° = +Z（上）（肉 flesh_geo 的 β；甲壳 shell_plate 的 φ = 90° - β）。
+    比眼眶唇峰（45°～51°，上半圈鼓出体表近 1 米）始终多 1.5°～3°，甲缘压在唇外坡上、不顶进唇里。可以传 numpy 数组。"""
+    import numpy as _np
+    s = _np.sin(be)
+    return SOCKET_ANGLE + math.radians(4.0) * (_np.sqrt(_np.maximum(s, 0.0)) + _np.maximum(-s, 0.0))
+
+
 def in_socket(d):
     """方向 d 是不是落在眼窝里（不长甲）。"""
-    return V(d).normalized().angle(V((0, 1, 0))) < SOCKET_ANGLE
+    d = V(d).normalized()
+    return d.angle(V((0, 1, 0))) < float(socket_rim(math.atan2(d.z, d.x)))
 
 
 # ---------------------------------------------------------------------------- 桨
 # 三对：(纬度, 经度) 是根部方向（右侧；左侧经度取负），length、width 是叶片尺寸（米），
 # sweep：静止时往后掠的角度，droop：往下垂的角度
 PADDLES = [
-    dict(lat=math.radians(-18), lon=math.radians(70), length=9.0, width=3.2, sweep=math.radians(25), droop=math.radians(12)),
-    dict(lat=math.radians(-24), lon=math.radians(95), length=10.5, width=3.6, sweep=math.radians(38), droop=math.radians(16)),
-    dict(lat=math.radians(-18), lon=math.radians(122), length=8.5, width=3.0, sweep=math.radians(52), droop=math.radians(12)),
+    dict(lat=math.radians(-18), lon=math.radians(70), length=9.0, width=3.2, sweep=math.radians(6), droop=math.radians(10)),
+    dict(lat=math.radians(-24), lon=math.radians(95), length=10.5, width=3.6, sweep=math.radians(34), droop=math.radians(16)),
+    dict(lat=math.radians(-18), lon=math.radians(122), length=8.5, width=3.0, sweep=math.radians(62), droop=math.radians(12)),
 ]
 PADDLE_BONES = 3                 # 每支桨三节（根节、中节、叶片）
 
@@ -132,14 +142,15 @@ SIPHON_R = 1.1
 #   贴图组 "shell"。
 # 肉（flesh.py）：甲片底下那层身体（甲片之间的关节膜露出来的部分要好看，完全被盖住的地方可以省面）、眼窝（眼球周围的肉）、
 #   上下眼睑（权重 LidUp / LidLo，闭眼时盖住眼球、不穿模）、腹面虹吸口。桨根部的肉褶不归你（桨的人做）。贴图组 "flesh"。
-# 桨（paddles.py）：三对桨，每支三节（权重 Paddle<L/R><i>_<k>，关节处混合），根部的肉褶盖住和身体的接缝。贴图组 "paddle"。
+# 桨（paddles.py，形体 paddle_geo.py、高模 paddle_high.py）：三对桨，每支三节（权重 Paddle<L/R><i>_<k>，关节处混合），
+#   根部的肉褶盖住和身体的接缝（权重 Body → Paddle<L/R><i>_0）。贴图组 "paddle"。
 # 眼（eye.py）：眼球（巩膜、虹膜的起伏、瞳孔区域）+ 外面一层透明的角膜（单独物体，材质 M_WatcherCornea）；
 #   权重全给 "Eye"。贴图组 "eye"。
 
 # ---------------------------------------------------------------------------- 贴图组
 # size：贴图边长；meters：目标的 1 个 UV 单位 = 多少米（atlas_uv 会写实际值到 json）
 # mask.A（Area）各组的含义：shell = 刺 / 甲缘磨出的白（1）；flesh = 眼睑内侧和眼窝最湿的肉（1）；
-#   paddle = 叶片薄处透光（1）；eye = 虹膜（1）/ 巩膜（0）
+#   paddle = 软组织（1：关节膜、根部肉褶、叶片鳍条之间的膜；偏粉、透光）/ 硬甲（0）；eye = 虹膜（1）/ 巩膜（0）
 TEXSETS = {
     "shell": dict(size=4096, meters=48.0),
     "flesh": dict(size=4096, meters=40.0),

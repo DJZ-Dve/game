@@ -1,0 +1,16 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/watcher_paddle.gdshader" id="1_sh"]
+[ext_resource type="Texture2D" path="res://assets/textures/watcher/paddle_normal.png" id="2_n"]
+[ext_resource type="Texture2D" path="res://assets/textures/watcher/paddle_mask.png" id="3_m"]
+[ext_resource type="Texture2D" path="res://assets/textures/giant_noise.png" id="4_x"]
+[ext_resource type="Texture2D" path="res://assets/textures/giant_tissue_n.png" id="5_x"]
+
+[resource]
+resource_name = "M_WatcherPaddle"
+shader = ExtResource("1_sh")
+shader_parameter/normal_tex = ExtResource("2_n")
+shader_parameter/mask_tex = ExtResource("3_m")
+shader_parameter/atlas_meters = 23.505
+shader_parameter/noise_tex = ExtResource("4_x")
+shader_parameter/detail_tex = ExtResource("5_x")

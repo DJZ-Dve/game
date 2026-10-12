@@ -96,6 +96,16 @@ godot --headless --audio-driver Dummy --path . --max-fps 60 -- --join=127.0.0.1 
 - 调试：`--giant=off`、`--giant-at=dx,dy,dz`、`--giant-still`、`--giant-log`、`--giant-pose=charge|moan|ram`、`--giant-jaw=度`、`--giant-yaw=度`、`--giant-light`（其余见 giant.gd 头部）、`--sonar=passive`、`--hull=0.5`、`--no-wreck`。
   无头跑行为（不出声、比实时快）：`godot --headless --audio-driver Dummy --path . --fixed-fps 60 --quit-after 7200 -- --scene=deep_sea --giant-log --giant-at=0,0,-120 --cruise=0.4`
 
+### 第二个巨物「大眼」（进行中：模型、材质已做，行为未做）
+直径十六七米、略扁的球形节肢动物（照潜渊症 Watcher 的思路原创）：漆黑的叠瓦甲壳和背刺，正面一只近 9 米的红色竖瞳大眼，两侧三对苍白的桨（它的弱点），腹面一个滤食的虹吸口。
+- **模型**（`blender/scripts/gen_watcher.py`，部件在 `blender/scripts/watcher/`，规格 `watcher/spec.py`）：甲壳、肉（关节膜、眼窝、可闭合的眼睑、虹吸口）、桨、眼四个部件，
+  高模烘低模（约 7 万三角、22 根骨：Body、Eye、LidUp/LidLo、每支桨三节）。`tools/rebuild_models.sh watcher` 只导出模型；
+  贴图按部件分进程烘（一次一个，峰值 5～7GB）：`blender -b --factory-startup --python blender/scripts/gen_watcher.py -- --parts=paddles --bake --no-export`。
+  `--preview=目录 --lid=0~1 --look=左右,上下` 出 Workbench 预览图
+- **材质**（`assets/shaders/watcher_*.gdshader`、`assets/materials/M_Watcher*.tres`）：透琥珀的黑几丁质（甲缘、刺尖磨白，缝里积泥，蜡质弱清漆），
+  暗红湿肉，苍白的桨（软膜偏粉、背光透血色），橙红虹膜的眼球（竖瞳大小、虹膜发光是 instance uniform `pupil`、`glow`），透明角膜。
+  看样场景：`tools/capture.sh out.png --scene=res://scenes/dev/watcher_lookdev.tscn --shot=eye --lid=0.3 --gaze=15,0 --pupil=0.6`（机位、参数见 `scripts/tools/watcher_lookdev.gd`）
+
 ## 外观
 一艘退役的老式军用小潜艇，艇长约 14 米：单壳体（耐压壳就是艇身），水线以上黑漆、以下红色防污漆；
 背上一道带流水孔的上层建筑（甲板），中前部一座高围壳（围壳舵、潜望镜、通气管、天线上系着红布条）；

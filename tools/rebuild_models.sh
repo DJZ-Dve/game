@@ -9,9 +9,12 @@
 #   office     第一章的东溟办事处（gen_office.py），顺带烘焙办事处的 VoxelGI 和光照贴图
 #   npc        沈渡（gen_npc.py，要先跑 tools/fetch_rocketbox.sh）
 #   giant      巨物「闷雷」（gen_giant.py，部件在 blender/scripts/giant/）
+#   watcher    巨物「大眼」（gen_watcher.py，部件在 blender/scripts/watcher/）。只导出模型；贴图要烘时
+#              按部件分开跑（一次一个，单次峰值 5～9GB）：blender -b --factory-startup --python
+#              blender/scripts/gen_watcher.py -- --parts=shell --bake --no-export（shell / flesh / paddles / eye）
 # Blender / Godot 默认在 /Applications 下，装在别处时用环境变量 BLENDER / GODOT 指定。
 set -eu
-all=(submarine seabed dorm office npc giant)
+all=(submarine seabed dorm office npc giant watcher)
 want=(${@:-$all})
 for k in $want; do
   if (( ! ${all[(Ie)$k]} )); then
@@ -24,8 +27,8 @@ blender=${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}
 source "$root/tools/godot_bg.sh"
 
 typeset -A gens=(submarine gen_submarine.py seabed gen_seabed.py dorm gen_dorm.py office gen_office.py
-  npc gen_npc.py giant gen_giant.py)
-typeset -A outs=(submarine "submarine_*" seabed "seabed*" dorm "dorm*" office "office*" npc "npc_*" giant "giant*")
+  npc gen_npc.py giant gen_giant.py watcher gen_watcher.py)
+typeset -A outs=(submarine "submarine_*" seabed "seabed*" dorm "dorm*" office "office*" npc "npc_*" giant "giant*" watcher "watcher*")
 for k in $want; do
   "$blender" -b --factory-startup --python "$root/blender/scripts/$gens[$k]" 2>&1 |
     grep -E "Traceback|Error|exported|line [0-9]+" || true

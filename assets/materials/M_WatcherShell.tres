@@ -1,0 +1,14 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/watcher_shell.gdshader" id="1_sh"]
+[ext_resource type="Texture2D" path="res://assets/textures/watcher/shell_normal.png" id="2_n"]
+[ext_resource type="Texture2D" path="res://assets/textures/watcher/shell_mask.png" id="3_m"]
+[ext_resource type="Texture2D" path="res://assets/textures/giant_noise.png" id="4_x"]
+
+[resource]
+resource_name = "M_WatcherShell"
+shader = ExtResource("1_sh")
+shader_parameter/normal_tex = ExtResource("2_n")
+shader_parameter/mask_tex = ExtResource("3_m")
+shader_parameter/atlas_meters = 53.942
+shader_parameter/noise_tex = ExtResource("4_x")

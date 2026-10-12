@@ -1,0 +1,19 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/watcher_eye.gdshader" id="1_sh"]
+[ext_resource type="Texture2D" path="res://assets/textures/watcher/eye_normal.png" id="2_n"]
+[ext_resource type="Texture2D" path="res://assets/textures/watcher/eye_mask.png" id="3_m"]
+[ext_resource type="Texture2D" path="res://assets/textures/giant_noise.png" id="4_x"]
+
+[resource]
+resource_name = "M_WatcherEye"
+shader = ExtResource("1_sh")
+shader_parameter/normal_tex = ExtResource("2_n")
+shader_parameter/mask_tex = ExtResource("3_m")
+shader_parameter/atlas_meters = 12.667
+shader_parameter/noise_tex = ExtResource("4_x")
+shader_parameter/iris_center = Vector2(0.25756, 0.74228)
+shader_parameter/r_root = 0.23973
+shader_parameter/r_limbus = 0.2571
+shader_parameter/slit_half = Vector2(0.02524, 0.16403)
+shader_parameter/collarette = 0.34

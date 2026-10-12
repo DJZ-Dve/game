@@ -309,13 +309,14 @@ SOCK_COUNTS = (2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1)
 SOCK_REGION = (0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4)
 REG_BODY = -1
 TH_BACK = D(140)
+JOIN = D(5)                            # join（藏在甲壳下面）比甲缘再往后多少
 
 
 def socket_keys(be):
     """每个方位的剖面控制点（θ, ρ），shape (nb, K, 2)，含首尾虚点。"""
     nb = len(be)
-    tj = theta_at_body_angle(be, D(61))
-    tr = theta_at_body_angle(be, D(56))
+    tj = theta_at_body_angle(be, spec.socket_rim(be) + JOIN)
+    tr = theta_at_body_angle(be, spec.socket_rim(be))
     tl = theta_lip(be)
     rf = roof_rho(be)
     tf = tl + FUNDUS
@@ -365,7 +366,7 @@ def rev_grid(nb, k):
     # 每圈在本区间里的位置（0～1）
     loc = np.concatenate([np.arange(n) / n for n in counts] + [np.ones(1)])
     # 身体段：椭球面
-    tj = theta_at_body_angle(be, D(61))
+    tj = theta_at_body_angle(be, spec.socket_rim(be) + JOIN)
     n1, n2 = BODY_COUNTS[0] * k, BODY_COUNTS[1] * k
     rings_th = [np.full(nb, math.pi - (math.pi - TH_BACK) * j / n1) for j in range(1, n1 + 1)]
     rings_th += [TH_BACK + (tj - TH_BACK) * j / n2 for j in range(1, n2)]

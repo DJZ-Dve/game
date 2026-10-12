@@ -12,6 +12,8 @@
 高模上可以带两个点色属性（FLOAT_COLOR 或 BYTE_COLOR，点域或面角域都行）：
   "Curv"：R = 凹槽，G = 凸棱（0～1，自己算；没有就用 lib._curvature 现算）
   "Area"：R = 写进 mask.A 的区域值（0～1；没有就是 0）
+  "AOv"：R = 自己算好的 AO（0～1）；有它就不用 Cycles 烘 AO（会动的部件只要细节自己的遮蔽，
+         也躲开「高模高过低模时 AO 成片发黑」的问题）
 烘完高模会被删掉（不进 glb）。
 """
 import math
@@ -163,10 +165,12 @@ def bake_set(name, lows, highs, extrusion=0.1, max_ray=0.3, ao_samples=48, ao_di
     # AO、凹槽、凸棱、区域
     chans = []
     img = _image(name + "_tmp", size, True)
-    _bake('AO', low, [high], img, extrusion, max_ray, samples=ao_samples)
-    chans.append(_pixels(img)[:, 0].copy())
     hm = [s.material for s in high.material_slots]
-    for attr, ch in (("Curv", "R"), ("Curv", "G"), ("Area", "R")):
+    own_ao = "AOv" in high.data.attributes
+    if not own_ao:
+        _bake('AO', low, [high], img, extrusion, max_ray, samples=ao_samples)
+        chans.append(_pixels(img)[:, 0].copy())
+    for attr, ch in ((("AOv", "R"),) if own_ao else ()) + (("Curv", "R"), ("Curv", "G"), ("Area", "R")):
         if attr not in high.data.attributes:
             chans.append(np.zeros(size * size, dtype=np.float32))
             continue
