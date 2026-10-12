@@ -13,7 +13,7 @@ extends Node3D
 ## 坐标：井轴是 Y 轴（和 ShaftKit 一样），轿厢挂在方位角 0 的导轨上，地板面在 y = 0。
 ##
 ## 调试：--scene=lift 直接从这里开始（单人）；--ride-hold 一直坐着不到站（截图、看效果）；--depth=米 从这个深度开始；
-##       --ride-crew=N 单人时往空座位上放 N 个假队友（看满员的样子）；--ride-still 轿厢停着不动（截图用，配 --depth 定在某个位置）；--seat=0~3 坐哪个座位；--ride-look=度,度 坐下以后视线往左右、上下偏多少；--ride-next=场景 到站以后进哪个场景
+##       --ride-crew=N 单人时往空座位上放 N 个假队友（看满员的样子；到站不等他们）；--ride-still 轿厢停着不动（截图用，配 --depth 定在某个位置）；--seat=0~3 坐哪个座位；--ride-look=度,度 坐下以后视线往左右、上下偏多少；--ride-next=场景 到站以后进哪个场景
 
 const SPEED := 5.0             # 往下走的速度（米/秒）：20 公里单程一个多小时
 const START_DEPTH := 96.0      # 进来的时候轿厢已经下到多深了（刚过第 8 圈）
@@ -72,7 +72,6 @@ func _ready() -> void:
 		Net.in_game = true
 		for i in clampi(int(DebugArgs.get_arg("ride-crew", "0")), 0, 3):
 			Net.players[1000 + i] = {"name": ["老周", "阿兰", "米沙"][i], "role": i + 1}
-			_hold = true   # 假队友永远“没加载好”，不会到站
 	if DebugArgs.has("depth"):
 		depth = float(DebugArgs.get_arg("depth"))
 	_shake.seed = 5

@@ -215,9 +215,13 @@ func ride_mark_ready() -> void:
 		_ride_ready_msg.rpc_id(1)
 
 
-## 名单上的人是不是都加载好了（主机把名单广播给大家，谁那边都能问）
+## 名单上的人是不是都加载好了（主机把名单广播给大家，谁那边都能问）。只等真连着的人
+## （名单里有、连接已经断了的不等；单人调试时 --ride-crew 放的假队友也不等）
 func ride_all_ready() -> bool:
+	var peers := multiplayer.get_peers()
 	for id: int in players:
+		if id != my_id() and not id in peers:
+			continue
 		if not _ride_ready.has(id):
 			return false
 	return true
