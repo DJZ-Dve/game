@@ -1185,6 +1185,36 @@ def spark_crackle(rng):
     return y
 
 
+
+def steam_burst(rng):
+    """冰裂扯开的加热管往外喷汽：开头一下猛的（管里的压力一口气冲出来），然后一直嘶嘶地喷，压力慢慢掉，
+    和画面上的喷汽同一条包络（0.35 + 0.65·e^(-t/2.5)）。喷口的湍流让嘶声一直在抖，低处带一层闷的“轰”，
+    偶尔夹着几下凝结水被冲出来的“噗嗤”。"""
+    dur = 22.0
+    n = int(dur * SR)
+    t = taxis(n)
+    env = (0.35 + 0.65 * np.exp(-t / 2.5)) * np.clip(t / 0.015, 0, 1) * np.clip((dur - t) / 4.0, 0, 1)
+    # 嘶声：峰在三四千赫，压力高的时候亮一点（高频多一点）
+    hiss_hi = noise(n, lambda f: bp(f, 2500, 11000, 2), rng)
+    hiss_mid = noise(n, lambda f: bp(f, 700, 5000, 2) * tilt(f, 1.5, 2000), rng)
+    bright = 0.35 + 0.65 * np.exp(-t / 2.5)
+    hiss = hiss_mid + hiss_hi * bright * 0.8
+    # 湍流：几赫兹到二十几赫兹的乱抖
+    hiss *= np.clip(1 + 0.25 * wobble(n, 4, 25, rng) + 0.15 * wobble(n, 0.3, 2, rng), 0.2, None)
+    roar = noise(n, lambda f: bp(f, 60, 600, 2) * tilt(f, -3, 150), rng)
+    roar *= np.clip(1 + 0.3 * wobble(n, 1, 8, rng), 0.2, None)
+    y = unit(hiss) + unit(roar) * db(-9)
+    y = y * env
+    # 刚崩开那一下：一口宽频的“噗”
+    place(y, unit(burst(160, lambda f: bp(f, 150, 8000, 2), rng)) * 1.2, 0)
+    # 凝结水“噗嗤”
+    tt = rng.uniform(0.6, 1.2)
+    while tt < dur - 5:
+        place(y, unit(burst(rng.uniform(15, 50), lambda f: bp(f, 800, 9000, 2), rng)) * rng.uniform(0.4, 1.0)
+              * (0.35 + 0.65 * np.exp(-tt / 2.5)), int(tt * SR))
+        tt += rng.exponential(1.4)
+    return y
+
 # ---------------------------------------------------------------------------- 冰井的声学（给上面这些冰井的声音烘焙回声）
 # 一口直径 22 米、几百米深的竖井，井壁是冰（几乎全反射），和普通大厅的混响很不一样：
 # - 颤动回声：声音在两边井壁之间来回弹。镜头站在走台上、离井壁不到两米，所以先是贴身那面墙 10 毫秒的回声，
@@ -1376,10 +1406,12 @@ SOUNDS = {
     "relay_drop": (relay_drop, False, 3),
     "steel_groan": (steel_groan, False, 3),
     "spark_crackle": (spark_crackle, False, 2),
+    "steam_burst": (steam_burst, False, 1),
     # 冰井里的回声（KEEP_LEVEL：不归一化，保留和干声的比例）
     "ice_boom_wet": (wet_of(ice_boom, "ice_boom"), False, 2),
     "steel_groan_wet": (wet_of(steel_groan, "steel_groan"), False, 3),
     "spark_crackle_wet": (wet_of(spark_crackle, "spark_crackle"), False, 2),
+    "steam_burst_wet": (wet_of(steam_burst, "steam_burst"), False, 1),
     # 每一圈的电闸声（要先跑 tools/bake_shaft_rir.py 算 RIR）
     "relay_ring": (relay_ring, False, 51),
 }

@@ -1,12 +1,12 @@
 extends Node3D
-## 开场镜头 3（docs/design.md「八、开场」）：冰井里，冰震，沿井壁一圈圈的灯从上往下一盏一盏灭掉。
+## 开场镜头 3（docs/design.md「八、开场」）：冰井里，冰震，沿井壁一圈圈的灯从井底往上一圈圈灭，黑暗涨上来吞掉镜头。
 ## 场景全部由脚本搭：冰壁（程序生成的冰，assets/shaders/ice_wall.gdshader）、每 10 米一圈的环形走台
 ## （格栅、栏杆、投光灯）、竖着贯穿整口井的加热管、电梯导轨、电缆桥架。一圈的零件合成一个网格，用 MultiMesh 摆满。
 ## 坐标：井轴是 Y 轴，方位角 a = atan2(z, x)（和冰壁着色器一致）；第 i 圈走台面在 y = -i * RING_STEP（i 从 -1 开始，头顶还有一圈）。
 ## 声音：井里的空气、灯的嗡声、冰震、钢架呻吟、打火是 tools/gen_sfx.py 合成的，冰井的回声烘焙在 *_wet_* 里；
 ## 每圈灯的电闸是实录卷上 pyroomacoustics 算的冲激响应（relay_ring_*，见 _play_relay），按距离晚到（声速 343 m/s）。
-## 机位：站在第 0 圈走台上扶着栏杆往下探（--cam=r,方位,高,看的点r,方位,高 可以临时换机位）；灯往下灭时
-##       镜头按时间线算出的黑暗前沿往下追、推长焦。
+## 机位：站在第 0 圈走台上扶着栏杆往下探（--cam=r,方位,高,看的点r,方位,高 可以临时换机位）；冰裂以后
+##       推长焦看着井底，黑暗从井底往上涨，镜头按时间线算出的黑暗前沿一路拉回广角。
 ## 调试：--shot-t=秒  定在这个时刻（截图看某一刻；时间不再走）；--shot-run 从这个时刻开始照常往下走。
 ##       --lookdev[=弧度]  站在走台上近看井壁（调冰的材质用；数字是视线往旁边偏多少）
 ## 录像：tools/record.sh .tmp/shaft 36 --scene=shaft
@@ -31,15 +31,24 @@ const LAMP_COOL := Color(0.86, 0.93, 1.0)     # 后来换上的 LED
 const G := 1.315               # 欧罗巴的重力
 const SOUND_SPEED := 343.0
 const CAM_A := 1.35            # 镜头站在走台的哪个方位
+const BURST_PIPE := 2          # 冰裂时崩开的是哪根加热管（PIPE_ANGLES 里的第几根）、在第几圈走台底下（开场机位的右上方）
+const BURST_RING := 2
+const FOG_AIR := 0.012         # 井里空气的体积雾密度（平时）；冰震把冰屑、冰晶震进空气里，再加 FOG_QUAKE
+const FOG_QUAKE := 0.012
 const FOV0 := 50.0
 
 # 时间线（秒）
 const FADE_IN := 2.5
 const QUAKE_T := 7.0           # 冰震开始：低频轰鸣、掉冰屑、灯跟着电压往下沉
 const CRACK_T := 10.4          # 冰裂的一声，掉冰块，墙上开始出裂纹
-const CASCADE_T := 12.6        # 头顶那圈灯灭，然后一圈一圈往下
-const CASCADE_K := 1.6         # 第 n 圈在 CASCADE_T + K * sqrt(n) 灭：越往下传得越快
-const LAST_HOLD := 1.9         # 最底下那圈多挣扎一会儿
+const BURST_T := 11.1          # 冰裂的那一下把一根加热管扯断（晚半拍：先震，再崩开，嘶声不被冰裂的轰响盖住）
+const CASCADE_T := 12.6        # 井底那圈灯灭，然后一圈一圈往上
+const CASCADE_DUR := 11.0      # 黑暗从井底涨到脚下那圈（k = 2）用多久。前沿离镜头的距离按对数匀速缩短：
+                               # 远处几百米一眨眼就涨上来，越近越慢，最后几圈一圈一顿
+const CAM_H := 1.55            # 镜头比第 0 圈走台面高多少
+const NEAR_HOLD := 1.9         # 黑暗涨到脚下那圈就停一下：镜头这圈的灯跟着电压往下沉、挣扎，然后才灭
+const PUSH_FRAME := 1.6        # 黑暗前沿涨近以后，那一圈最多占画面半高的 1/PUSH_FRAME（再近就拉回广角）
+const PUSH_FOV := 10.0         # 推长焦推到多少度
 
 var t := 0.0
 var _frozen := false
@@ -63,6 +72,12 @@ var _fov := FOV0
 var _aim := Vector3.ZERO           # 镜头看着的点（推长焦时移到还亮着那一圈的中心）
 var _aim0 := Vector3.ZERO
 var _hum_lvl := 1.0
+var _end_t := 0.0                  # 最后一盏灯灭的时刻
+var _steam_noise: NoiseTexture3D
+var _jets: Array[GPUParticles3D] = []   # 崩开的管子往外喷的汽（芯 + 外面一团）
+var _jet_cloud: ShaderMaterial     # 喷出来以后在那一片积起来的一团
+var _burst_at := Vector3.ZERO
+var _puff_tex: ImageTexture
 
 
 func _ready() -> void:
@@ -79,6 +94,7 @@ func _ready() -> void:
 	_build_verticals()
 	_build_rings()
 	_build_particles()
+	_build_steam()
 	_build_camera()
 	_build_overlay()
 	_build_audio()
@@ -127,6 +143,13 @@ func _lamp_power(k: int, j: int, at: float) -> Vector2:
 	if q > 0.0:
 		# 电压跟着往下沉、乱跳（整口井一起，各圈各盏差一点点）
 		p -= 0.22 * q * (0.5 + 0.5 * _shake.get_noise_2d(at * 6.0, float(k) * 3.1 + float(j) * 0.7))
+	var strain: float = lamp.strain
+	if at >= strain and at < die - flick:
+		# 黑暗停在脚下的那一会儿：电压一点点塌下去，时不时整个掉一下又挣回来
+		var s := (at - strain) / maxf(die - flick - strain, 0.01)
+		p *= 1.0 - 0.6 * s * s
+		if _shake.get_noise_2d(at * 7.0, float(k) * 5.3 + 40.0) < -0.3 + 0.25 * s:
+			p *= 0.12
 	if at >= die - flick:
 		# 要灭之前：一阵乱闪（每秒 20 来次，亮灭随机），最后一下电弧闪得比平时还亮
 		var slot := floori(at * 22.0)
@@ -135,6 +158,20 @@ func _lamp_power(k: int, j: int, at: float) -> Vector2:
 		if at > die - 0.05:
 			p = 1.7
 	return Vector2(clampf(p, 0.0, 1.8), 0.0)
+
+
+## 黑暗前沿此刻离镜头多远（米）：从井底那圈开始，按对数匀速往上，到脚下那圈（k = 2）为止
+func _front_dist(at: float) -> float:
+	var f := clampf((at - CASCADE_T) / CASCADE_DUR, 0.0, 1.0)
+	return _d_bottom() * pow(_d_near() / _d_bottom(), f)
+
+
+func _d_bottom() -> float:
+	return CAM_H + float(RING_LAST) * RING_STEP
+
+
+func _d_near() -> float:
+	return CAM_H + RING_STEP
 
 
 func _update(delta: float) -> void:
@@ -167,23 +204,18 @@ func _update(delta: float) -> void:
 	var lean := smoothstep(0.0, 16.0, t) * 0.28
 	var xf := _cam_base
 	xf.origin += -Vector3(_cam_base.origin.x, 0, _cam_base.origin.z).normalized() * lean + Vector3(0, -lean * 0.4, 0)
-	# 灯往下灭的时候，镜头一路往下追着黑暗的前沿：看的点从井壁上的构图点移到井轴上（各圈都以井轴为中心，
-	# 看着井轴，下面还亮着的那几圈总在画面正中），焦距随前沿的深度推长，让最外面那圈还亮着的灯一直差不多大——
-	# 下面一圈套一圈的灯像隧道，黑暗从外往里一圈圈吃进来。前沿的位置直接由时间线算（第 n 圈在 CASCADE_T + K√n 灭），
-	# 不靠跟随：越往下灭得越快（底下每秒八十来米），跟随总是落后，亮的那块就会越来越小、漂到一边
-	var chase := smoothstep(float(_rings[1].die) + 0.3, float(_rings[1].die) + 3.0, t)
-	var nf := pow(maxf(t - CASCADE_T, 0.0) / CASCADE_K, 2.0)
-	var bottom: float = _rings[-1].y
-	var front := maxf(_rings[0].y - RING_STEP * nf, bottom)
-	# 镜头不在井轴上（离轴九米多），越深的圈在画面上越往“正下方”那个灭点挤；看的点往前沿和井底之间挪一点，
-	# 前沿那圈和下面一串都框得住、大致居中
-	var fdepth := maxf(minf(front - 10.0, _aim0.y), bottom - 6.0)
-	var depth := lerpf(_aim0.y, lerpf(fdepth, bottom, 0.3) if fdepth > bottom else fdepth, chase)
-	var dist := xf.origin.y - fdepth
-	_aim = _aim0.lerp(Vector3(0.0, depth, 0.0), chase)
-	_aim.y = depth
-	var tele := clampf(2.0 * rad_to_deg(atan((R * 1.25 + 4.0) / dist)), 2.6, FOV0)
-	_fov = exp(lerpf(log(FOV0), log(tele), chase))
+	# 冰裂以后镜头推长焦、看着井轴的深处（一圈套一圈的灯像隧道，没进雾里的黑暗在画面正中）；灯从井底往上灭，
+	# 黑暗从画面中间往外一圈圈涨出来、越涨越大；涨到占满大半个画面以后焦距跟着拉回来（黑洞不再变大，
+	# 外面那圈亮的还看得见），最后几十米回到广角、看的点回到井壁上的构图点，剩下几圈直接冲到脚下。
+	# 前沿的位置直接由时间线算（_front_dist），不靠跟随：远处涨得飞快，跟随总是落后
+	var push := smoothstep(BURST_T + 0.9, CASCADE_T + 2.8, t)   # 先让人看清管子崩开
+	push = push * push * (3.0 - 2.0 * push)
+	var front := CAM_H - _front_dist(t)
+	var dist := xf.origin.y - front
+	var tele := clampf(2.0 * rad_to_deg(atan(R * PUSH_FRAME / dist)), PUSH_FOV, FOV0)
+	_fov = exp(lerpf(log(FOV0), log(tele), push))
+	var chase := push * smoothstep(0.0, 1.0, log(FOV0 / tele) / log(FOV0 / 16.0))
+	_aim = _aim0.lerp(Vector3(0.0, front, 0.0), chase)
 	xf.basis = Basis.looking_at(_aim - xf.origin, _cam_base.basis.y)  # 几乎正对下方：拿原来的“上”当参考，免得滚转乱跳
 	if not _lookdev:
 		_cam.fov = _fov
@@ -198,9 +230,17 @@ func _update(delta: float) -> void:
 		_shake.get_noise_2d(t * 12.0, 9.0)) * shake_pos * minf(q, 1.0)
 	_cam.transform = _cam_base if _lookdev else xf
 	# 身边的灯灭了以后眼睛慢慢适应黑暗：曝光往上抬，下面远处的灯显得更亮、光晕更大
-	_env.tonemap_exposure = 1.0 + 0.9 * smoothstep(CASCADE_T + 2.0, CASCADE_T + 9.0, t)
+	_env.tonemap_exposure = 1.0 + 0.9 * smoothstep(_end_t, _end_t + 5.0, t)
 	# 黑场淡入
 	_fade.color.a = 1.0 - smoothstep(0.0, FADE_IN, t)
+	# 空气：冰震把冰屑、冰晶震进空气里，低重力下好久落不下来
+	_env.volumetric_fog_density = FOG_AIR + FOG_QUAKE * smoothstep(QUAKE_T, CRACK_T + 3.0, t)
+	# 崩开的管子：先“砰”一大股，然后一直往外喷，压力慢慢掉；喷出来的汽在那一片越积越多
+	var since := t - BURST_T
+	for jp in _jets:
+		jp.emitting = since >= 0.0   # 按时刻算，不排进事件里：--shot-t 跳过冰裂那一刻时也得接着喷
+		jp.amount_ratio = 0.35 + 0.65 * exp(-maxf(since, 0.0) / 2.5)
+	_jet_cloud.set_shader_parameter("amount", smoothstep(0.0, 6.0, since))
 	# 灯的嗡声：按还亮着的灯（近的权重大）
 	var lit := 0.0
 	var wsum := 0.0
@@ -251,6 +291,9 @@ func _schedule() -> void:
 	_at(QUAKE_T + 2.2, _play2d.bind("steel_groan_0", -9.0, 0.85))
 	_at(CRACK_T + 0.15, _play2d.bind("ice_boom_1", -5.0, 1.15, -8.0))
 	_at(CRACK_T + 3.1, _play2d.bind("steel_groan_1", -8.0, 0.8))
+	# 管子崩开喷汽（按距离晚到；画面上的喷汽见 _build_steam）
+	_at(BURST_T + _burst_at.distance_to(_cam_base.origin) / SOUND_SPEED,
+		_play3d.bind("steam_burst_0", _burst_at, -2.0, 1.0, -5.0))
 	_at(CRACK_T + 9.5, _play2d.bind("steel_groan_2", -12.0, 0.75))
 	_at(CRACK_T + 14.0, func() -> void: _quake_dust.emitting = false)
 	for i in 9:
@@ -265,7 +308,7 @@ func _schedule() -> void:
 			_at(float(ring.die), _sparks.bind(jb))
 			_at(float(ring.die) + delay, _play3d.bind("spark_crackle_%d" % (k % 2), jb, -4.0, 1.0))
 	# 全黑以后：冰还在挤，钢架呻吟，最后一声闷响
-	var end: float = _rings[-1].die
+	var end := _end_t
 	_at(end + 1.2, _play2d.bind("steel_groan_0", -16.0, 0.65))
 	_at(end + 4.0, _play2d.bind("ice_boom_1", -5.0, 0.7, -6.0))
 	_events.sort_custom(func(x: Array, y: Array) -> bool: return x[0] < y[0])
@@ -382,12 +425,15 @@ func _build_environment() -> void:
 	env.glow_bloom = 0.03
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
 	env.glow_hdr_threshold = 1.6
+	# 远处渐渐没进黑暗里：冰井只建到 DEPTH，不加雾的话长焦看井底会看见一个硬边的黑圆口
 	env.fog_enabled = true
-	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
+	env.fog_mode = Environment.FOG_MODE_DEPTH
 	env.fog_light_color = Color(0, 0, 0)
-	env.fog_density = 0.0018
+	env.fog_depth_begin = 200.0
+	env.fog_depth_end = DEPTH - 20.0
+	env.fog_depth_curve = 2.0
 	env.volumetric_fog_enabled = true
-	env.volumetric_fog_density = 0.005
+	env.volumetric_fog_density = 0.2
 	env.volumetric_fog_albedo = Color(0.86, 0.9, 0.95)
 	env.volumetric_fog_anisotropy = 0.62
 	env.volumetric_fog_length = 140.0
@@ -630,6 +676,184 @@ func _sparks(at: Vector3) -> void:
 	var tw := create_tween()
 	tw.tween_property(flash, "light_energy", 0.0, 0.5).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 	tw.tween_callback(flash.queue_free)
+
+
+# ---------------------------------------------------------------------------- 水汽：加热管冒的汽、冰裂时崩开的管子
+func _build_steam() -> void:
+	var fn := FastNoiseLite.new()
+	fn.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	fn.frequency = 0.05
+	fn.fractal_octaves = 3
+	_steam_noise = NoiseTexture3D.new()
+	_steam_noise.width = 64
+	_steam_noise.height = 64
+	_steam_noise.depth = 64
+	_steam_noise.seamless = true
+	_steam_noise.normalize = true
+	_steam_noise.noise = fn
+	var shader := preload("res://assets/shaders/steam_fog.gdshader")
+	# 加热管冒的汽：热管边上的湿空气往上走、碰到冷空气凝成一团团白汽，贴着管子往上飘、慢慢化开。
+	# 用粒子不用体积雾：几十米外体积雾的格子有一米来宽，细细的一缕会被抹平
+	var puff := _steam_puff_material(0.18)
+	for a in PIPE_ANGLES:
+		var wp := GPUParticles3D.new()
+		wp.amount = 90
+		wp.lifetime = 9.0
+		wp.preprocess = 9.0
+		wp.visibility_aabb = AABB(Vector3(-3, -40, -3), Vector3(6, 46, 6))
+		var pm := ParticleProcessMaterial.new()
+		pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+		pm.emission_box_extents = Vector3(0.1, 17.0, 0.1)
+		pm.direction = Vector3(0, 1, 0)
+		pm.spread = 20.0
+		pm.initial_velocity_min = 0.15
+		pm.initial_velocity_max = 0.4
+		pm.gravity = Vector3(0, 0.03, 0)
+		pm.turbulence_enabled = true
+		pm.turbulence_noise_strength = 0.3
+		pm.turbulence_noise_scale = 4.0
+		pm.angle_min = -180.0
+		pm.angle_max = 180.0
+		pm.angular_velocity_min = -6.0
+		pm.angular_velocity_max = 6.0
+		pm.scale_min = 0.5
+		pm.scale_max = 1.0
+		pm.scale_curve = _curve_tex([Vector2(0.0, 0.3), Vector2(1.0, 1.0)])
+		pm.color_ramp = _alpha_ramp([0.0, 0.25, 0.6, 1.0], [0.0, 1.0, 0.6, 0.0])
+		wp.process_material = pm
+		var q := QuadMesh.new()
+		q.size = Vector2(1.4, 1.4)
+		q.material = puff
+		wp.draw_pass_1 = q
+		wp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# 贴着管子、离井壁一点（不然一半插在冰里）
+		wp.position = _pol(R - 0.35, a, -20.0)
+		add_child(wp)
+	# 崩开的那根：冰裂把走台上面那道管卡扯开，一股汽横着往井里喷——正好在这圈灯照着的地方，底下是黑的走台
+	var ba: float = PIPE_ANGLES[BURST_PIPE]
+	_burst_at = _pol(R - 0.12, ba, -float(BURST_RING) * RING_STEP + 0.5)
+	var inward := -Vector3(cos(ba), 0, sin(ba))
+	var cloud := FogVolume.new()
+	cloud.shape = RenderingServer.FOG_VOLUME_SHAPE_ELLIPSOID
+	cloud.size = Vector3(7.0, 6.0, 7.0)
+	cloud.position = _burst_at + inward * 3.0 + Vector3(0, 1.5, 0)
+	_jet_cloud = ShaderMaterial.new()
+	_jet_cloud.shader = shader
+	_jet_cloud.set_shader_parameter("density", 0.5)
+	_jet_cloud.set_shader_parameter("amount", 0.0)
+	_jet_cloud.set_shader_parameter("noise", _steam_noise)
+	cloud.material = _jet_cloud
+	add_child(cloud)
+	# 一股细的、快的芯（出管口十几米每秒，一秒多就被空气拖住、散开），外面裹着一大团慢慢翻滚、往上浮的汽
+	var xf := Transform3D(Basis.looking_at(-inward, Vector3.UP), _burst_at + inward * 0.1)
+	_jets.append(_jet_emitter(xf, 220, 1.3, Vector2(11.0, 15.0), 5.0, 0.0, 6.0, 1.4, 0.8,
+		[Vector2(0.0, 0.15), Vector2(1.0, 1.0)]))
+	_jets.append(_jet_emitter(xf, 320, 5.5, Vector2(3.0, 6.0), 1.0, 0.5, 18.0, 4.2, 0.5,
+		[Vector2(0.0, 0.1), Vector2(0.3, 0.55), Vector2(1.0, 1.0)]))
+
+
+## 喷汽的一个发射器：粒子系统的 +Z 朝井里
+func _jet_emitter(xf: Transform3D, amount: int, life: float, vel: Vector2, damping: float, buoy: float,
+		spread: float, size: float, alpha: float, grow: Array[Vector2]) -> GPUParticles3D:
+	var jp := GPUParticles3D.new()
+	jp.amount = amount
+	jp.lifetime = life
+	jp.emitting = false
+	jp.local_coords = false
+	jp.visibility_aabb = AABB(Vector3(-14, -8, -14), Vector3(28, 20, 28))
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = Vector3(0, 0.1, 1)
+	pm.spread = spread
+	pm.initial_velocity_min = vel.x
+	pm.initial_velocity_max = vel.y
+	pm.damping_min = damping * 0.8
+	pm.damping_max = damping * 1.2
+	pm.gravity = Vector3(0, buoy, 0)   # 汽比冷空气轻，慢慢往上浮
+	pm.turbulence_enabled = true
+	pm.turbulence_noise_strength = 1.2
+	pm.turbulence_noise_scale = 3.0
+	pm.turbulence_influence_min = 0.03
+	pm.turbulence_influence_max = 0.12
+	pm.angle_min = -180.0
+	pm.angle_max = 180.0
+	pm.angular_velocity_min = -30.0
+	pm.angular_velocity_max = 30.0
+	pm.scale_min = 0.8
+	pm.scale_max = 1.2
+	pm.scale_curve = _curve_tex(grow)
+	pm.color_ramp = _alpha_ramp([0.0, 0.06, 0.45, 1.0], [0.0, 1.0, 0.5, 0.0])
+	jp.process_material = pm
+	var q := QuadMesh.new()
+	q.size = Vector2(size, size)
+	q.material = _steam_puff_material(alpha)
+	jp.draw_pass_1 = q
+	jp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	jp.transform = xf
+	add_child(jp)
+	return jp
+
+
+## 一团汽的材质：灯在汽后面也能把它照亮（半透明），贴近井壁、走台的地方淡掉（不然切出一道硬边）
+func _steam_puff_material(alpha: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.vertex_color_use_as_albedo = true
+	m.albedo_color = Color(0.9, 0.93, 0.96, alpha)
+	m.albedo_texture = _puff_texture()
+	m.roughness = 1.0
+	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	m.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT_WRAP
+	m.backlight_enabled = true
+	m.backlight = Color(0.75, 0.75, 0.75)
+	m.proximity_fade_enabled = true
+	m.proximity_fade_distance = 0.8
+	return m
+
+
+func _curve_tex(pts: Array[Vector2]) -> CurveTexture:
+	var c := Curve.new()
+	for p in pts:
+		c.add_point(p)
+	var ct := CurveTexture.new()
+	ct.curve = c
+	return ct
+
+
+## 只变透明度的颜色渐变（粒子一生里先浮现、再化开）
+func _alpha_ramp(offsets: Array[float], alphas: Array[float]) -> GradientTexture1D:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array(offsets)
+	var cols := PackedColorArray()
+	for a in alphas:
+		cols.append(Color(1, 1, 1, a))
+	g.colors = cols
+	var gt := GradientTexture1D.new()
+	gt.gradient = g
+	return gt
+
+
+## 一团汽的贴图：边缘发虚的圆，里面是一团团的噪声（白色，透明度在 alpha 里）
+func _puff_texture() -> ImageTexture:
+	if _puff_tex:
+		return _puff_tex
+	var n := FastNoiseLite.new()
+	n.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	n.frequency = 0.045
+	n.fractal_octaves = 4
+	var size := 128
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	for y in size:
+		for x in size:
+			var u := (float(x) + 0.5) / size * 2.0 - 1.0
+			var v := (float(y) + 0.5) / size * 2.0 - 1.0
+			var r := sqrt(u * u + v * v)
+			var fall := clampf(1.0 - r, 0.0, 1.0)
+			fall = fall * fall * (3.0 - 2.0 * fall)
+			var c := clampf(0.5 + 0.8 * n.get_noise_2d(x, y), 0.0, 1.0)
+			img.set_pixel(x, y, Color(1, 1, 1, clampf(fall * (0.35 + 0.9 * c) * fall, 0.0, 1.0)))
+	_puff_tex = ImageTexture.create_from_image(img)
+	return _puff_tex
 
 
 # ---------------------------------------------------------------------------- 冰壁
@@ -883,12 +1107,18 @@ func _build_rings() -> void:
 	var spacing := (TAU - 2.0 * GAP - 1.2 / R) / LAMPS
 	for k in ys.size():
 		var y := ys[k]
-		var n := float(k)
-		var die := CASCADE_T + CASCADE_K * sqrt(n) + _rng.randf_range(-0.06, 0.06) * minf(n, 1.0)
-		var last := k == ys.size() - 1
+		# 从井底往上灭：黑暗前沿涨过哪一圈，那一圈就灭（_front_dist 反过来算）；涨到脚下那圈（k = 2）停一下，
+		# 镜头这圈（k = 1）挣扎 NEAR_HOLD 秒才灭，头顶那圈（k = 0）紧跟着灭，全黑
+		var dk := CAM_H - ys[maxi(k, 2)]
+		var die := CASCADE_T + CASCADE_DUR * log(_d_bottom() / dk) / log(_d_bottom() / _d_near())
+		die += _rng.randf_range(-0.04, 0.04) * float(k > 2)
+		var hold := 0.0
+		if k <= 1:
+			hold = NEAR_HOLD
+			die += NEAR_HOLD + (0.7 if k == 0 else 0.0)
 		# 一圈里也是一盏接一盏灭：从随机的一盏开始，顺着圈扫过去（灯多了，扫得快一点）
 		var first := _rng.randi_range(0, LAMPS - 1)
-		var sweep := _rng.randf_range(0.012, 0.02) * (2.5 if last else 1.0)
+		var sweep := _rng.randf_range(0.012, 0.02) * (2.5 if k == 1 else 1.0)
 		var ring_off := _rng.randf()
 		var lamps: Array[Dictionary] = []
 		for j in LAMPS:
@@ -906,9 +1136,10 @@ func _build_rings() -> void:
 			mm.set_instance_transform(idx, Transform3D(Basis(), p) if not dead else Transform3D(Basis().scaled(Vector3(0.4, 0.3, 0.4)), p + Vector3(0, -0.07, 0)))
 			mm.set_instance_custom_data(idx, Color(0 if dead else 1, 0, maxf(tint, 0.0), 0))
 			var order := (j - first + LAMPS) % LAMPS
-			var hold := LAST_HOLD if last else 0.0
+			var lamp_die := die + order * sweep
+			_end_t = maxf(_end_t, lamp_die)
 			lamps.append({"idx": idx, "a": la, "pos": p, "dead": dead, "faulty": faulty, "tint": maxf(tint, 0.0),
-				"die": die + order * sweep + hold, "flick": _rng.randf_range(0.15, 0.5) + hold})
+				"die": lamp_die, "flick": _rng.randf_range(0.15, 0.5), "strain": lamp_die - hold - 0.4 if hold > 0.0 else INF})
 		var lights: Array[Light3D] = []
 		var lamp_of: Array[int] = []   # 每个光源跟着哪盏灯（-1 = 跟着这一圈的平均亮度）
 		var base: Array[float] = []
