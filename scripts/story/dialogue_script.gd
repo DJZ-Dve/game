@@ -1,6 +1,6 @@
 class_name DialogueScript
 extends RefCounted
-## 对白文件（assets/story/*.dlg）解析成一段段的条目。格式（详见 docs/story.md 末尾）：
+## 对白文件（assets/story/*.dlg）解析成一段段的条目。格式（详见 docs/archive/story_1998.md 末尾）：
 ##   # 标签                一段的开始
 ##   沈渡：台词            某人说话（全角或半角冒号）
 ##   （心声）              主角心里话

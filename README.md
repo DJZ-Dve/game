@@ -32,19 +32,31 @@ godot --headless --audio-driver Dummy --path . --max-fps 60 -- --join=127.0.0.1 
 另一个用 `tools/capture.sh out.png --scene=res://scenes/lobby.tscn --join=127.0.0.1 --at=0,1.4 --wait=1100`。
 
 ## 玩法设计（`docs/design.md`）
-2026-10-11 起改为 4 人联机合作：岗位分工、出舱、深海巨物、资源管理、船坞升级、局外成长，见 `docs/design.md`。下面的单人剧情只作素材保留，待重写。
+2026-10-12 起背景换到木卫二（欧罗巴）冰下海洋：冰震和被人类噪音引来的东西毁了线缆和站点，能延寿的生物质“时间”断供；
+4 个被高价征召的菜鸟从 20 公里的冰井下去，开小潜艇沿着断掉的线缆往深处走，见 `docs/design.md`。下面的 1998 年单人剧情不再用，旧文档归档在 `docs/archive/`，只作素材。
 
-## 剧情（`docs/story.md`，旧版）
+## 开场镜头：冰井灯灭（`scenes/intro/shaft_blackout.tscn`、`scripts/intro/shaft_blackout.gd`）
+设计文档「八、开场」的第 3 个镜头，第一个做的高画质镜头。吊在 20 公里冰井（半径 11 米）的中间往下看：每 12 米一圈环形走台，
+扶手内侧挂着一圈 24 盏舱壁灯，走台底下一排洗墙灯贴着井壁往下照，一圈圈排成往下的隧道。冰震（7 秒起：低频轰鸣、冰屑、电压往下沉）→
+冰裂（10.4 秒：冰里特有的“啾——”哨音、掉冰块、墙上开裂纹）→ 12.6 秒起灯从头顶那圈开始一圈一圈往下灭（同一圈里也是一盏接一盏），
+镜头推长焦一路追着下面还亮着的灯，最后一圈挣扎一会儿灭掉，全黑。
+场景全部由脚本搭。冰壁 `assets/shaders/ice_wall.gdshader`：表面是刀具刮过的毛冰（螺旋切削纹、节缝、融水流痕），
+冰里面用实拍的湖冰（ambientCG Ice002 / Ice004，CC0）在三个深度各贴一层、按折射后的视线错开，越深越蓝。
+声音是 `tools/gen_sfx.py` 里 `shaft_*`、`ice_*`、`relay_drop` 等合成的；每圈的继电器声按距离晚到（声速 343 m/s），远的更闷、混响更多。
+调试：`--shot-t=秒` 定在某一刻截图（`--shot-run` 从那一刻接着走）；`--lookdev[=弧度]` 站在走台上近看井壁（调冰的材质用）。
+ambientCG 直连很慢（几十 KB/s），`tools/fetch_ambientcg.sh` 的 300 秒超时下不完一个包，下素材前先开代理（`--proxy`）。
+
+## 剧情（`docs/archive/story_1998.md`，旧版，已不用）
 一九九八年夏末，浙东渔港白沙门。退伍潜艇兵周海生被一家叫“东溟海洋工程”的公司找上门，二十万，开一条老潜艇下去
 “打捞一只箱子”——舷窗封死、不许问、合同上要写生辰八字。他捞的是一口沉棺。完整的设定、人物、时间线、
-怎么一步步发现是棺材的线索设计、三个结局都在 `docs/story.md`；台词在 `assets/story/*.dlg`（纯文本，格式见文档末尾），
+怎么一步步发现是棺材的线索设计、三个结局都在 `docs/archive/story_1998.md`；台词在 `assets/story/*.dlg`（纯文本，格式见文档末尾），
 纸面文字（合同、催款单、信……）在 `assets/story/docs/*.txt`。
 
 | 场景 | 内容 |
 |---|---|
 | 序章「二〇七」`scenes/dorm.tscn` | 船厂单身宿舍，台风前夜。传呼机在桌上响 → 看看屋里（催款单、存折、退伍证、挂历、照镜子看见自己的脸）→ 有人敲门、脚步声走远、门缝底下塞进来一个湿信封 → 开门：楼道里一串湿脚印，只有来、没有回 |
 | 第一章「契」`scenes/office.tscn` | 渔业公司老楼三楼，东溟公司的临时办事处，雨天下午。沈渡坐在红木官帽椅里，背后一整面钢窗对着码头上的潜艇。坐下谈 → 读合同 → 问问题 → 签：写生辰、写名字、按手印——挂钟停了 |
-| 第二章起 `scenes/deep_sea.tscn` | 镇海号（剧情部分还没做，见 docs/story.md 的进度表） |
+| 第二章起 `scenes/deep_sea.tscn` | 镇海号（剧情部分还没做，见 docs/archive/story_1998.md 的进度表） |
 
 岸上的操作（和舱里一样的地方不重复）：
 
@@ -215,7 +227,7 @@ godot --headless --audio-driver Dummy --path . --max-fps 60 -- --join=127.0.0.1 
 - `blender/scripts/` 生成潜艇（`gen_submarine.py` 外壳，`cockpit.py` 控制舱，`quarters.py` 生活舱）和海床（`gen_seabed.py`）的脚本；
   岸上的房间（`room_kit.py` 墙地顶、门窗、明线、日光灯、吊扇这些公共零件，`gen_dorm.py` 宿舍，`gen_office.py` 办事处）；
   人物（`rocketbox.py` 公共处理，`gen_crew.py` 第一人称的身体和脸，`gen_npc.py` 沈渡）；`blender/source/` 是生成的 .blend
-- `assets/story/` 对白（`*.dlg`）和纸面文字（`docs/*.txt`）；`docs/story.md` 剧情设计
+- `assets/story/` 对白（`*.dlg`）和纸面文字（`docs/*.txt`）；`docs/archive/story_1998.md` 旧剧情设计
 - 铺位上的床单、被子、枕头、布帘、毛巾是用 Blender 布料模拟摆出来的（`blender/scripts/bedding.py`），床垫是带绗缝凹坑的软垫；
   模拟结果缓存在 `blender/cache/`（不进仓库），参数不变就不重算，第一次生成会多花十几秒。布料材质见 `assets/shaders/fabric.gdshader`
 - `assets/models/` 导出的 glb；`assets/materials/` 材质（由 `scripts/tools/setup_project.gd` 生成）；`assets/shaders/` 着色器
@@ -248,5 +260,6 @@ tools/fetch_polyhaven.sh --models a,b --textures c,d                      # 下�
 tools/fetch_rocketbox.sh && tools/fetch_mpfb.sh && blender -b --factory-startup --python blender/scripts/gen_crew.py   # 重新生成第一人称的身体和周海生的头（npc 同理：gen_npc.py）
 python3 tools/gen_sfx.py [名字前缀...]                                   # 重新合成音效（之后让 Godot 导入一次：godot --headless --path . --import）
 tools/record.sh .tmp/door 12 --at=0,2.0 --yaw=180 --actions=30:interact   # 离线录一段画面+声音（.mp4/.wav/.log），不出声
+RES=1280x720 CRF=18 tools/record.sh .tmp/shaft 34 --scene=shaft         # 录开场冰井灯灭的镜头（录的时候临时用 override.cfg 把视口降到 RES，免得 AVI 过 1 GB 被截断）
 python3 tools/audio_report.py .tmp/door.wav --log .tmp/door.log --png .tmp/door.png   # 分析录音
 ```

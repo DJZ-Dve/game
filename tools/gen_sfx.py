@@ -1081,6 +1081,143 @@ def harbor(rng):
     return unit(lap) + unit(far) * db(-6)
 
 
+# ---------------------------------------------------------------------------- 冰井（开场：冰震、一圈圈灯灭掉）
+def shaft_air(rng):
+    """二十公里深的冰井里的空气：竖井像一根巨大的管子，低频的气流涌动里带着几个很宽的共鸣峰（管子里的驻波），
+    极慢地涨落；再加一层很淡的、左右各自不同的高处嘶声，让井显得又高又空。"""
+    n = 16 * SR
+
+    def shape(f):
+        g = bp(f, 22, 500, 2) * tilt(f, -4.5, 60)
+        for k, f0 in enumerate([31.0, 47.0, 63.0, 94.0, 141.0]):
+            g = g + 1.6 / (k + 1) * np.exp(-0.5 * ((f - f0) / (f0 * 0.05)) ** 2)
+        return g
+
+    c = noise(n, shape, rng) * np.clip(1 + 0.4 * wobble(n, 0.03, 0.25, rng), 0.25, None)
+    hiss = lambda f: bp(f, 1500, 9000, 2)
+    return stereo(unit(c), unit(noise(n, hiss, rng)) * db(-30), unit(noise(n, hiss, rng)) * db(-30), 1.0)
+
+
+def shaft_hum(rng):
+    """一圈圈灯的镇流器嗡声：十几个 100 Hz 的嗡声叠在一起，频率各差一点点，互相拍出很慢的起伏；
+    再带一点跟着电网半周期一下一下的“滋”。运行时音量跟着还亮着的灯走。"""
+    n = 8 * SR
+    t = taxis(n)
+    y = np.zeros(n)
+    for _ in range(12):
+        f0 = loopf(100.0 + rng.uniform(-0.6, 0.6), n)
+        ph = rng.uniform(0, 2 * np.pi)
+        for h, a in [(1, 1.0), (2, 0.35), (3, 0.5), (5, 0.22), (7, 0.12)]:
+            y += a * np.sin(2 * np.pi * loopf(f0 * h, n) * t + ph * h)
+    gate = (0.5 + 0.5 * np.sin(2 * np.pi * loopf(100.0, n) * t)) ** 8
+    buzz = noise(n, lambda f: bp(f, 2000, 7000, 2), rng) * gate
+    return unit(y) + unit(buzz) * db(-26)
+
+
+def heater_tick(rng):
+    """加热管热胀冷缩“嗒”的一下：小冲击敲响管壁的几个中高频模态，再带一点管子本身的低频。"""
+    ir = modes(0.5, logu(rng, 900, 5200, 8), rng.uniform(0.02, 0.09, 8), rng.uniform(0.3, 1, 8))
+    low = modes(0.3, [rng.uniform(180, 260)], [0.05], [0.4])
+    return mix(fftconv(pulse(0.25), ir), low)
+
+
+def ice_boom(rng):
+    """冰震：几公里外的冰壳在断裂，经过冰和钢架传进井里——先是越来越响的次声轰鸣，中间夹着远处冰层
+    噼噼啪啪的碎裂（隔得远，只剩闷的），最后一声低吼往下滑着沉下去。"""
+    dur = 10.0
+    n = int(dur * SR)
+    t = taxis(n)
+    env = (1 - np.exp(-t / 1.6)) * np.exp(-np.maximum(t - 2.8, 0) / 2.6)
+    slow = unit(filt(rng.standard_normal(n), lambda f: bp(f, 0.5, 4, 2)))
+    rumble = unit(filt(rng.standard_normal(n), lambda f: bp(f, 20, 90, 3) * tilt(f, -6, 30)))
+    rumble = rumble * env * (1 + 0.5 * slow)
+    f_inst = 30 + 24 * np.exp(-t / 5.0)
+    ph = 2 * np.pi * np.cumsum(f_inst) / SR
+    groan = (np.sin(ph) + 0.5 * np.sin(2 * ph + 0.3) + 0.3 * np.sin(3 * ph + 1.1)) * env ** 1.5
+    crk = np.zeros(n)
+    for tt in np.sort(rng.uniform(0.5, 7.0, 70)):
+        b = burst(rng.uniform(2, 12), lambda f: bp(f, 150, 2500, 2), rng)
+        place(crk, b * rng.uniform(0.2, 1.0) * env[int(tt * SR)], int(tt * SR))
+    crk = filt(crk, lambda f: bp(f, None, 1800, 2))
+    return unit(rumble) + unit(groan) * db(-8) + unit(crk) * db(-14)
+
+
+def ice_crack(rng):
+    """冰裂：一声脆响，紧跟着冰里特有的“啾——”。冰层里传的弯曲波，群速度和频率的平方根成正比——高频跑得快、
+    低频跑得慢，同一下断裂传过来就被拉成一声从高往低滑的哨音（结冰的湖面上听得到，像科幻片里的激光枪）。
+    到达时间 t = k/√f，所以瞬时频率 f(t) = (k/t)²；k 越大（越远）拉得越长。两三条路径各来一声，最后一下冰壳的闷响。"""
+    n = int(3.0 * SR)
+    y = np.zeros(n)
+    place(y, unit(burst(rng.uniform(1.5, 4.0), lambda f: bp(f, 400, 12000, 2), rng)), 0)
+    at = 0.004
+    for j in range(int(rng.integers(2, 4))):
+        k = rng.uniform(7, 14) * (1 + 0.6 * j)
+        f_hi, f_lo = rng.uniform(5000, 8000), rng.uniform(180, 350)
+        ts, te = k / np.sqrt(f_hi), k / np.sqrt(f_lo)
+        m = int((te - ts) * SR)
+        tt = ts + np.arange(m) / SR
+        ph = 2 * np.pi * np.cumsum((k / tt) ** 2) / SR
+        a = np.exp(-(tt - ts) / ((te - ts) * 0.45)) * np.minimum(1, np.arange(m) / (0.002 * SR))
+        place(y, np.sin(ph) * a * db(-4 * j) * 0.8, int(at * SR))
+        at += rng.uniform(0.05, 0.18)
+    thump = modes(1.2, [rng.uniform(40, 70), rng.uniform(90, 140)], [0.25, 0.12], [1.0, 0.4])
+    return mix(y, fftconv(pulse(2.0), thump) * db(-4))
+
+
+def relay_drop(rng):
+    """一圈灯的电源跳掉：接触器断开“咔嚓”一声（衔铁撞回去：两下挨得很近的金属撞击 + 铁壳的闷响），
+    触点拉出一小段电弧的“滋”，镇流器的嗡声跟着往下一沉就没了。"""
+    n = int(1.8 * SR)
+    t = taxis(n)
+    y = np.zeros(n)
+    hit_ir = modes(0.6, logu(rng, 1200, 6000, 10), rng.uniform(0.01, 0.06, 10), rng.uniform(0.3, 1, 10))
+    box_ir = modes(0.5, logu(rng, 140, 420, 4), rng.uniform(0.03, 0.09, 4), rng.uniform(0.5, 1, 4))
+    clack = unit(mix(fftconv(pulse(0.2), hit_ir), fftconv(pulse(1.2), box_ir) * 1.2))
+    t0 = 0.05
+    place(y, clack, int(t0 * SR))
+    place(y, clack * 0.45, int((t0 + rng.uniform(0.006, 0.012)) * SR))
+    place(y, unit(burst(rng.uniform(20, 45), lambda f: bp(f, 2500, 11000, 2), rng)) * db(-6), int((t0 - 0.002) * SR))
+    env = np.where(t < t0, np.minimum(1, t / 0.02), np.exp(-(t - t0) / 0.12))
+    ph = 2 * np.pi * np.cumsum(100 - 18 * (1 - np.minimum(env, 1))) / SR
+    hum = (np.sin(ph) + 0.4 * np.sin(3 * ph)) * env
+    return unit(y) + unit(hum) * db(-14)
+
+
+def steel_groan(rng):
+    """井壁上一整圈钢架被冰挤着扭：很慢的粘滑（每秒十来下到二十几下）敲在大结构的低频模态上，又低又长的“嘎——”。"""
+    dur = rng.uniform(2.5, 3.5)
+    n = int(dur * SR)
+    t = taxis(n)
+    arch = np.sin(np.pi * t / dur)
+    rate = 9 + 16 * arch ** 1.5 * np.clip(1 + 0.25 * wobble(n, 0.5, 3, rng), 0.3, None)
+    exc = stick_slip(n, rate, arch ** 0.8, rng)
+    ir = modes(1.5, logu(rng, 55, 700, 14), rng.uniform(0.08, 0.5, 14), rng.uniform(0.3, 1, 14))
+    return fftconv(exc, ir)
+
+
+def ice_impact(rng):
+    """一块冰砸在下面的格栅走台上：冰碎开的一阵沙沙脆响 + 格栅钢板被砸响的“哐”。"""
+    n = int(2.0 * SR)
+    shatter = np.zeros(n)
+    for tt in rng.uniform(0, 0.07, 40):
+        place(shatter, burst(rng.uniform(0.3, 2.0), lambda f: bp(f, 1500, 12000, 2), rng) * rng.uniform(0.2, 1),
+              int(tt * SR))
+    ir = modes(1.6, logu(rng, 280, 3500, 12), rng.uniform(0.05, 0.4, 12), rng.uniform(0.3, 1, 12))
+    return mix(unit(shatter) * db(-3), unit(fftconv(pulse(0.6), ir)))
+
+
+def spark_crackle(rng):
+    """断开的电缆头打火：一串越来越稀的“噼啪”，每一下是零点几毫秒的高频爆。"""
+    n = int(1.4 * SR)
+    y = np.zeros(n)
+    tt = 0.0
+    while tt < 1.2:
+        place(y, burst(rng.uniform(0.2, 1.0), lambda f: bp(f, 1800, 14000, 2), rng) * rng.uniform(0.2, 1)
+              * np.exp(-tt / 0.5), int(tt * SR))
+        tt += rng.exponential(0.008 + tt * 0.05)
+    return y
+
+
 # 名字 -> (函数, 是否循环, 变体个数)
 SOUNDS = {
     "hull_bed": (hull_bed, True, 1),
@@ -1148,6 +1285,16 @@ SOUNDS = {
     "settle_concrete": (lambda r: concrete_step(r, gait="settle"), False, 4),
     "step_terrazzo": (lambda r: terrazzo_step(r), False, 8),
     "run_terrazzo": (lambda r: terrazzo_step(r, "run"), False, 6),
+    # 冰井（开场）
+    "shaft_air": (shaft_air, True, 1),
+    "shaft_hum": (shaft_hum, True, 1),
+    "heater_tick": (heater_tick, False, 4),
+    "ice_boom": (ice_boom, False, 2),
+    "ice_crack": (ice_crack, False, 4),
+    "relay_drop": (relay_drop, False, 3),
+    "steel_groan": (steel_groan, False, 3),
+    "ice_impact": (ice_impact, False, 3),
+    "spark_crackle": (spark_crackle, False, 2),
 }
 
 

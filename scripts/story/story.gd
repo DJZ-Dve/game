@@ -1,6 +1,6 @@
 extends Node
 ## 剧情：剧情标记、转场（黑场 + 章节字幕）、播放对白文件。自动加载为 Story。
-## 剧情设计见 docs/story.md；对白在 assets/story/*.dlg。
+## 剧情设计见 docs/archive/story_1998.md；对白在 assets/story/*.dlg。
 ##
 ## 调试参数（`--` 之后）：
 ##   --scene=dorm|office|deep_sea   直接从这个场景开始（也可以给 res:// 路径）
@@ -16,6 +16,7 @@ const SCENES := {
 	"dorm": "res://scenes/dorm.tscn",
 	"office": "res://scenes/office.tscn",
 	"deep_sea": "res://scenes/deep_sea.tscn",
+	"shaft": "res://scenes/intro/shaft_blackout.tscn",
 }
 ## 普通话大约一秒四五个字
 const SPEECH_RATE := 4.6

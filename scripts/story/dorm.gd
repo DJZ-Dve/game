@@ -1,5 +1,5 @@
 extends StoryRoom
-## 序章「二〇七」：船厂单身宿舍（模型 blender/scripts/gen_dorm.py，台词 assets/story/dorm.dlg，剧情 docs/story.md）。
+## 序章「二〇七」：船厂单身宿舍（模型 blender/scripts/gen_dorm.py，台词 assets/story/dorm.dlg，剧情 docs/archive/story_1998.md）。
 ## 一九九八年八月二十八日夜，台风外围的暴雨。坐在床边醒过来 → 桌上的传呼机响 → 看看屋里的东西 →
 ## 有人敲门、脚步声走远、门缝底下塞进来一个湿信封 → 开门：楼道里一串湿脚印，只有来、没有回 → 出门，转到第一章。
 

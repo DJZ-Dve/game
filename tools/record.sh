@@ -22,9 +22,22 @@ mkdir -p ${out:h}
 tmp=$(mktemp -d)
 scene=(--scene=deep_sea)
 [[ " $* " == *" --scene="* ]] && scene=()
-godot_window --path "$root" --resolution ${RES:-960x540} --write-movie "$tmp/movie.avi" --fixed-fps 60 \
+# Movie Maker 写的 AVI 到 1 GB 左右就停（后面的帧全丢，ffmpeg 只好一直重复最后一帧）。它按项目的视口大小
+# （1920×1080）录 MJPEG，画面细节多、带胶片颗粒时每帧更大，二三十秒就撞上限。录的时候临时放一个 override.cfg：
+# 视口降到 RES、MJPEG 质量调低一点（MJPEG_Q，默认 0.6），录完删掉。项目里本来就有 override.cfg 时不动它
+res=${RES:-960x540}
+override=$root/override.cfg
+made_override=0
+if [[ ! -e $override ]]; then
+  printf '[display]\n\nwindow/size/viewport_width=%s\nwindow/size/viewport_height=%s\n\n[editor]\n\nmovie_writer/mjpeg_quality=%s\n' \
+    ${res%x*} ${res#*x} ${MJPEG_Q:-0.6} > $override
+  made_override=1
+fi
+trap '(( made_override )) && rm -f $override; rm -rf $tmp' EXIT
+godot_window --path "$root" --resolution $res --write-movie "$tmp/movie.avi" --fixed-fps 60 \
   --quit-after $((secs * 60)) -- --sfx-log $scene "$@" > "$out.log" || true
 grep -E "ERROR|SCRIPT ERROR|at: " "$out.log" | head -20 || true
+grep -E "frames at" "$out.log" || true
 if [[ ! -s $tmp/movie.avi ]]; then
   echo "没录出来，见 $out.log" >&2
   exit 1
@@ -32,5 +45,4 @@ fi
 ffmpeg -v error -y -i "$tmp/movie.avi" -vn -c:a pcm_s16le "$out.wav"
 ffmpeg -v error -y -i "$tmp/movie.avi" -c:v libx264 -preset veryfast -pix_fmt yuv420p -crf ${CRF:-26} \
   -c:a aac -b:a 192k -movflags +faststart "$out.mp4"
-rm -rf "$tmp"
 echo "录好了: $out.mp4  $out.wav  $out.log"
