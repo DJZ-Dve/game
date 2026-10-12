@@ -34,7 +34,7 @@ theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.8)
 theme_override_font_sizes/font_size = 18
 text = "驾驶：W/S 前进/后退    A/D 转向    空格/Ctrl 上浮/下潜
 走动：WASD（按住 Shift 跑）    E 起身 / 坐下驾驶 / 开关门    舷窗边按住右键 贴近舷窗
-F 探照灯    Tab 舱内/舱外视角    Esc 释放鼠标    F1 显示本提示"
+F 探照灯    Q 主动/被动声呐（主动声呐会把东西招来）    Tab 舱内/舱外视角    Esc 释放鼠标    F1 显示本提示"
 
 [node name="Prompt" type="Label" parent="HUD"]
 anchors_preset = 7

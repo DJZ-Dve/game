@@ -5,7 +5,8 @@ extends Node
 ##   别人那边用替身（crew_puppet.gd）带着一个 crew_body.gd 的身体演出来，脸看得见，脚步声也有
 ## - 潜艇：主机算物理，每秒广播 20 次位置、速度和正在用的操纵输入；别人那边用同样的输入跟着算（不卡），
 ##   再慢慢往主机的位置上拉。坐在驾驶椅上的人把自己的输入发给主机（自己这边直接用，不等主机）
-## - 驾驶椅谁坐、探照灯、水密门：先问主机，主机定了再告诉所有人（同时有两个人抢，主机说了算）
+## - 驾驶椅谁坐、探照灯、声呐主动 / 被动、水密门：先问主机，主机定了再告诉所有人（同时有两个人抢，主机说了算）
+## - 艇壳耐久：主机算（巨物撞的，见 giant.gd），跟着潜艇状态广播；破了就全员出局回大厅
 ## 单人（没联网）时自己就是主机，走的是同一条路，只是没有别人可发。
 
 const CREW_RATE := 20.0
@@ -13,6 +14,8 @@ const SUB_RATE := 20.0
 const INPUT_RATE := 30.0
 ## 和主机的潜艇位置差多少米就直接跳过去（卡得太久、刚连上）
 const SNAP_DIST := 4.0
+## 艇壳破了以后过多久回大厅
+const WRECK_DELAY := 7.0
 ## 门的开关和主机对不上多久就按主机的摆过去（各家演门的动作有随机的快慢，演完前后差个零点几秒是正常的）
 const DOOR_GRACE := 2.0
 ## 开局站在哪（舱内局部 x、z）、朝哪：驾驶的人坐驾驶椅，其余按岗位站到各自的工作台跟前
@@ -48,6 +51,8 @@ var _seat_wish := -1
 var _hud: CanvasLayer
 var _roster: Label
 var _menu: Control
+var _wreck: Label
+var _wreck_t := -1.0
 
 
 func _init() -> void:
@@ -124,6 +129,7 @@ func _process(delta: float) -> void:
 			_input_t = 0.0
 			_pilot_input_msg.rpc_id(1, sub.steering())
 	_update_menu()
+	_update_wreck(delta)
 
 
 func _physics_process(delta: float) -> void:
@@ -176,7 +182,7 @@ func _send_sub() -> void:
 		return
 	var pack := [sub.global_position, sub.rotation.y, sub.velocity, sub.yaw_speed,
 		Vector3(sub.thrust_input, sub.lift_input, sub.steering().z if not sub.use_remote_input else sub.remote_input.z),
-		_door.is_open if _door else false]
+		_door.is_open if _door else false, sub.hull]
 	for id: int in peers:
 		_sub_state.rpc_id(id, pack)
 
@@ -236,7 +242,7 @@ func _on_peer_left(id: int) -> void:
 ## 别人那边：主机加载好了，之前想坐驾驶椅的话现在去问
 func _on_peer_loaded(id: int) -> void:
 	if Net.is_host() and id != Net.my_id():
-		_init_state.rpc_id(id, seat_owner, sub.lights_on, _door.is_open if _door else false)
+		_init_state.rpc_id(id, seat_owner, sub.lights_on, _door.is_open if _door else false, sub.sonar_active)
 	elif id == 1 and _seat_wish >= 0:
 		_seat_req.rpc_id(1, _seat_wish == 1)
 		_seat_wish = -1
@@ -262,6 +268,13 @@ func request_lights(on: bool) -> void:
 		_to_all(&"_lights", [on])
 	elif _host_ready():
 		_lights_req.rpc_id(1, on)
+
+
+func request_sonar(active: bool) -> void:
+	if Net.is_host():
+		_to_all(&"_sonar", [active])
+	elif _host_ready():
+		_sonar_req.rpc_id(1, active)
 
 
 func request_door() -> void:
@@ -309,6 +322,7 @@ func _crew_state(pack: Array) -> void:
 func _sub_state(pack: Array) -> void:
 	_auth = {"pos": pack[0], "yaw": pack[1], "vel": pack[2], "yaw_speed": pack[3], "input": pack[4]}
 	_auth_at = Time.get_ticks_msec() / 1000.0
+	sub.hull = pack[6]
 	if _door == null:
 		return
 	var open: bool = pack[5]
@@ -328,9 +342,10 @@ func _pilot_input_msg(steer: Vector3) -> void:
 
 
 @rpc("authority", "reliable")
-func _init_state(owner_id: int, lights: bool, door_open: bool) -> void:
+func _init_state(owner_id: int, lights: bool, door_open: bool, sonar_active: bool) -> void:
 	seat_owner = owner_id
 	sub.set_lights(lights)
+	sub.set_sonar(sonar_active)
 	if _door:
 		_door.set_open_now(door_open)
 
@@ -364,6 +379,18 @@ func _lights_req(on: bool) -> void:
 func _lights(on: bool) -> void:
 	sub.switch_lights(on)
 	Net.log_event("lights %s" % on)
+
+
+@rpc("any_peer", "reliable")
+func _sonar_req(active: bool) -> void:
+	if Net.is_host():
+		_to_all(&"_sonar", [active])
+
+
+@rpc("authority", "reliable")
+func _sonar(active: bool) -> void:
+	sub.switch_sonar(active)
+	Net.log_event("sonar %s" % ("active" if active else "passive"))
 
 
 @rpc("any_peer", "reliable")
@@ -427,8 +454,37 @@ func _build_hud() -> void:
 		box.add_child(b)
 	_menu.visible = false
 	_hud.add_child(_menu)
+
+	_wreck = Label.new()
+	_wreck.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	_wreck.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_wreck.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_wreck.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_wreck.add_theme_font_override("font", font)
+	_wreck.add_theme_font_size_override("font_size", 30)
+	_wreck.add_theme_color_override("font_color", Color(0.85, 0.78, 0.65))
+	_wreck.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	_wreck.text = "艇壳裂了。\n镇海号沉进了归墟。"
+	_wreck.modulate.a = 0.0
+	_hud.add_child(_wreck)
 	Net.roster_changed.connect(_update_roster)
 	_update_roster()
+
+
+## 艇壳破了：字慢慢浮出来，过几秒回大厅（--no-wreck 调试时不回）
+func _update_wreck(delta: float) -> void:
+	if _wreck == null:
+		return
+	if _wreck_t < 0.0:
+		if sub.hull <= 0.0:
+			_wreck_t = 0.0
+			Net.log_event("wrecked")
+		return
+	_wreck_t += delta
+	_wreck.modulate.a = clampf((_wreck_t - 1.0) / 2.0, 0.0, 1.0)
+	if _wreck_t > WRECK_DELAY and not DebugArgs.has("no-wreck"):
+		_wreck_t = -INF
+		Net.leave("镇海号失事")
 
 
 func _resume() -> void:

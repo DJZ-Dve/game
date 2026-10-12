@@ -59,6 +59,11 @@ func _ready() -> void:
 	set_warning(Warn.COMMS, 2)
 
 
+## 艇壳挨撞以后漏水灯：七成五以下闪，四成以下常亮
+func _update_hull_warning() -> void:
+	set_warning(Warn.LEAK, 0 if sub.hull > 0.75 else (2 if sub.hull > 0.4 else 1))
+
+
 ## 打开/关闭某个报警灯：0 灭 1 常亮 2 闪烁
 func set_warning(i: int, state: int) -> void:
 	if i < _warn_state.size():
@@ -109,6 +114,7 @@ func _seg_label(c: Color) -> Label3D:
 func _process(delta: float) -> void:
 	var t := Time.get_ticks_msec() / 1000.0
 	_dive_time += delta
+	_update_hull_warning()
 	var depth := sub.depth()
 	var thrust := absf(sub.thrust_input) + absf(sub.lift_input) * 0.6
 	_battery = maxf(3.2, _battery - delta * (0.0004 + thrust * 0.002))
@@ -192,5 +198,6 @@ func _altitude() -> float:
 	var origin := sub.global_position + Vector3(0, -1.2, 0)
 	var q := PhysicsRayQueryParameters3D.create(origin, origin + Vector3.DOWN * 99.0)
 	q.exclude = [sub.get_rid()]
+	q.collision_mask = 1  # 只量海底（巨物从艇底下游过去不算）
 	var hit := space.intersect_ray(q)
 	return origin.distance_to(hit.position) if hit else -1.0

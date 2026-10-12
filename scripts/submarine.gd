@@ -5,6 +5,8 @@ extends CharacterBody3D
 signal bumped(strength: float)
 ## 驾驶员按了探照灯开关（给音效用；调试参数开场关灯不算）
 signal lights_switched(on: bool)
+## 主动声呐开关（艇上谁按的都一样，给音效、声呐屏用）
+signal sonar_switched(active: bool)
 
 @export_group("航行")
 @export var max_speed := 2.6
@@ -26,6 +28,11 @@ signal lights_switched(on: bool)
 @export var light_color := Color(1.0, 0.93, 0.82)
 
 var lights_on := true
+## 主动声呐开着：屏上有海底回波，但每转一圈打一声 ping，方圆几百米听得见（巨物就是循着声音来的，见 giant.gd）。
+## 关掉是被动声呐：自己不出声，只听得见别的东西发出的声音的方位
+var sonar_active := true
+## 艇壳完好程度：1 完好，0 破了（主机算，联机时跟着潜艇状态广播）
+var hull := 1.0
 ## 有人坐在驾驶椅上才响应操纵（起身走动时艇只靠惯性漂）
 var piloting := true
 var thrust_input := 0.0
@@ -48,6 +55,7 @@ var _rudder: Node3D
 var _planes: Node3D
 var _prop_speed := 0.0
 var _lift_smooth := 0.0
+var _noise_peak := 0.0
 
 @onready var body: Node3D = $Body
 @onready var cockpit_camera: Camera3D = %CockpitCamera
@@ -96,12 +104,22 @@ func _ready() -> void:
 	piloting = cockpit_camera.is_seated()
 	cockpit_camera.seated_changed.connect(func(s: bool) -> void: piloting = s)
 	bumped.connect(cockpit_camera.add_shake)
+	bumped.connect(func(s: float) -> void: make_noise(clampf(s * 0.5, 0.0, 1.0)))
+	var door := find_child("Door", true, false)
+	if door and door.has_signal("sound"):
+		door.sound.connect(func(e: StringName, s: float) -> void:
+			if e == &"slam":
+				make_noise(0.3 * s))
 	if DebugArgs.has("view"):
 		set_external_view(DebugArgs.get_arg("view") == "external")
 	if DebugArgs.get_arg("lights", "on") == "off":
 		set_lights(false)
 	if DebugArgs.has("sub-yaw"):
 		rotate_y(deg_to_rad(float(DebugArgs.get_arg("sub-yaw"))))
+	if DebugArgs.get_arg("sonar") == "passive":
+		set_sonar(false)
+	if DebugArgs.has("hull"):
+		hull = clampf(float(DebugArgs.get_arg("hull")), 0.0, 1.0)
 
 
 func depth() -> float:
@@ -212,6 +230,40 @@ func switch_lights(on: bool) -> void:
 	lights_switched.emit(lights_on)
 
 
+func set_sonar(active: bool) -> void:
+	sonar_active = active
+
+
+## 有人扳了声呐的主动 / 被动开关（出声）
+func switch_sonar(active: bool) -> void:
+	set_sonar(active)
+	sonar_switched.emit(active)
+
+
+# ---------------------------------------------------------------------------- 噪音（巨物靠这个找你，见 giant.gd）
+## 0 = 什么都听不见，1 = 主动声呐的一声 ping（巨物在 400 米外都听得见）。
+## 一直在响的：螺旋桨（满速约 0.35）、压载泵（升降时 0.12）；一下一下的：ping、撞击、水密门砸上
+func noise_level() -> float:
+	return 0.02 + absf(_prop_speed) / 9.0 * 0.33 + absf(lift_input) * 0.12
+
+
+## 一下子的响动（只在主机上有用）
+func make_noise(amount: float) -> void:
+	_noise_peak = maxf(_noise_peak, amount)
+
+
+## 上次取到现在这段时间里最响的一下（巨物隔一会儿听一次）
+func take_noise() -> float:
+	var n := maxf(_noise_peak, noise_level())
+	_noise_peak = 0.0
+	return n
+
+
+## 艇壳挨了一下（主机调）
+func damage(amount: float) -> void:
+	hull = maxf(hull - amount, 0.0)
+
+
 ## 这一帧的操纵输入（推进、升降、转向）
 func steering() -> Vector3:
 	if use_remote_input:
@@ -242,6 +294,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			session.request_lights(not lights_on)
 		else:
 			switch_lights(not lights_on)
+	elif event.is_action_pressed("toggle_sonar"):
+		if session:
+			session.request_sonar(not sonar_active)
+		else:
+			switch_sonar(not sonar_active)
 	elif event.is_action_pressed("toggle_view"):
 		set_external_view(not external_view)
 

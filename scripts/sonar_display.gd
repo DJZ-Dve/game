@@ -4,6 +4,9 @@ extends Node
 ## 换能器每转一小步发一次声脉冲：往这个方位打一扇从陡到平的射线，命中的海底、礁石按距离写进极坐标回波图的一列
 ## （海底连成一片，凸起的东西后面留下声影），屏幕上按扫过的先后算余辉。画面在离屏 SubViewport 里画好
 ## （sonar_ppi.gdshader + 屏上的字），再由显像管材质（crt_sonar.gdshader）贴到 Screen_Sonar 上。
+## 关掉主动声呐（sub.sonar_active = false）就是被动声呐：不发声、没有海底回波，扫描线扫到哪个方位，
+## 就把那个方位上听到的声音（noise_source 组里的东西，比如巨物）画成一条径向的亮线——只有方位，没有距离；
+## 自己的螺旋桨、压载泵越响，底噪越高，越听不清。
 
 const RES := 512                    # 离屏画面分辨率
 const BEARINGS := 256               # 一圈分多少个方位
@@ -12,6 +15,8 @@ const SONAR_HEAD := Vector3(0, -0.9, -5.2)   # 换能器在艇上的位置（艏
 const FONT := preload("res://assets/fonts/DSEG14Classic-Regular.ttf")
 const PPI := preload("res://assets/shaders/sonar_ppi.gdshader")
 const INK := Color(0.45, 1.0, 0.5, 0.85)
+## 被动声呐：听得见的最远距离（米）
+const LISTEN_RANGE := 600.0
 
 ## 扫描线转回艏向（每转一圈一次），这时发一声能听见的 ping
 signal pinged
@@ -34,6 +39,7 @@ var _next_col := 0
 var _col := PackedFloat32Array()
 var _fan := PackedFloat32Array()    # 一次发射的射线：往下的斜率（tan），从陡到平
 var _heading := -1
+var _active := true
 
 
 func setup(p_sub: Submarine, screen: MeshInstance3D, lamp: MeshInstance3D) -> void:
@@ -79,8 +85,12 @@ func _process(delta: float) -> void:
 		return
 	var before := _sweep
 	_sweep = fmod(_sweep + delta / period, 1.0)
-	if _sweep < before:
+	if _active != sub.sonar_active:
+		_active = sub.sonar_active
+		_overlay.queue_redraw()
+	if _sweep < before and _active:
 		pinged.emit()
+		sub.make_noise(1.0)
 	var target := int(_sweep * BEARINGS)
 	var dirty := false
 	while _next_col != target:
@@ -96,7 +106,7 @@ func _process(delta: float) -> void:
 		_overlay.queue_redraw()
 	if _lamp:
 		var t := Time.get_ticks_msec() / 1000.0
-		_lamp.emission_energy_multiplier = 3.0 if fmod(t * 3.0, 1.0) < 0.22 else 0.08
+		_lamp.emission_energy_multiplier = 3.0 if _active and fmod(t * 3.0, 1.0) < 0.22 else 0.08
 
 
 ## 往第 col 个方位发一次声脉冲，结果写进回波图的那一列。
@@ -105,6 +115,9 @@ func _ping(col: int) -> void:
 	fwd.y = 0.0
 	var h := fwd.normalized().rotated(Vector3.UP, -TAU * (col + 0.5) / BEARINGS)
 	var origin := sub.global_transform * SONAR_HEAD
+	if not _active:
+		_listen(col, h, origin)
+		return
 	var space := sub.get_world_3d().direct_space_state
 	_col.fill(0.0)
 	var prev_d := -1.0
@@ -143,6 +156,27 @@ func _ping(col: int) -> void:
 		_img.set_pixel(col, i, Color(clampf(v, 0.0, 1.0), 0, 0))
 
 
+## 被动声呐：这个方位上听到多少声音，整列画成一条（不知道距离）
+func _listen(col: int, h: Vector3, origin: Vector3) -> void:
+	var e := 0.0
+	for src in get_tree().get_nodes_in_group("noise_source"):
+		var to: Vector3 = (src as Node3D).global_position - origin
+		to.y = 0.0
+		var d := to.length()
+		if d < 0.1 or d > LISTEN_RANGE:
+			continue
+		var level: float = 2.2 * src.radiated_noise() * pow(1.0 - d / LISTEN_RANGE, 1.5)
+		# 离得近的大家伙占一大片方位
+		var width := maxf(deg_to_rad(3.0), atan2(float(src.get("half_length")) * 0.6, d))
+		var ang := h.signed_angle_to(to / d, Vector3.UP)
+		e += level * exp(-pow(ang / width, 2.0))
+	var floor_level := 0.03 + sub.noise_level() * 0.35   # 自己越吵，越听不清
+	for i in BINS:
+		var r := (i + 0.5) / BINS
+		var v := e * randf_range(0.45, 1.25) * (1.15 - 0.4 * r) + randf() * floor_level
+		_img.set_pixel(col, i, Color(clampf(v, 0.0, 1.0), 0, 0))
+
+
 func _splat(d: float, s: float) -> void:
 	var i := int(d * BINS)
 	for k in range(-1, 2):
@@ -154,11 +188,11 @@ func _splat(d: float, s: float) -> void:
 func _draw_overlay() -> void:
 	var c := Vector2(RES, RES) / 2.0
 	var R := RES / 2.0 * 0.96
-	_text(c + Vector2(-R * 0.82, -R * 0.42), "R %dM" % int(range_m), false)
+	_text(c + Vector2(-R * 0.82, -R * 0.42), ("R %dM" % int(range_m)) if _active else "PASV", false)
 	_text(c + Vector2(R * 0.82, -R * 0.42), "HDG %03d" % _heading, true)
 	_text(c + Vector2(-R * 0.82, R * 0.52), "B %03d" % int(cursor_brg), false)
 	_text(c + Vector2(R * 0.82, R * 0.52), "D %05.1f" % cursor_rng, true)
-	for k in range(1, 4):
+	for k in range(1, 4 if _active else 1):
 		_text(c + Vector2(5, -R * k / 4.0 + 15), str(int(range_m * k / 4.0)), false, 12, 0.6)
 
 

@@ -1,5 +1,6 @@
 extends Node3D
-## 深海测试场景：把潜艇放到海床模型里的出生点，挂上联机同步（scripts/net/sub_session.gd，单人也挂）。
+## 深海测试场景：把潜艇放到海床模型里的出生点，挂上联机同步（scripts/net/sub_session.gd，单人也挂），
+## 放一只巨物（scripts/giant.gd，--giant=off 不放）。
 
 @onready var sub: Submarine = $Submarine
 
@@ -11,3 +12,7 @@ func _ready() -> void:
 	var session := SubSession.new()
 	session.setup(sub)
 	add_child(session)
+	if DebugArgs.get_arg("giant") != "off":
+		var giant := Giant.new()
+		add_child(giant)
+		giant.setup(sub)

@@ -698,6 +698,74 @@ def hull_impact(rng):
     return fade(y, 0.0, 0.8)
 
 
+# ---------------------------------------------------------------------------- 巨物（scripts/giant.gd）
+def giant_moan(rng):
+    """巨物的叫声：二三十赫兹的基频慢慢滑下去，泛音很密，一个共振峰在一二百赫兹之间游走（像一整条沉船在呻吟，
+    但是活的）；中间带一段粗糙的颤动，底下垫一层次声的涌动。在舱里隔着艇壳只剩低频，所以主要能量放在 200 Hz 以下。"""
+    dur = rng.uniform(6.5, 9.5)
+    n = int(dur * SR)
+    t = taxis(n)
+    f_a, f_b = rng.uniform(26, 38), rng.uniform(16, 22)
+    bend = np.clip(t / dur, 0, 1) ** rng.uniform(0.6, 1.4)
+    f0 = (f_a + (f_b - f_a) * bend) * (1 + 0.02 * wobble(n, 0.3, 2, rng))
+    ph = 2 * np.pi * np.cumsum(f0) / SR
+    form = rng.uniform(70, 110) + rng.uniform(40, 110) * np.sin(np.pi * t / dur) ** 2 * (1 + 0.15 * wobble(n, 0.2, 1, rng))
+    bw = 45.0
+    x = np.zeros(n)
+    for k in range(1, 30):
+        fk = k * f0
+        a = (k ** -0.7) * (0.25 + np.exp(-((fk - form) / bw) ** 2)) * bp(fk, None, 320, 3)
+        x += a * np.sin(k * ph + rng.uniform(0, 6.3))
+    # 中段粗糙的颤动（声带一样的不规则抖动），两头平滑
+    rough = np.clip(1 + 0.55 * wobble(n, 7, 16, rng) * np.sin(np.pi * t / dur) ** 3, 0.05, 2.0)
+    x = x / rms(x) * rough
+    env = np.clip(t / rng.uniform(1.2, 2.0), 0, 1) ** 2 * np.clip((dur - t) / rng.uniform(2.0, 3.0), 0, 1) ** 1.5
+    env *= np.clip(1 + 0.25 * wobble(n, 0.3, 1.5, rng), 0.3, 2)
+    swell = noise(n, lambda f: bp(f, 10, 60, 2), rng) * db(-8)
+    grit = noise(n, lambda f: bp(f, 150, 700, 2), rng) * np.clip(wobble(n, 3, 12, rng), 0, None) * db(-22)
+    return fade((x + swell + grit) * env, 0.0, 0.5)
+
+
+def giant_swim(rng):
+    """巨物游动时排开的水：极低频的涌动，跟着身体摆动（约 0.25 Hz）一下一下地推过来，夹一点甲片摩擦的沙沙声。
+    运行时音量跟着距离和速度走。"""
+    n = 16 * SR
+    t = taxis(n)
+    beat = 1 + 0.6 * np.sin(2 * np.pi * loopf(0.25, n) * t) + 0.2 * np.sin(2 * np.pi * loopf(0.5, n) * t + 1.0)
+    m = np.clip(1 + 0.3 * wobble(n, 0.1, 1, rng), 0.3, 2)
+    sh = lambda f: bp(f, 12, 90, 2) * tilt(f, -4, 30)
+    c, l, r = (noise(n, sh, rng) * beat * m for _ in range(3))
+    rub = lambda: noise(n, lambda f: bp(f, 200, 900, 2), rng) * np.clip(beat - 0.8, 0, None) * db(-24)
+    return stereo(c, l + rub(), r + rub(), 0.6)
+
+
+def giant_ram(rng):
+    """巨物撞上艇身：比撞礁沉得多的一下，整个耐压壳被打得嗡嗡响很久；接着甲片贴着艇壳刮过去的长长一阵摩擦，
+    钢板受力的吱嘎，最后几声壳体回弹的“嘣”。"""
+    n = int(7.0 * SR)
+    y = np.zeros(n)
+    w = int(rng.uniform(0.06, 0.1) * SR)
+    exc = filt(rng.standard_normal(w), lambda f: bp(f, None, 250, 2)) * np.hanning(w)
+    f = logu(rng, 22, 500, 36)
+    hull = modes(6.0, f, rng.uniform(0.8, 3.5, 36) * (60 / f) ** 0.3, rng.uniform(0.4, 1, 36) * (f / 60) ** -0.6)
+    place(y, fftconv(exc, hull), 0)
+    # 刮擦：慢速粘滑敲在钢板模态上，先猛后弱
+    m = int(rng.uniform(2.5, 3.5) * SR)
+    tt = taxis(m)
+    rate = rng.uniform(10, 16) + rng.uniform(15, 30) * np.exp(-tt / 0.8) * (1 + 0.2 * wobble(m, 1, 4, rng))
+    amp = np.exp(-tt / 1.2) * np.clip(1 + 0.5 * wobble(m, 1, 6, rng), 0.1, 2)
+    fr = logu(rng, 60, 900, 24)
+    ir = modes(1.0, fr, rng.uniform(0.1, 0.5, 24) * (200 / fr) ** 0.3, rng.uniform(0.3, 1, 24) * fr ** -0.3)
+    scrape = fftconv(np.convolve(stick_slip(m, rate, amp, rng), pulse(0.8))[:m], ir)
+    place(y, unit(scrape) * np.abs(y).max() * 0.5, int(0.15 * SR))
+    for _ in range(3):
+        fp = logu(rng, 200, 2500, 14)
+        ring = modes(1.5, fp, rng.uniform(0.2, 0.9, 14) * (500 / fp) ** 0.5, rng.uniform(0.3, 1, 14) * (fp / 500) ** -0.3)
+        place(y, unit(fftconv(pulse(0.2), ring)) * np.abs(y).max() * rng.uniform(0.12, 0.25),
+              int(rng.uniform(1.2, 5.0) * SR))
+    return fade(y, 0.0, 1.0)
+
+
 # ---------------------------------------------------------------------------- 岸上的房间（宿舍、办事处）
 def reverb_ir(rng, rt60, lo=150, hi=6000, pre=0.008):
     """简单的房间混响冲激响应：指数衰减的有色噪声（高频衰减得快一点）。"""
@@ -1047,6 +1115,10 @@ SOUNDS = {
     "step_settle": (lambda r: footstep(r, "grate", "settle"), False, 4),
     "switch": (switch, False, 3),
     "hull_impact": (hull_impact, False, 3),
+    # 巨物
+    "giant_moan": (giant_moan, False, 4),
+    "giant_swim": (giant_swim, True, 1),
+    "giant_ram": (giant_ram, False, 2),
     # 岸上的房间
     "rain_window": (rain_window, True, 1),
     "rain_steel": (lambda r: rain_window(r, steel=True), True, 1),

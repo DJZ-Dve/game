@@ -1,0 +1,16 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://assets/shaders/giant_skin.gdshader" id="1_sh"]
+[ext_resource type="Texture2D" path="res://assets/textures/giant/skin_normal.png" id="2_n"]
+[ext_resource type="Texture2D" path="res://assets/textures/giant/skin_mask.png" id="3_m"]
+[ext_resource type="Texture2D" path="res://assets/textures/giant_denticle_n.png" id="4_d"]
+[ext_resource type="Texture2D" path="res://assets/textures/giant_noise.png" id="5_z"]
+
+[resource]
+resource_name = "M_GiantSkin"
+shader = ExtResource("1_sh")
+shader_parameter/normal_tex = ExtResource("2_n")
+shader_parameter/mask_tex = ExtResource("3_m")
+shader_parameter/atlas_meters = 42.799
+shader_parameter/detail_tex = ExtResource("4_d")
+shader_parameter/noise_tex = ExtResource("5_z")

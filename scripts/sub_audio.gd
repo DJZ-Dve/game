@@ -18,6 +18,7 @@ const VENT_POS := Vector3(-0.3, 0.81, -1.46)   # 驾驶员头顶的球形风口
 const POWER_POS := Vector3(1.05, 0.25, 1.4)    # 右舷配电柜 PD-4
 const PUMP_POS := Vector3(0.0, -1.15, 0.6)     # 地板底下的压载泵
 const SWITCH_POS := Vector3(0.3, -0.05, -2.0)  # 驾驶台上的探照灯开关
+const SONAR_SWITCH_POS := Vector3(-0.25, -0.05, -2.0)  # 声呐屏旁边的主动 / 被动开关
 const COMPARTMENTS := [Vector2(-1.9, 2.5), Vector2(2.75, 6.3)]  # 控制舱、生活舱的 z 范围（吱嘎声随机落在里面）
 
 ## 音量（dB），都是相对生成时的归一化（循环音 RMS -20 dBFS、一次性峰值 -3 dBFS）
@@ -127,6 +128,7 @@ func _ready() -> void:
 	_cam.stepped.connect(_on_step)
 	sub.bumped.connect(_on_bump)
 	sub.lights_switched.connect(func(_on: bool) -> void: _play("switch", SWITCH_POS))
+	sub.sonar_switched.connect(func(_on: bool) -> void: _play("switch", SONAR_SWITCH_POS))
 	var props := sub.find_child("Props", true, false)
 	if props and props.has_signal("drip_landed"):
 		props.drip_landed.connect(func(p: Vector3) -> void: _play("drip", p))
@@ -143,6 +145,13 @@ func _connect_sonar() -> void:
 	_sonar = sub.find_child("Sonar", true, false)
 	if _sonar:
 		_sonar.pinged.connect(func() -> void: _play("sonar_ping", SonarDisplay.SONAR_HEAD, true))
+
+
+## 外面有很大的东西贴着艇游过去，水压一推一拉：艇壳吱嘎、钢板“嘣”一声（giant.gd 调，amount 0~1）
+func hull_stress(amount: float) -> void:
+	var z: Vector2 = COMPARTMENTS[randi() % COMPARTMENTS.size()]
+	var pos := Vector3(randf_range(-1.0, 1.0), randf_range(-0.5, 0.8), randf_range(z.x, z.y))
+	_play("pop" if randf() < 0.3 else "creak", pos, true, linear_to_db(clampf(amount, 0.2, 1.0)))
 
 
 func _local_of(node_name: String, fallback: Vector3) -> Vector3:

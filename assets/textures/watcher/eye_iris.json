@@ -1,0 +1,22 @@
+{
+ "note": "Blender UV (v up). In Godot/glTF use v' = 1 - v; pupil 'up' is +v here, i.e. -v' in Godot.",
+ "center_uv": [
+  0.25756,
+  0.25772
+ ],
+ "center_uv_godot": [
+  0.25756,
+  0.74228
+ ],
+ "uv_per_meter": 0.084117,
+ "r_limbus_uv": 0.2571,
+ "r_root_uv": 0.23973,
+ "pupil_groove_half_len_uv": 0.16403,
+ "pupil_groove_half_width_uv": 0.02524,
+ "pupil_margin_ellipse_uv": [
+  0.02524,
+  0.15765
+ ],
+ "focus_uv": 0.15562,
+ "collarette_s": 0.34
+}
