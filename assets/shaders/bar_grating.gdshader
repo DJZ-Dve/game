@@ -7,6 +7,8 @@
 // 热镀锌，旧了发灰发白（锌面上一层白锈），不刷漆。
 // 斜着看时，看到的多半是扁钢、横杆竖着的侧面：法线往那边歪，灯从头顶照下来时不会像一整块平板那样亮。
 // 远处几圈走台不挂真的灯光（太多了），扶手上那圈灯照在格栅上的一片片光斑在这里算（pool_power > 0 的圈）。
+// 检修口：爬梯从这圈下到下一圈的地方，靠井壁那一段格栅切掉（hatch_a 是这圈检修口的方位角，< 0 = 没有）；
+// 口子在它自己的直角坐标里量：径向从 hatch_in 到井壁，切向 ±hatch_w（两条边是平行的，和角钢口框对齐）。
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_disabled, diffuse_burley, specular_schlick_ggx, alpha_to_coverage;
 
@@ -28,13 +30,19 @@ uniform float lamp_count = 24.0;
 uniform vec4 lamp_color : source_color = vec4(1.0, 0.86, 0.68, 1.0);
 instance uniform float pool_power = 0.0;   // 这一圈灯此刻的平均亮度 × 强度（近处几圈有真灯，是 0）
 instance uniform float ring_phase = 0.0;   // 这一圈的灯整体错开了几盏（0~1）
+uniform float hatch_w = 0.42;
+uniform float hatch_in = 10.06;
+instance uniform float hatch_a = -1.0;
 
 varying vec3 p_obj;
 varying vec3 n_obj;
+// 检修口的朝向（cos, sin）、有没有：每个顶点算一次（格栅还要画进几十张阴影图，别每个像素都读、都算三角函数）
+varying flat vec3 hatch;
 
 void vertex() {
 	p_obj = VERTEX;
 	n_obj = NORMAL;
+	hatch = hatch_a >= 0.0 ? vec3(cos(hatch_a), sin(hatch_a), 1.0) : vec3(0.0);
 }
 
 float hash13(vec3 p) {
@@ -64,6 +72,9 @@ float bar_cover(float x, float w, float d) {
 
 void fragment() {
 	vec3 p = p_obj;
+	if (hatch.z > 0.5 && dot(p.xz, hatch.xy) > hatch_in && abs(dot(p.xz, vec2(-hatch.y, hatch.x))) < hatch_w) {
+		discard;
+	}
 	float r = length(p.xz);
 	// 方位角取 0~2π：横杆、拼缝的接缝落在方位角 0，那里是电梯导轨的缺口，没有格栅
 	float ang = atan(p.z, p.x);

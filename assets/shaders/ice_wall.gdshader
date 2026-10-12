@@ -12,6 +12,9 @@
 // 细的东西（节缝、刮痕、切削纹、裂纹）都按一个像素有多宽来画：小于像素时变宽、变淡（总量不变），远处不闪成虚线。
 // 灯照在身后的冰上：每段井壁（两圈走台中间切开）正好对应一圈灯，这圈 24 盏灯照在冰上的那一圈暖光在这里算
 // （真的灯光只往下照走台；每盏都加一个照冰的光源太多了）。走台面以下被格栅、梁挡住，淡掉。
+// 每圈的深度标记（「R07 / -84 m」）：模板喷漆直接喷在这圈走台面上方的冰上，绕井几处各一条。
+// 圈号、深度按这段井壁的 ring_y 算（第 n 圈走台面在 y = -n × ring_step），字形是距离场（tools/gen_stencil_glyphs.py）。
+// 旧了：字边被磨得深一块浅一块、一片片漆皮剥掉露出冰、冰里冻出来的霜盖住一块块；漆是不透光的，那里不往外透蓝光。
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_schlick_ggx;
 
@@ -51,11 +54,28 @@ instance uniform float ring_y = 0.0;       // 这圈走台面的高度（世界�
 instance uniform float ring_phase = 0.0;   // 这圈的灯整体错开了几盏（0~1）
 instance uniform float ring_power = 0.0;   // 这圈灯此刻的平均亮度 × 强度
 
+// 深度标记
+uniform sampler2D stencil_glyphs : hint_default_black, filter_linear_mipmap, repeat_disable;
+uniform vec4 stencil_paint : source_color = vec4(0.045, 0.045, 0.05, 1.0);   // 黑漆
+uniform vec4 frost_color : source_color = vec4(0.8, 0.86, 0.9, 1.0);         // 盖在漆上的霜
+uniform float stencil_cap = 0.42;         // 大写高（米）
+uniform float stencil_base = 1.25;        // 基线在走台面上方多高
+uniform vec4 stencil_angles = vec4(2.06, 3.14, 4.46, 5.62);   // 每圈喷在哪几个方位角（一条字的正中）
+uniform float ring_step = 12.0;
+// 字形图集（tools/gen_stencil_glyphs.py）：4×4 格、每格 128 像素，笔的起点在格子左边 16、基线在上边往下 100，
+// 1 em = 100 像素，距离场覆盖字边内外各 10 像素（所以每 em 距离场变 5）。字宽按 em（那个脚本打印的），顺序 0123456789R/-m+.
+const float STENCIL_ADV[16] = float[16](0.599, 0.599, 0.599, 0.599, 0.599, 0.599, 0.599, 0.599, 0.599, 0.599,
+	0.695, 0.386, 0.376, 0.974, 0.599, 0.339);
+const float STENCIL_SPACE = 0.228;
+const float STENCIL_CAP_EM = 0.76;
+const float STENCIL_TRACK = 0.07;         // 一块块字模拼着喷，字距比排版的松一点
+
 varying vec3 p_obj;
 // 霜晶闪点：两级格子（远近之间渐变）各一片冰晶面的法线（视图空间）和权重
 varying vec3 g_n0;
 varying vec3 g_n1;
 varying vec2 g_w;
+varying float paint_v;   // 这里有多少是漆（不透光：light() 里不加透出来的蓝光）
 
 void vertex() {
 	p_obj = VERTEX;
@@ -160,6 +180,76 @@ vec3 glint_facet(vec3 cell, vec3 n, float spread) {
 	return normalize(n + (t * cos(phi) + b * sin(phi)) * tan(spread * sqrt(h1)));
 }
 
+// 第 n 圈深度标记「R07 / -84 m」的第 c 个字：图集里第几格；-1 = 空格，-2 = 写完了
+int stencil_char(int n, int c) {
+	if (c == 0) {
+		return 10;
+	}
+	if (c == 1) {
+		return (n / 10) % 10;
+	}
+	if (c == 2) {
+		return n % 10;
+	}
+	if (c == 3 || c == 5) {
+		return -1;
+	}
+	if (c == 4) {
+		return 11;
+	}
+	int depth = n * int(ring_step + 0.5);
+	int k = c - 6;
+	if (depth > 0) {
+		if (k == 0) {
+			return 12;
+		}
+		k -= 1;
+	}
+	int nd = depth >= 100 ? 3 : (depth >= 10 ? 2 : 1);
+	if (k < nd) {
+		int div = k == nd - 1 ? 1 : (k == nd - 2 ? 10 : 100);
+		return (depth / div) % 10;
+	}
+	if (k == nd) {
+		return -1;
+	}
+	return k == nd + 1 ? 13 : -2;
+}
+
+float stencil_adv(int g) {
+	return (g >= 0 ? STENCIL_ADV[g] : STENCIL_SPACE) + STENCIL_TRACK;
+}
+
+// 一条标记的距离场（0.5 = 字边，往字里变大）。luv：从这条字的正中、基线量起（em，往右、往上）；
+// gx、gy：luv 的屏幕导数（每个字只是平移，所以共用一组；由分支外面求好的 dFdx(p)、dFdy(p) 换算）
+float stencil_sdf(int n, vec2 luv, vec2 gx, vec2 gy) {
+	float w = -STENCIL_TRACK;
+	for (int c = 0; c < 14; c++) {
+		int g = stencil_char(n, c);
+		if (g == -2) {
+			break;
+		}
+		w += stencil_adv(g);
+	}
+	float pen = -0.5 * w;
+	float sd = 0.0;
+	for (int c = 0; c < 14; c++) {
+		int g = stencil_char(n, c);
+		if (g == -2) {
+			break;
+		}
+		// 字格里的像素坐标；字的墨迹都在格子里，出了格子就是字外（不去采隔壁的格子）
+		vec2 cp = vec2(16.0 + (luv.x - pen) * 100.0, 100.0 - luv.y * 100.0);
+		if (g >= 0 && all(greaterThan(cp, vec2(1.0))) && all(lessThan(cp, vec2(127.0)))) {
+			vec2 cell = vec2(float(g % 4), float(g / 4)) * 128.0;
+			vec2 duv = vec2(100.0, -100.0) / 512.0;
+			sd = max(sd, textureGrad(stencil_glyphs, (cell + cp) / 512.0, gx * duv, gy * duv).r);
+		}
+		pen += stencil_adv(g);
+	}
+	return sd;
+}
+
 void fragment() {
 	vec3 p = p_obj;
 	// 方位角取 0~2π：展开图的接缝落在方位角 0，正好藏在电梯导轨的安装底板后面
@@ -169,7 +259,9 @@ void fragment() {
 	vec2 uv = vec2(s, p.y);
 	float big = fbm(p * 0.3);
 	// 一个像素在井壁上有多宽（米）
-	float px = max(length(dFdx(p)), length(dFdy(p)));
+	vec3 dpx = dFdx(p);
+	vec3 dpy = dFdy(p);
+	float px = max(length(dpx), length(dpy));
 
 	// ---- 开凿痕迹（只在表面）
 	// 螺旋切削纹：沿着螺旋线量高度，纹距被噪声扭得不太规整，每道深浅不一
@@ -242,11 +334,57 @@ void fragment() {
 	milky = mix(milky, cavity_color.rgb, clamp((1.0 - groove) * gdepth * 0.45 + seam * 0.5, 0.0, 1.0));
 	vec3 col = mix(inside * 1.4, milky, milk);
 	col = mix(col, vec3(0.95, 0.98, 1.0), cracked * 0.9);
+
+	// ---- 这圈的深度标记：先按高度筛（绝大多数像素到这里就跳过），再找离哪条字最近（按方位角），
+	// 量到那条字的正中、基线（em）。分支里不能求导（各像素走的路不一样），字形用 textureGrad 采，
+	// 导数按分支外面求好的 dFdx(p)、dFdy(p) 换算（方位角 atan(z, x) 的微分是 (x dz - z dx) / (x² + z²)）
+	float rel = p.y - ring_y;
+	float em = stencil_cap / STENCIL_CAP_EM;
+	float paint = 0.0;
+	float pfrost = 0.0;
+	int ring_no = int(round(-ring_y / ring_step));
+	float lv = (rel - stencil_base) / em;
+	if (lv > -0.3 && lv < 1.0 && ring_no >= 0) {
+		float da = 10.0;
+		for (int i = 0; i < 4; i++) {
+			float d = mod(ang - stencil_angles[i] + PI, TAU) - PI;
+			da = abs(d) < abs(da) ? d : da;
+		}
+		vec2 luv = vec2(da * radius / em, lv);
+		float rr = dot(p.xz, p.xz);
+		vec2 lgx = vec2((p.x * dpx.z - p.z * dpx.x) / rr * radius, dpx.y) / em;
+		vec2 lgy = vec2((p.x * dpy.z - p.z * dpy.x) / rr * radius, dpy.y) / em;
+		float sd = abs(luv.x) < 3.8 ? stencil_sdf(ring_no, luv, lgx, lgy) : 0.0;
+		if (sd > 0.2) {   // 字上、字边上（飞边伸到字外 0.06 em）
+			// 抗锯齿：距离场每 em 变 5，一个像素宽是多少（字小到几个像素时边自然变虚）
+			float aa = 3.8 * max(length(lgx), length(lgy)) + 0.01;
+			// 字边深一块浅一块：喷得不匀，边上的漆磨掉一些
+			float wob = vnoise(p * 26.0) * 0.6 + vnoise(p * 70.0) * 0.4;
+			float edge = 0.5 + (wob - 0.5) * 0.16;
+			float cov = smoothstep(edge - aa, edge + aa, sd);
+			// 飞边：字模边上漏出去的雾点。冰面不平，字模贴不严，有的地方漏得多、漏得远（远了看不出一粒粒，就是一圈淡灰）
+			float leak = smoothstep(0.35, 0.75, vnoise(p * 5.0 + 40.0));
+			float speck = mix(step(0.62, hash13(floor(p * 500.0))), 0.38, smoothstep(0.0015, 0.004, px));
+			float over = smoothstep(0.42 - 0.2 * leak, 0.5, sd) * (1.0 - cov) * speck * (0.25 + 0.45 * leak);
+			// 一片片漆皮翘起来剥掉，露出底下的冰（越靠字边剥得越多；剥口的边是碎的）
+			float peel = vnoise(p * vec3(9.0, 13.0, 9.0) + 5.0) * 0.6 + vnoise(p * 33.0 + 9.0) * 0.28 + vnoise(p * 95.0) * 0.12;
+			cov *= 1.0 - smoothstep(0.6, 0.64, peel + (0.6 - sd) * 0.3);
+			paint = clamp(cov + over, 0.0, 1.0);
+			// 漆褪色发灰；冰里冻出来的霜从冰面往外长：整片罩一层薄的，一块块厚的（切削纹凹处先长）
+			float fr = vnoise(p * vec3(4.0, 6.0, 4.0) + 21.0) * 0.6 + vnoise(p * 19.0 + 3.0) * 0.4;
+			pfrost = smoothstep(0.5, 0.78, fr + (1.0 - groove) * gdepth * 0.12);
+			vec3 pc = mix(stencil_paint.rgb, vec3(0.16, 0.16, 0.17), smoothstep(0.3, 0.9, big) * 0.6);
+			pc = mix(pc, frost_color.rgb, pfrost * 0.8 + 0.12);
+			col = mix(col, pc, paint);
+		}
+	}
+	paint_v = paint;
+
 	ALBEDO = col;
-	ROUGHNESS = mix(0.05, 0.48, milk) - scratch * 0.08 * milk + gouge * 0.2;
+	ROUGHNESS = mix(mix(0.05, 0.48, milk) - scratch * 0.08 * milk + gouge * 0.2, mix(0.6, 0.85, pfrost), paint);
 	SPECULAR = 0.5;
 	METALLIC = 0.0;
-	SSS_STRENGTH = sss * (0.5 + 0.5 * milk);
+	SSS_STRENGTH = sss * (0.5 + 0.5 * milk) * (1.0 - paint);
 
 	// 凹凸是按 2×2 像素块求导的：只有几个像素宽的细线（节缝、深刮痕、裂纹、刀纹）会被导数切成一段段，离远了不进凹凸，只留颜色
 	float thin = 1.0 - smoothstep(0.004, 0.012, px);
@@ -268,13 +406,12 @@ void fragment() {
 	float dot1 = 1.0 - smoothstep(0.08, 0.2, length(p - s1) / (c0 * 2.0));
 	g_n0 = glint_facet(id0, NORMAL, 0.7);
 	g_n1 = glint_facet(id1, NORMAL, 0.7);
-	float gm = (milk * 0.85 + cracked + 0.1) * (1.0 - smoothstep(0.004, 0.012, px));
+	float gm = (milk * 0.85 + cracked + 0.1) * (1.0 - smoothstep(0.004, 0.012, px)) * (1.0 - paint * (1.0 - pfrost));
 	g_w = vec2(step(hash13(id0 + 5.17), glint_density) * dot0 * (1.0 - fract(lod)),
 		step(hash13(id1 + 5.17), glint_density) * dot1 * fract(lod)) * gm;
 
 	// ---- 这圈灯照在冰上：最近的三盏，点光源照一个面（按凹凸以后的法线算 cos / d²，切削纹、台阶都显得出来）；
 	// 冰会把光吃进去再散出来，稍微背光的地方也亮一点点
-	float rel = p.y - ring_y;
 	if (ring_power > 0.0 && abs(rel) < 6.0) {
 		float idx = (ang - lamp_start) / lamp_step - ring_phase;
 		float j0 = clamp(floor(idx + 0.5), 0.0, lamp_count - 1.0);
@@ -297,7 +434,7 @@ void fragment() {
 		}
 		// 走台面以下被格栅、梁挡住；离开这段井壁的两头淡掉（和上下两段接上，没有缝）
 		float fade = smoothstep(-0.5, 0.05, rel) * (1.0 - smoothstep(2.5, 4.5, abs(rel)));
-		EMISSION = (ALBEDO * (lamp_color.rgb + glow_color.rgb * translucency * 0.25) * e + lamp_color.rgb * gl * glint_amount)
+		EMISSION = (ALBEDO * (lamp_color.rgb + glow_color.rgb * translucency * 0.25 * (1.0 - paint)) * e + lamp_color.rgb * gl * glint_amount)
 			* ring_power * fade;
 	}
 }
@@ -310,7 +447,7 @@ void light() {
 	vec3 lc = LIGHT_COLOR * ATTENUATION / PI;
 	DIFFUSE_LIGHT += lc * max(ndl, 0.0);
 	float wrap = clamp((ndl + 0.7) / 1.7, 0.0, 1.0);
-	DIFFUSE_LIGHT += lc * wrap * wrap * glow_color.rgb * translucency;
+	DIFFUSE_LIGHT += lc * wrap * wrap * glow_color.rgb * translucency * (1.0 - paint_v);
 	vec3 h = normalize(LIGHT + VIEW);
 	float ndh = max(dot(NORMAL, h), 0.0);
 	float a = max(ROUGHNESS * ROUGHNESS, 0.002);
