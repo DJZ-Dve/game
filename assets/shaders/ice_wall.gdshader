@@ -7,6 +7,11 @@
 //   毛面越厚越看不进去；两成左右被融水、升华磨光的地方湿亮透明，才看得见冰里；
 // - 开凿痕迹：螺旋切削纹（刀盘一边转一边往下掘，纹距、深浅都不规则）、每节之间一道接缝、偶尔一道深刮痕；
 // - 加热管两边化了又冻：最透；crack 随冰震从 0 涨到 1：一道道新裂纹（白的断面）。
+// - 冰层：冰壳是一层层冻上来的，气泡多的白层、气泡少的清亮层交替，层面略倾斜，绕井一圈在井壁上起伏。
+// - 霜晶闪点：冰面上的冰晶、新鲜断口是一片片小平面，灯照过来，朝向刚好对上的那几片闪一下（light() 里按半向量算）。
+// 细的东西（节缝、刮痕、切削纹、裂纹）都按一个像素有多宽来画：小于像素时变宽、变淡（总量不变），远处不闪成虚线。
+// 灯照在身后的冰上：每段井壁（两圈走台中间切开）正好对应一圈灯，这圈 24 盏灯照在冰上的那一圈暖光在这里算
+// （真的灯光只往下照走台；每盏都加一个照冰的光源太多了）。走台面以下被格栅、梁挡住，淡掉。
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_schlick_ggx;
 
@@ -29,8 +34,28 @@ uniform float bump_strength = 1.0;
 uniform float sss = 0.25;
 uniform float translucency = 0.7;   // 光钻进冰里再透出来的那部分（见 light()）
 uniform vec4 glow_color : source_color = vec4(0.42, 0.72, 1.0, 1.0);
+uniform float strata_amount : hint_range(0.0, 1.0) = 0.5;
+uniform float glint_amount = 80.0;     // 闪点有多亮
+uniform float glint_density = 0.8;     // 多少格子里有一颗朝向能闪的冰晶
+uniform float glint_cell = 0.006;      // 最细一级的格子多大（米）；远处按像素放大（至少六个像素一格）
+uniform float glint_sharp = 900.0;     // 冰晶面越平，闪点越尖、越少
+
+// 这段井壁对应的那圈灯：灯挂在半径 lamp_r、走台面上方 lamp_h 处，第 j 盏在方位角 lamp_start + lamp_step * (j + ring_phase)
+uniform float lamp_r = 9.38;
+uniform float lamp_h = 1.24;
+uniform float lamp_start = 0.14;
+uniform float lamp_step = 0.25;
+uniform float lamp_count = 24.0;
+uniform vec4 lamp_color : source_color = vec4(1.0, 0.86, 0.68, 1.0);
+instance uniform float ring_y = 0.0;       // 这圈走台面的高度（世界坐标）
+instance uniform float ring_phase = 0.0;   // 这圈的灯整体错开了几盏（0~1）
+instance uniform float ring_power = 0.0;   // 这圈灯此刻的平均亮度 × 强度
 
 varying vec3 p_obj;
+// 霜晶闪点：两级格子（远近之间渐变）各一片冰晶面的法线（视图空间）和权重
+varying vec3 g_n0;
+varying vec3 g_n1;
+varying vec2 g_w;
 
 void vertex() {
 	p_obj = VERTEX;
@@ -119,29 +144,51 @@ float ice_layer(sampler2D tex, vec2 uv, float tile, float rot) {
 	return smoothstep(layer_contrast.x, layer_contrast.y, l);
 }
 
+// 一条宽 w（和 x 同单位）的细线，像素宽 px：线比像素细时画成一个像素宽、按比例变淡（远看总量不变，不断成虚线）
+float thin_line(float x, float w, float px) {
+	float ww = max(w, px * 1.5);
+	return (1.0 - smoothstep(0.0, ww, abs(x))) * (w / ww);
+}
+
+// 格子 cell 里那片冰晶面的法线：围着表面法线 n 随机歪 0~spread 弧度（n 和结果都在视图空间）
+vec3 glint_facet(vec3 cell, vec3 n, float spread) {
+	float h1 = hash13(cell + 17.31);
+	float h2 = hash13(cell + 41.73);
+	vec3 t = normalize(cross(n, abs(n.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+	vec3 b = cross(n, t);
+	float phi = TAU * h2;
+	return normalize(n + (t * cos(phi) + b * sin(phi)) * tan(spread * sqrt(h1)));
+}
+
 void fragment() {
 	vec3 p = p_obj;
+	// 方位角取 0~2π：展开图的接缝落在方位角 0，正好藏在电梯导轨的安装底板后面
 	float ang = atan(p.z, p.x);
+	ang += ang < 0.0 ? TAU : 0.0;
 	float s = ang * radius;   // 沿井壁的弧长
 	vec2 uv = vec2(s, p.y);
 	float big = fbm(p * 0.3);
+	// 一个像素在井壁上有多宽（米）
+	float px = max(length(dFdx(p)), length(dFdy(p)));
 
 	// ---- 开凿痕迹（只在表面）
 	// 螺旋切削纹：沿着螺旋线量高度，纹距被噪声扭得不太规整，每道深浅不一
-	float helix = p.y + ang / TAU * groove_pitch * 3.0 + (vnoise(vec3(s * 0.15, p.y * 0.4, 0.0)) - 0.5) * 0.25;
+	float helix = p.y + ang / TAU * groove_pitch * 3.0 + (vnoise(vec3(p.x * 0.15, p.y * 0.4, p.z * 0.15)) - 0.5) * 0.25;
 	float gpos = helix / groove_pitch;
 	float gid = floor(gpos);
 	float gph = fract(gpos);
 	float gdepth = 0.2 + 0.8 * hash11(gid + floor(s / 7.0) * 13.0);
-	float groove = 1.0 - pow(abs(2.0 * gph - 1.0), 1.4);
+	// 纹距小到两三个像素时换成平均值（不然远处起摩尔纹）
+	float gfar = smoothstep(0.15, 0.4, px / groove_pitch);
+	float groove = mix(1.0 - pow(abs(2.0 * gph - 1.0), 1.4), 0.58, gfar);
 	// 刀齿刮出的细纹（顺着切削方向，一段一段，很淡）
-	float scratch = pow(0.5 + 0.5 * sin(helix * TAU / 0.045 + vnoise(p * vec3(1.5, 12.0, 1.5)) * 5.0), 6.0)
-		* smoothstep(0.45, 0.75, vnoise(vec3(s * 0.6, gid * 3.1, 0.0)));
+	float scratch = mix(pow(0.5 + 0.5 * sin(helix * TAU / 0.045 + vnoise(p * vec3(1.5, 12.0, 1.5)) * 5.0), 6.0), 0.23,
+		smoothstep(0.006, 0.02, px)) * smoothstep(0.45, 0.75, vnoise(vec3(s * 0.6, gid * 3.1, 0.0)));
 	// 偶尔一道深的刮痕（刀齿崩了一颗）
-	float gouge = (1.0 - smoothstep(0.0, 0.05, abs(gph - 0.5))) * step(0.93, hash11(gid * 3.7 + floor(s / 3.0)));
+	float gouge = thin_line(gph - 0.5, 0.05, px / groove_pitch) * step(0.93, hash11(gid * 3.7 + floor(s / 3.0))) * (1.0 - gfar);
 	// 节缝
 	float lph = fract(p.y / lift);
-	float seam = 1.0 - smoothstep(0.0, 0.015, min(lph, 1.0 - lph) * lift);
+	float seam = thin_line(min(lph, 1.0 - lph) * lift, 0.015, px);
 
 	// ---- 表面：毛面还是镜面
 	// 大部分是刀具啃过的毛面；一部分被融水、升华磨光了，透亮、看得进去
@@ -172,20 +219,26 @@ void fragment() {
 	vec3 t1 = exp(-absorb * 0.06);
 	vec3 t2 = exp(-absorb * 0.22);
 	vec3 t3 = exp(-absorb * 0.5);
+	// 冰层：层面朝一边倾斜几度、带点起伏（绕井一圈在井壁上是一道道起伏的带子）；气泡多的层白、散射多，
+	// 气泡少的层清亮、看得更深、更蓝
+	float sy = p.y + dot(p.xz, vec2(0.11, -0.06)) + (fbm(p * vec3(0.12, 0.05, 0.12)) - 0.5) * 2.0;
+	float strata = vnoise(vec3(sy * 0.8, 3.7, 1.3)) * 0.65 + vnoise(vec3(sy * 2.9, 8.1, 5.2)) * 0.35;
+	float bubbly = mix(0.5, smoothstep(0.3, 0.72, strata), strata_amount);
 	vec3 inside = scatter_color.rgb * (l1 * t1 * 1.1 + l2 * t2 * 0.85 * (1.0 - l1 * 0.6) + l3 * t3 * 0.7 * (1.0 - l2 * 0.5))
-		+ deep_color.rgb * exp(-absorb * 0.8) * 4.0;
+		* mix(0.55, 1.35, bubbly)
+		+ deep_color.rgb * exp(-absorb * 0.8) * mix(5.0, 3.0, bubbly);
 
 	// ---- 冰震的新裂纹：白的断面
 	vec2 cuv = uv * vec2(0.22, 0.13) + vec2(fbm(p * 1.3), fbm(p * 1.3 + 11.0)) * 0.9;
 	vec2 ce = voronoi(cuv);
-	float line = 1.0 - smoothstep(0.0, 0.012 + 0.012 * vnoise(p * 30.0), ce.x);
+	float line = thin_line(ce.x, 0.012 + 0.012 * vnoise(p * 30.0), px * 0.2);
 	float cracked = line * step(ce.y, crack * 0.4 - 0.02);
 
 	// 毛面：乳白，大尺度上借一点照片的明暗打破均匀；切削纹的凹处透蓝
 	float lbig = ice_layer(ice_b, uv, 6.0, 0.6);
 	// 冰晶的晶界在毛面上也看得出来（钻开的冰壁上，一颗颗冰晶的边界会被刮得更白）
 	float grain = ice_layer(ice_a, uv, 0.7, 0.4);
-	vec3 milky = milk_color.rgb * (0.78 + 0.12 * big + 0.1 * lbig + 0.22 * grain + 0.04 * scratch);
+	vec3 milky = milk_color.rgb * (0.78 + 0.12 * big + 0.1 * lbig + 0.22 * grain + 0.04 * scratch) * mix(0.93, 1.06, bubbly);
 	milky = mix(milky, cavity_color.rgb, clamp((1.0 - groove) * gdepth * 0.45 + seam * 0.5, 0.0, 1.0));
 	vec3 col = mix(inside * 1.4, milky, milk);
 	col = mix(col, vec3(0.95, 0.98, 1.0), cracked * 0.9);
@@ -195,8 +248,58 @@ void fragment() {
 	METALLIC = 0.0;
 	SSS_STRENGTH = sss * (0.5 + 0.5 * milk);
 
-	float h = groove * gdepth * 0.15 + grain * 0.12 + big * 0.6 - seam * 0.8 - gouge * 0.6 - cracked * 0.3 + scratch * 0.04 + l1 * 0.05 * (1.0 - milk);
+	// 凹凸是按 2×2 像素块求导的：只有几个像素宽的细线（节缝、深刮痕、裂纹、刀纹）会被导数切成一段段，离远了不进凹凸，只留颜色
+	float thin = 1.0 - smoothstep(0.004, 0.012, px);
+	float h = groove * gdepth * 0.15 * (1.0 - gfar) + grain * 0.12 + big * 0.6 - (seam * 0.8 + gouge * 0.6 + cracked * 0.3) * thin
+		+ scratch * 0.04 * thin + l1 * 0.05 * (1.0 - milk);
 	NORMAL = bump_normal(NORMAL, VERTEX, h * 0.022 * bump_strength);
+
+	// ---- 霜晶闪点：格子按像素大小分级（至少六个像素一格），相邻两级按距离渐变；每格里一颗冰晶，
+	// 在格子里随机的一点、一两个像素大的圆点（不是整格亮，不然是一个个小方块）。
+	// 毛面上（刮开的冰晶、结的霜）和新裂开的断口上才有；离远了一格比一颗冰晶大得多，淡掉
+	float lod = log2(max(px * 6.0, glint_cell) / glint_cell);
+	float l0 = floor(lod);
+	float c0 = glint_cell * exp2(l0);
+	vec3 id0 = floor(p / c0);
+	vec3 id1 = floor(p / (c0 * 2.0)) + 1000.0;
+	vec3 s0 = (id0 + 0.25 + 0.5 * vec3(hash13(id0 + 1.3), hash13(id0 + 2.9), hash13(id0 + 4.1))) * c0;
+	vec3 s1 = (id1 - 1000.0 + 0.25 + 0.5 * vec3(hash13(id1 + 1.3), hash13(id1 + 2.9), hash13(id1 + 4.1))) * c0 * 2.0;
+	float dot0 = 1.0 - smoothstep(0.08, 0.2, length(p - s0) / c0);
+	float dot1 = 1.0 - smoothstep(0.08, 0.2, length(p - s1) / (c0 * 2.0));
+	g_n0 = glint_facet(id0, NORMAL, 0.7);
+	g_n1 = glint_facet(id1, NORMAL, 0.7);
+	float gm = (milk * 0.85 + cracked + 0.1) * (1.0 - smoothstep(0.004, 0.012, px));
+	g_w = vec2(step(hash13(id0 + 5.17), glint_density) * dot0 * (1.0 - fract(lod)),
+		step(hash13(id1 + 5.17), glint_density) * dot1 * fract(lod)) * gm;
+
+	// ---- 这圈灯照在冰上：最近的三盏，点光源照一个面（按凹凸以后的法线算 cos / d²，切削纹、台阶都显得出来）；
+	// 冰会把光吃进去再散出来，稍微背光的地方也亮一点点
+	float rel = p.y - ring_y;
+	if (ring_power > 0.0 && abs(rel) < 6.0) {
+		float idx = (ang - lamp_start) / lamp_step - ring_phase;
+		float j0 = clamp(floor(idx + 0.5), 0.0, lamp_count - 1.0);
+		float e = 0.0;
+		float gl = 0.0;   // 灯照过来的霜晶闪点
+		for (float dj = -1.0; dj <= 1.0; dj += 1.0) {
+			float j = j0 + dj;
+			if (j < 0.0 || j > lamp_count - 1.0) {
+				continue;
+			}
+			float la = lamp_start + lamp_step * (j + ring_phase);
+			vec3 d = vec3(lamp_r * cos(la), ring_y + lamp_h, lamp_r * sin(la)) - p;
+			float dl2 = dot(d, d);
+			vec3 dv = normalize((VIEW_MATRIX * vec4(d, 0.0)).xyz);
+			float c = dot(NORMAL, dv);
+			e += (max(c, 0.0) + 0.08 * clamp(c + 0.5, 0.0, 1.0)) / dl2;
+			vec3 hv = normalize(dv + VIEW);
+			gl += (g_w.x * pow(max(dot(g_n0, hv), 0.0), glint_sharp) + g_w.y * pow(max(dot(g_n1, hv), 0.0), glint_sharp))
+				* max(c, 0.0) / dl2;
+		}
+		// 走台面以下被格栅、梁挡住；离开这段井壁的两头淡掉（和上下两段接上，没有缝）
+		float fade = smoothstep(-0.5, 0.05, rel) * (1.0 - smoothstep(2.5, 4.5, abs(rel)));
+		EMISSION = (ALBEDO * (lamp_color.rgb + glow_color.rgb * translucency * 0.25) * e + lamp_color.rgb * gl * glint_amount)
+			* ring_power * fade;
+	}
 }
 
 // 冰的光照：表面的漫反射 + 光钻进冰里散开再透出来的蓝光。洗墙灯几乎贴着冰面掠过去，只算表面的话
@@ -220,4 +323,9 @@ void light() {
 	float vis = 0.25 / ((nl * (1.0 - k) + k) * (ndv * (1.0 - k) + k));
 	float f = 0.02 + 0.98 * pow(1.0 - max(dot(VIEW, h), 0.0), 5.0);
 	SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * nl * dd * vis * f;
+	// 霜晶闪点：半向量正好对上这一格冰晶面的法线时闪一下
+	if (g_w.x + g_w.y > 0.0) {
+		float g = g_w.x * pow(max(dot(g_n0, h), 0.0), glint_sharp) + g_w.y * pow(max(dot(g_n1, h), 0.0), glint_sharp);
+		SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * nl * g * glint_amount;
+	}
 }
