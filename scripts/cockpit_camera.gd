@@ -95,6 +95,8 @@ var _auto_pos := Vector2.ZERO
 var _auto_aim := false
 ## 联机（scripts/net/sub_session.gd 每帧更新）：驾驶椅上坐着别人；别的船员脚下的位置（挤不过去）
 var seat_taken := false
+## 蹚水：舱里进了水，走得慢（breach.gd 按水深给，1 正常）
+var wade := 1.0
 var crew_obstacles: Array[Vector2] = []
 
 
@@ -366,7 +368,7 @@ func _walk(delta: float) -> void:
 	var near_door := absf(_pos.y - DOOR_POS.y) < 0.7
 	var want_run := current and Input.is_action_pressed("sprint") and input.y < -0.3 and not near_door
 	_sprint = move_toward(_sprint, 1.0 if want_run else 0.0, delta * 3.0)
-	var top := lerpf(walk_speed, run_speed, _sprint)
+	var top := lerpf(walk_speed, run_speed, _sprint) * wade
 	if near_door:
 		top = minf(top, walk_speed * 0.8)
 	var wish := input.rotated(-yaw) * top

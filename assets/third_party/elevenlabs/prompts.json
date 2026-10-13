@@ -1,0 +1,263 @@
+{
+ "breach_strain_v0.mp3": {
+  "text": "Thick steel submarine pressure hull straining under crushing deep-sea pressure, heard from inside a small steel compartment: deep low metallic groans and creaks growing faster and louder, stressed steel plates popping and pinging, rivets ticking, the hull about to give way. No music, no voices.",
+  "duration_seconds": 3.0,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:42:16"
+ },
+ "breach_strain_v1.mp3": {
+  "text": "Thick steel submarine pressure hull straining under crushing deep-sea pressure, heard from inside a small steel compartment: deep low metallic groans and creaks growing faster and louder, stressed steel plates popping and pinging, rivets ticking, the hull about to give way. No music, no voices.",
+  "duration_seconds": 3.0,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:42:19"
+ },
+ "breach_strain_v2.mp3": {
+  "text": "Thick steel submarine pressure hull straining under crushing deep-sea pressure, heard from inside a small steel compartment: deep low metallic groans and creaks growing faster and louder, stressed steel plates popping and pinging, rivets ticking, the hull about to give way. No music, no voices.",
+  "duration_seconds": 3.0,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:42:23"
+ },
+ "breach_burst_v0.mp3": {
+  "text": "A thick steel submarine hull suddenly ruptures under extreme deep-sea pressure, heard from inside: an enormous deep metallic bang that shakes the whole hull, a violent shriek of tearing ripping steel, then a blast of high-pressure seawater exploding into the small steel room. No music, no voices.",
+  "duration_seconds": 4.0,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:42:26"
+ },
+ "breach_burst_v1.mp3": {
+  "text": "A thick steel submarine hull suddenly ruptures under extreme deep-sea pressure, heard from inside: an enormous deep metallic bang that shakes the whole hull, a violent shriek of tearing ripping steel, then a blast of high-pressure seawater exploding into the small steel room. No music, no voices.",
+  "duration_seconds": 4.0,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:42:29"
+ },
+ "breach_burst_v2.mp3": {
+  "text": "A thick steel submarine hull suddenly ruptures under extreme deep-sea pressure, heard from inside: an enormous deep metallic bang that shakes the whole hull, a violent shriek of tearing ripping steel, then a blast of high-pressure seawater exploding into the small steel room. No music, no voices.",
+  "duration_seconds": 4.0,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:42:32"
+ },
+ "breach_jet_v0.mp3": {
+  "text": "Continuous powerful high-pressure seawater jet blasting through a hole into a small steel room, like a giant fire hose: loud constant roaring hiss of the jet, water hammering on a steel floor and splashing off metal walls, heavy spray. Steady, no build-up, no music.",
+  "duration_seconds": 10.0,
+  "loop": true,
+  "prompt_influence": 0.5,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:42:37"
+ },
+ "breach_jet_v1.mp3": {
+  "text": "Continuous powerful high-pressure seawater jet blasting through a hole into a small steel room, like a giant fire hose: loud constant roaring hiss of the jet, water hammering on a steel floor and splashing off metal walls, heavy spray. Steady, no build-up, no music.",
+  "duration_seconds": 10.0,
+  "loop": true,
+  "prompt_influence": 0.5,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:42:43"
+ },
+ "breach_jet_v2.mp3": {
+  "text": "Continuous powerful high-pressure seawater jet blasting through a hole into a small steel room, like a giant fire hose: loud constant roaring hiss of the jet, water hammering on a steel floor and splashing off metal walls, heavy spray. Steady, no build-up, no music.",
+  "duration_seconds": 10.0,
+  "loop": true,
+  "prompt_influence": 0.5,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:42:48"
+ },
+ "flood_churn_v0.mp3": {
+  "text": "Seawater flooding a small steel submarine compartment, heard from just above the water: turbulent churning water, heavy sloshing waves slapping steel walls and cabinets, constant gurgling bubbles bursting at the surface. Steady, no music.",
+  "duration_seconds": 10.0,
+  "loop": true,
+  "prompt_influence": 0.5,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:42:53"
+ },
+ "flood_churn_v1.mp3": {
+  "text": "Seawater flooding a small steel submarine compartment, heard from just above the water: turbulent churning water, heavy sloshing waves slapping steel walls and cabinets, constant gurgling bubbles bursting at the surface. Steady, no music.",
+  "duration_seconds": 10.0,
+  "loop": true,
+  "prompt_influence": 0.5,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:42:58"
+ },
+ "flood_churn_v2.mp3": {
+  "text": "Seawater flooding a small steel submarine compartment, heard from just above the water: turbulent churning water, heavy sloshing waves slapping steel walls and cabinets, constant gurgling bubbles bursting at the surface. Steady, no music.",
+  "duration_seconds": 10.0,
+  "loop": true,
+  "prompt_influence": 0.5,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:43:03"
+ },
+ "underwater_roar_v0.mp3": {
+  "text": "Heard with the head submerged underwater inside a flooded steel room: deep muffled roaring rumble of a high-pressure water jet nearby, dense turbulent bubbles, low-frequency pressure throbbing in the ears, everything dull and muffled. Steady, no music.",
+  "duration_seconds": 10.0,
+  "loop": true,
+  "prompt_influence": 0.5,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:43:08"
+ },
+ "underwater_roar_v1.mp3": {
+  "text": "Heard with the head submerged underwater inside a flooded steel room: deep muffled roaring rumble of a high-pressure water jet nearby, dense turbulent bubbles, low-frequency pressure throbbing in the ears, everything dull and muffled. Steady, no music.",
+  "duration_seconds": 10.0,
+  "loop": true,
+  "prompt_influence": 0.5,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:43:14"
+ },
+ "underwater_roar_v2.mp3": {
+  "text": "Heard with the head submerged underwater inside a flooded steel room: deep muffled roaring rumble of a high-pressure water jet nearby, dense turbulent bubbles, low-frequency pressure throbbing in the ears, everything dull and muffled. Steady, no music.",
+  "duration_seconds": 10.0,
+  "loop": true,
+  "prompt_influence": 0.5,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:43:20"
+ },
+ "breach_strain_v3.mp3": {
+  "text": "Crescendo: a steel submarine hull slowly buckling inward under deep-sea pressure, heard from inside. Starts quiet with a few faint creaks, then the metallic groaning and creaking gets steadily faster, louder and higher-pitched, steel pinging and popping more and more often, ending at maximum tension right before it breaks. Steadily rising intensity, no ending boom, no music, no voices.",
+  "duration_seconds": 3.0,
+  "loop": false,
+  "prompt_influence": 0.7,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:44:24"
+ },
+ "breach_strain_v4.mp3": {
+  "text": "Crescendo: a steel submarine hull slowly buckling inward under deep-sea pressure, heard from inside. Starts quiet with a few faint creaks, then the metallic groaning and creaking gets steadily faster, louder and higher-pitched, steel pinging and popping more and more often, ending at maximum tension right before it breaks. Steadily rising intensity, no ending boom, no music, no voices.",
+  "duration_seconds": 3.0,
+  "loop": false,
+  "prompt_influence": 0.7,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:44:27"
+ },
+ "breach_strain_v5.mp3": {
+  "text": "Crescendo: a steel submarine hull slowly buckling inward under deep-sea pressure, heard from inside. Starts quiet with a few faint creaks, then the metallic groaning and creaking gets steadily faster, louder and higher-pitched, steel pinging and popping more and more often, ending at maximum tension right before it breaks. Steadily rising intensity, no ending boom, no music, no voices.",
+  "duration_seconds": 3.0,
+  "loop": false,
+  "prompt_influence": 0.7,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:44:30"
+ },
+ "hull_groan_v0.mp3": {
+  "text": "Continuous creaking and groaning of a thick steel submarine hull under heavy deep-sea pressure, heard from inside a small steel compartment: dense deep metallic creaks, stressed steel plates pinging and popping, steady constant intensity throughout, no build-up, no ending, no music, no voices.",
+  "duration_seconds": 6.0,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:44:54"
+ },
+ "hull_groan_v1.mp3": {
+  "text": "Continuous creaking and groaning of a thick steel submarine hull under heavy deep-sea pressure, heard from inside a small steel compartment: dense deep metallic creaks, stressed steel plates pinging and popping, steady constant intensity throughout, no build-up, no ending, no music, no voices.",
+  "duration_seconds": 6.0,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:44:58"
+ },
+ "creature_ram_v0.mp3": {
+  "text": "A huge sea creature slams into the outside of a steel submarine hull, heard from inside the small steel compartment: a massive deep muffled thud, the whole hull booming and ringing afterwards, loose metal items rattling. Single impact, no music, no voices.",
+  "duration_seconds": 2.5,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:56:58"
+ },
+ "creature_ram_v1.mp3": {
+  "text": "A huge sea creature slams into the outside of a steel submarine hull, heard from inside the small steel compartment: a massive deep muffled thud, the whole hull booming and ringing afterwards, loose metal items rattling. Single impact, no music, no voices.",
+  "duration_seconds": 2.5,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:57:01"
+ },
+ "creature_ram_v2.mp3": {
+  "text": "A huge sea creature slams into the outside of a steel submarine hull, heard from inside the small steel compartment: a massive deep muffled thud, the whole hull booming and ringing afterwards, loose metal items rattling. Single impact, no music, no voices.",
+  "duration_seconds": 2.5,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:57:05"
+ },
+ "claw_scrape_v0.mp3": {
+  "text": "A giant sharp claw dragging slowly across the outside of a thick steel submarine hull, heard from inside: harsh grinding metallic screech and scratching, deep resonance through the hull plates. No music, no voices.",
+  "duration_seconds": 2.5,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:57:08"
+ },
+ "claw_scrape_v1.mp3": {
+  "text": "A giant sharp claw dragging slowly across the outside of a thick steel submarine hull, heard from inside: harsh grinding metallic screech and scratching, deep resonance through the hull plates. No music, no voices.",
+  "duration_seconds": 2.5,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:57:11"
+ },
+ "claw_scrape_v2.mp3": {
+  "text": "A giant sharp claw dragging slowly across the outside of a thick steel submarine hull, heard from inside: harsh grinding metallic screech and scratching, deep resonance through the hull plates. No music, no voices.",
+  "duration_seconds": 2.5,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:57:14"
+ },
+ "claw_pierce_v0.mp3": {
+  "text": "A sharp bony spike violently punches through a thick steel submarine hull and saws along it, heard from inside: a sharp metallic puncture crack, a shrieking rip of tearing steel, then high pressure water bursting in with a roar. No music, no voices.",
+  "duration_seconds": 3.0,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:57:17"
+ },
+ "claw_pierce_v1.mp3": {
+  "text": "A sharp bony spike violently punches through a thick steel submarine hull and saws along it, heard from inside: a sharp metallic puncture crack, a shrieking rip of tearing steel, then high pressure water bursting in with a roar. No music, no voices.",
+  "duration_seconds": 3.0,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:57:21"
+ },
+ "claw_pierce_v2.mp3": {
+  "text": "A sharp bony spike violently punches through a thick steel submarine hull and saws along it, heard from inside: a sharp metallic puncture crack, a shrieking rip of tearing steel, then high pressure water bursting in with a roar. No music, no voices.",
+  "duration_seconds": 3.0,
+  "loop": false,
+  "prompt_influence": 0.6,
+  "model_id": "eleven_text_to_sound_v2",
+  "tier": "starter",
+  "generated": "2026-10-13 15:57:24"
+ }
+}

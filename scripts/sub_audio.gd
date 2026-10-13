@@ -72,6 +72,7 @@ var _bus_cabin := 0
 var _bus_fwd := 0
 var _bus_aft := 0
 var _bus_sea := 0
+var _breach  # breach.gd：头在不在水里
 
 
 func _ready() -> void:
@@ -131,7 +132,9 @@ func _ready() -> void:
 	sub.sonar_switched.connect(func(_on: bool) -> void: _play("switch", SONAR_SWITCH_POS))
 	var props := sub.find_child("Props", true, false)
 	if props and props.has_signal("drip_landed"):
-		props.drip_landed.connect(func(p: Vector3) -> void: _play("drip", p))
+		props.drip_landed.connect(func(p: Vector3) -> void:
+			if _breach == null or _breach.level < -0.95:  # 舱里进了水就听不见水珠落进积水里了
+				_play("drip", p))
 	_connect_sonar.call_deferred()
 
 
@@ -279,8 +282,12 @@ func _process(delta: float) -> void:
 ## 视角、隔舱、贴舷窗对总线的影响
 func _update_buses() -> void:
 	# 舱外视角：舱里的声音隔着艇壳只剩低沉的一点；艇外的水声全开
-	_set_lowpass(_bus_cabin, _lerp_log(20000.0, 250.0, _view))
-	AudioServer.set_bus_volume_db(_bus_cabin, lerpf(0.0, -24.0, _view))
+	# 头没进水里：空气里传来的声音几乎都被挡在水面上，只剩一点闷闷的低频（水下的轰鸣 breach.gd 直接放在 Master 上）
+	if _breach == null:
+		_breach = sub.find_child("Breach", true, false)  # submarine.gd 的 _ready 才建，比这里晚
+	var ear: float = _breach.ear_under if _breach else 0.0
+	_set_lowpass(_bus_cabin, minf(_lerp_log(20000.0, 250.0, _view), _lerp_log(20000.0, 320.0, ear)))
+	AudioServer.set_bus_volume_db(_bus_cabin, lerpf(0.0, -24.0, _view) - 12.0 * ear)
 	var lean: float = _cam.get("lean")
 	var inside := _lerp_log(380.0, 650.0, lean)
 	_set_lowpass(_bus_sea, _lerp_log(inside, 9000.0, _view))

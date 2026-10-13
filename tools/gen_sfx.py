@@ -1215,6 +1215,199 @@ def steam_burst(rng):
         tt += rng.exponential(1.4)
     return y
 
+# ---------------------------------------------------------------------------- 破舱（scripts/breach.gd）
+# 都是合成的占位：真东西（钢板撕裂、高压水）以后换成实录更好，见 docs/design.md「破舱」。
+def breach_strain(rng):
+    """艇壳被从外面往里压、快撑不住了（2.6 秒，和 breach.gd 的 STRAIN 对齐）：低沉的吱嘎越来越密、越来越紧，
+    中间几声“嘣”，最后半秒一条裂缝先滋出一股细水（嘶声从无到有、越来越尖）。"""
+    dur = 2.6
+    n = int(dur * SR)
+    t = taxis(n)
+    k = t / dur
+    rate = 7 + 70 * k ** 2.2 * np.clip(1 + 0.2 * wobble(n, 2, 9, rng), 0.3, None)
+    env = (0.25 + 0.75 * k ** 1.3) * np.clip(1 + 0.35 * wobble(n, 2, 8, rng), 0.1, None)
+    x = np.convolve(stick_slip(n, rate, env, rng), pulse(0.5))[:n]
+    f = logu(rng, 45, 1200, 28)
+    ir = modes(1.2, f, rng.uniform(0.1, 0.6, 28) * (150 / f) ** 0.3, rng.uniform(0.3, 1, 28) * f ** -0.25)
+    y = fftconv(x, ir)[:n]
+    y = unit(y)
+    for tt in sorted(rng.uniform(0.4, 2.3, 4)):
+        f2 = logu(rng, 250, 3200, 14)
+        ring = modes(1.2, f2, rng.uniform(0.15, 0.8, 14) * (500 / f2) ** 0.5, rng.uniform(0.3, 1, 14))
+        place(y, unit(fftconv(pulse(0.2), ring)) * (0.35 + 0.5 * tt / dur), int(tt * SR))
+    # 裂缝滋水
+    hs = int(2.05 * SR)
+    m = n - hs
+    tm = taxis(m)
+    hiss = noise(m, lambda f: bp(f, 1800, 12000, 2), rng) * np.clip(1 + 0.4 * wobble(m, 10, 40, rng), 0, None)
+    place(y, unit(hiss) * (tm / tm[-1]) ** 1.5 * 0.5, hs)
+    return fade(y, 0.0, 0.05)
+
+
+def breach_burst(rng):
+    """崩开的那一下：整个艇壳被砸响的一声巨响（低频长嗡），同时钢板撕裂的尖啸（高速粘滑敲在高频模态上，零点三秒），
+    一口宽频的水爆。水柱的持续轰鸣是另一个循环音（breach_jet），同时开始。"""
+    n = int(5.0 * SR)
+    y = np.zeros(n)
+    w = int(0.012 * SR)
+    exc = filt(rng.standard_normal(w), lambda f: bp(f, None, 1500, 2)) * np.hanning(w)
+    f = logu(rng, 28, 1100, 36)
+    hull = modes(5.0, f, rng.uniform(0.5, 3.0, 36) * (60 / f) ** 0.35, rng.uniform(0.4, 1, 36) * (f / 60) ** -0.45)
+    place(y, unit(fftconv(exc, hull)), 0)
+    # 撕裂：粘滑从每秒几百下扫到上千下，敲在高频的板模态上
+    m = int(0.38 * SR)
+    tm = taxis(m)
+    rate = 380 + 900 * (tm / tm[-1]) ** 0.6 * np.clip(1 + 0.3 * wobble(m, 20, 80, rng), 0.2, None)
+    tear = stick_slip(m, rate, np.exp(-tm / 0.2), rng)
+    f2 = logu(rng, 900, 9000, 30)
+    tear = fftconv(tear, modes(0.4, f2, rng.uniform(0.01, 0.06, 30), rng.uniform(0.3, 1, 30)))
+    place(y, unit(tear) * 0.7, int(0.005 * SR))
+    # 低频的“咚”
+    place(y, unit(modes(1.5, [32, 47, 61], [0.35, 0.25, 0.2], [1, 0.7, 0.5])) * 0.9, 0)
+    # 水爆
+    bl = int(1.2 * SR)
+    tb = taxis(bl)
+    blast = noise(bl, lambda f: bp(f, 120, 9000, 1) * tilt(f, -1.5, 1000), rng) * np.exp(-tb / 0.35)
+    place(y, unit(blast) * 0.8, int(0.01 * SR))
+    return fade(y, 0.0, 1.0)
+
+
+def _bubbles(n, rng, rate, r_lo, r_hi, circular=True):
+    """一串气泡声（Minnaert 共振：半径 r 米的气泡约 3.26/r 赫兹；破的时候音调往上滑一点，几毫秒到几十毫秒衰减完）。"""
+    y = np.zeros(n)
+    count = int(rate * n / SR)
+    for _ in range(count):
+        r = np.exp(rng.uniform(np.log(r_lo), np.log(r_hi)))
+        f0 = 3.26 / r
+        tau = 0.0006 + 0.012 * (r / r_hi) ** 0.8
+        L = int(min(tau * 6, 0.08) * SR)
+        tt = taxis(L)
+        b = np.sin(2 * np.pi * f0 * tt * (1 + rng.uniform(0.05, 0.25) * tt / tau / 6)) * np.exp(-tt / tau)
+        b *= np.clip(tt / 0.0004, 0, 1)
+        place(y, b * rng.uniform(0.2, 1.0) * (r / r_hi) ** 0.3, int(rng.uniform(0, n)), circular)
+    return y
+
+
+def breach_jet(rng):
+    """高压水柱横穿过舱、砸在对面柜门上（循环）：像高压水枪、消防水龙对着铁皮柜子猛冲——
+    宽频的“哗——”（峰在一两千赫，湍流一直在抖），底下是水砸钢板的密集鼓点和柜子的低频轰鸣。"""
+    n = 12 * SR
+    sh = lambda f: bp(f, 250, 7000, 2) * tilt(f, -1.0, 1500)
+    roar_l, roar_r = noise(n, sh, rng), noise(n, sh, rng)
+    mod = np.clip(1 + 0.25 * wobble(n, 3, 18, rng) + 0.12 * wobble(n, 0.3, 2, rng), 0.2, None)
+    hiss = noise(n, lambda f: bp(f, 3000, 14000, 2), rng) * db(-8)
+    # 水砸铁皮：每秒几百下的密集冲击（循环脉冲串）卷柜门、艇壳的模态
+    rate = 520 * np.clip(1 + 0.3 * wobble(n, 2, 12, rng), 0.3, None)
+    hits = stick_slip(n, rate, np.ones(n), rng, circular=True)
+    f = logu(rng, 60, 900, 22)
+    drum = cconv(hits, modes(0.6, f, rng.uniform(0.03, 0.2, 22), rng.uniform(0.3, 1, 22) * (f / 100) ** -0.4))
+    low = noise(n, lambda f: bp(f, 30, 160, 2), rng) * np.clip(1 + 0.4 * wobble(n, 1, 6, rng), 0.1, None)
+    c = unit(drum) * db(-6) + unit(low) * db(-8)
+    l = (unit(roar_l) + unit(hiss) * db(-6)) * mod
+    r = (unit(roar_r) + unit(np.roll(hiss, n // 3)) * db(-6)) * np.roll(mod, n // 5)
+    return stereo(c, l, r, 1.0)
+
+
+def flood_churn(rng):
+    """舱里的水被搅得翻天（循环）：一大片气泡的咕嘟、哗啦，水撞来撞去的低沉晃荡。"""
+    n = 10 * SR
+    bub = _bubbles(n, rng, 260, 0.0025, 0.03)
+    bub2 = _bubbles(n, rng, 260, 0.0025, 0.03)
+    slosh = noise(n, lambda f: bp(f, 35, 260, 2), rng) * np.clip(1 + 0.6 * wobble(n, 0.4, 3, rng), 0.05, None)
+    splash = noise(n, lambda f: bp(f, 400, 6000, 1) * tilt(f, -2, 800), rng) * np.clip(0.6 + 0.5 * wobble(n, 1, 7, rng), 0, None)
+    c = unit(slosh) * db(-4)
+    return stereo(c, unit(bub) + unit(splash) * db(-12), unit(bub2) + unit(np.roll(splash, n // 2)) * db(-12), 1.0)
+
+
+def underwater_roar(rng):
+    """头没进水里听到的（循环）：水柱在水里冲出来的低沉轰鸣盖住一切，夹着闷掉的气泡咕嘟，压着耳朵的一层低频脉动。"""
+    n = 10 * SR
+    roar = noise(n, lambda f: bp(f, 25, 420, 2) * tilt(f, -2.5, 80), rng)
+    roar *= np.clip(1 + 0.3 * wobble(n, 0.5, 4, rng), 0.2, None)
+    bub = filt(_bubbles(n, rng, 180, 0.004, 0.04), lambda f: bp(f, None, 1100, 2))
+    bub2 = filt(_bubbles(n, rng, 180, 0.004, 0.04), lambda f: bp(f, None, 1100, 2))
+    throb = noise(n, lambda f: bp(f, 12, 45, 2), rng)
+    c = unit(roar) + unit(throb) * db(-6)
+    return stereo(c, unit(bub) * db(-8), unit(bub2) * db(-8), 1.0)
+
+
+# ---------------------------------------------------------------------------- 破舱：ElevenLabs 生成的版本
+# 原始文件由 tools/gen_sfx_el.py 生成（assets/third_party/elevenlabs/，描述和套餐记在 prompts.json）；这里挑版本、裁剪、
+# 做模型做不出来的部分（渐强、接上合成的裂缝滋水），统一成 48 kHz 立体声。上面合成的版本留着对比（*_synth）。
+EL = Path(__file__).resolve().parent.parent / "assets" / "third_party" / "elevenlabs"
+
+
+def _el(name):
+    x = load_recording(EL / f"{name}.mp3")
+    return x if x.shape[1] == 2 else np.repeat(x, 2, axis=1)
+
+
+def _cfilt(x, shape):
+    """循环滤波（整段当一个周期做 FFT，首尾照样接得上），循环音用。"""
+    n = len(x)
+    f = np.fft.rfftfreq(n, 1 / SR)
+    return np.stack([np.fft.irfft(np.fft.rfft(x[:, c]) * shape(f), n) for c in range(x.shape[1])], axis=1)
+
+
+def breach_strain_el(rng):
+    """挤压：取 hull_groan_v0（一段强度平稳的连续吱嘎）中间 3.8 秒，回放速度从 1 倍慢慢加到 1.45 倍（越绷越紧、音调往上走），
+    音量从 -12 dB 推到 0；最后半秒叠上合成的裂缝滋水（breach_strain 的那一层）。2.65 秒，和 breach.gd 的 STRAIN 对齐。"""
+    src = _el("hull_groan_v0")[int(0.4 * SR):int(4.2 * SR)]
+    dur = 2.65
+    n = int(dur * SR)
+    t = taxis(n)
+    k = t / dur
+    rate = 1.0 + 0.45 * k ** 1.6
+    pos = np.cumsum(rate) - rate[0]
+    pos = np.minimum(pos, len(src) - 2)
+    y = np.stack([np.interp(pos, np.arange(len(src)), src[:, c]) for c in range(2)], axis=1)
+    y *= db(-12 + 12 * k ** 1.3)[:, None]
+    y = unit(y)
+    hs = int(2.05 * SR)
+    m = n - hs
+    tm = taxis(m)
+    hiss = noise(m, lambda f: bp(f, 1800, 12000, 2), rng) * np.clip(1 + 0.4 * wobble(m, 10, 40, rng), 0, None)
+    hiss = unit(hiss) * (tm / tm[-1]) ** 1.5 * 0.35
+    y[hs:] += hiss[:, None]
+    return fade(y, 0.002, 0.05)
+
+
+def creature_ram_el(rng):
+    """外面那东西撞艇：creature_ram_v0（闷重的一下，整条艇嗡）、v1（更低更沉）两个变体，轮流用。"""
+    return fade(_el(f"creature_ram_v{_VARIANT}"), 0.0, 0.4)
+
+
+def claw_scrape_el(rng):
+    """爪子从外面刮过艇壳：claw_scrape_v1（起得快的那条）。"""
+    return fade(_el("claw_scrape_v1"), 0.01, 0.3)
+
+
+def claw_pierce_el(rng):
+    """骨刺扎穿、顺着艇壳锯开：claw_pierce_v2（一开头就是扎穿的那一下，对得上画面）。"""
+    return fade(_el("claw_pierce_v2"), 0.0, 0.5)
+
+
+def breach_burst_el(rng):
+    """崩开：breach_burst_v2（一串从低频直冲到七八千赫的金属冲击，后面拖着长长的低频余震）。"""
+    return fade(_el("breach_burst_v2"), 0.0, 0.8)
+
+
+def breach_jet_el(rng):
+    """水柱（循环）：breach_jet_v1。原始的太亮（七成能量在 4 kHz 以上，像喷雾），压掉一点高频、补一点低频的轰。"""
+    x = _el("breach_jet_v1")
+    return _cfilt(x, lambda f: tilt(f, -2.0, 2000) * (1 + 1.5 * bp(f, 40, 300, 2)))
+
+
+def flood_churn_el(rng):
+    """翻腾的水（循环）：flood_churn_v0，最平稳、频带最宽的一条。"""
+    return _el("flood_churn_v0")
+
+
+def underwater_roar_el(rng):
+    """头在水里听到的（循环）：underwater_roar_v2，三条里最平稳的。"""
+    return _el("underwater_roar_v2")
+
+
 # ---------------------------------------------------------------------------- 冰井的声学（给上面这些冰井的声音烘焙回声）
 # 一口直径 22 米、几百米深的竖井，井壁是冰（几乎全反射），和普通大厅的混响很不一样：
 # - 颤动回声：声音在两边井壁之间来回弹。镜头站在走台上、离井壁不到两米，所以先是贴身那面墙 10 毫秒的回声，
@@ -1407,6 +1600,20 @@ SOUNDS = {
     "steel_groan": (steel_groan, False, 3),
     "spark_crackle": (spark_crackle, False, 2),
     "steam_burst": (steam_burst, False, 1),
+    # 破舱（ElevenLabs 生成，见上面的 *_el；_synth 是原来合成的，对比用）
+    "creature_ram": (creature_ram_el, False, 2),
+    "claw_scrape": (claw_scrape_el, False, 1),
+    "claw_pierce": (claw_pierce_el, False, 1),
+    "breach_strain": (breach_strain_el, False, 1),
+    "breach_burst": (breach_burst_el, False, 1),
+    "breach_jet": (breach_jet_el, True, 1),
+    "flood_churn": (flood_churn_el, True, 1),
+    "underwater_roar": (underwater_roar_el, True, 1),
+    "breach_strain_synth": (breach_strain, False, 1),
+    "breach_burst_synth": (breach_burst, False, 1),
+    "breach_jet_synth": (breach_jet, True, 1),
+    "flood_churn_synth": (flood_churn, True, 1),
+    "underwater_roar_synth": (underwater_roar, True, 1),
     # 冰井里的回声（KEEP_LEVEL：不归一化，保留和干声的比例）
     "ice_boom_wet": (wet_of(ice_boom, "ice_boom"), False, 2),
     "steel_groan_wet": (wet_of(steel_groan, "steel_groan"), False, 3),

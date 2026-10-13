@@ -99,6 +99,11 @@ func _ready() -> void:
 	for n in body.get_children():
 		if n.name != "Exterior":
 			add_layer(n, CABIN_LAYER)
+	# 破舱（原型）：平时什么都不做，--breach / Ctrl+B 才撕开
+	var breach := Node3D.new()
+	breach.name = "Breach"
+	breach.set_script(preload("res://scripts/breach.gd"))
+	body.add_child(breach)
 	cockpit_camera.configure(body)
 	cockpit_camera.make_current()
 	piloting = cockpit_camera.is_seated()

@@ -23,6 +23,7 @@ extends Node
 ##   --sonar=passive  开场关掉主动声呐；--hull=0~1 开场的艇壳完好程度；--no-wreck 艇壳破了不回大厅
 ##   --giant=off      不放巨物；--giant-at=dx,dy,dz 放在潜艇的这个偏移处；--giant-still 定住；--giant-log 打印它的状态
 ##                    动作、截图用的 --giant-pose / --giant-jaw / --giant-yaw / --giant-turn / --giant-light 见 scripts/giant.gd 头部
+##   --breach=秒 / --breach-open / --flood=米 / --flood-rate=立方米每秒  破舱（见 scripts/breach.gd 头部；游戏里 Ctrl+B 撕开）
 ##   --seed=N         随机数种子（闪电、灯闪……的随机时刻固定下来；配合 --fixed-fps 两次录像逐帧一样）
 ## 画面（对比用，不改 project.godot）：
 ##   --aa=msaa|fsr2|taa|off  抗锯齿：msaa = MSAA 2x（project.godot 的默认）；fsr2 = FSR2 原生分辨率（scale 1.0，
