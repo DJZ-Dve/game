@@ -5,8 +5,10 @@ extends Node3D
 ## 灯是柔光棚：左前上方暖色主光（软阴影）、右前方冷色补光、身后右上方轮廓光，背景深灰。
 ## 调试：--cc-preset=N 开场用第几个预设，--cc-view=face|side|body|back|eye，--cc-yaw=度（人转多少），--cc-ui=off 截图不要界面，
 ##       --cc-shots=0,1,2|all 批量拍预设（见 _shots），--cc-set=形态:值,形态:值 再改几个形态 / 参数（调预设用），--cc-hide=材质名,… 把这几个材质的面藏起来（查眼睛）
+##       --cc-tressfx 试 TressFX 发丝（见 scripts/tools/tressfx_try.gd），--cc-gpu 打印渲染时间（见 _measure_gpu）
 
 const CREW_BODY := preload("res://scripts/crew_body.gd")
+const TFX_TRY := preload("res://scripts/tools/tressfx_try.gd")
 const LOBBY := "res://scenes/lobby.tscn"
 const SERIF := "res://assets/fonts/NotoSerifSC-VF.ttf"
 const INK := Color(0.9, 0.86, 0.78)
@@ -70,6 +72,27 @@ func _ready() -> void:
 		_ui.visible = false
 	if DebugArgs.has("cc-shots"):
 		_shots.call_deferred()
+	if DebugArgs.has("cc-gpu"):
+		_measure_gpu.call_deferred()
+
+
+## 调试：--cc-gpu 打印第 150~230 帧平均的 GPU、CPU 渲染时间（比较加不加 TressFX 发丝；截图配 --wait=240，
+## 不然第 150 帧就截完退出了）
+func _measure_gpu() -> void:
+	var vp := get_viewport().get_viewport_rid()
+	RenderingServer.viewport_set_measure_render_time(vp, true)
+	for _f in 150:
+		await get_tree().process_frame
+	var gpu := 0.0
+	var cpu := 0.0
+	var t0 := Time.get_ticks_usec()
+	for _f in 80:
+		await get_tree().process_frame
+		gpu += RenderingServer.viewport_get_measured_render_time_gpu(vp)
+		cpu += RenderingServer.viewport_get_measured_render_time_cpu(vp)
+	var size := get_viewport().get_visible_rect().size
+	print("CC 渲染时间（%d×%d）：GPU %.2f ms，CPU %.2f ms，一帧 %.2f ms" % [size.x, size.y, gpu / 80.0, cpu / 80.0,
+		(Time.get_ticks_usec() - t0) / 1000.0 / 80.0])
 
 
 ## 调试：--cc-shots=0,1,2（或 all）挨个用这几个预设，每个拍正脸、侧脸两张，存到 --cc-out 目录（默认 .tmp/faces），拍完退出。
@@ -204,6 +227,12 @@ func _spawn_body() -> void:
 	_body.look = look
 	_body.camera_path = _stand.get_path()
 	add_child(_body)
+	if DebugArgs.has("cc-tressfx"):
+		# 调试：试 TressFX 发丝（见 scripts/tools/tressfx_try.gd）
+		var tfx: Node3D = TFX_TRY.new()
+		tfx.body = _body
+		tfx.look = look
+		_body.add_child(tfx)
 	if DebugArgs.has("cc-dump"):
 		await get_tree().process_frame
 		for mi in CrewLook.head_meshes(_body):
