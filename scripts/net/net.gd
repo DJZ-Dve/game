@@ -43,9 +43,11 @@ var backends := {
 	"steam": NetBackend.SteamBackend.new(),
 	"server": NetBackend.ServerBackend.new(),
 }
-## 玩家名单：peer id → {"name": 名字, "role": 岗位}。主机维护，每次变动整张广播
+## 玩家名单：peer id → {"name": 名字, "role": 岗位, "look": 样子（crew_look.gd）}。主机维护，每次变动整张广播
 var players := {}
 var local_name := ""
+## 本机船员的样子（crew_look.gd 的 Dictionary），存在 settings.cfg 的 [player] look；没存过就随机挑一个预设
+var local_look := {}
 var in_game := false
 ## 回到大厅时要告诉玩家的话（主机断开、房间满了……）
 var last_message := ""
@@ -65,6 +67,13 @@ func _ready() -> void:
 		set_local_name("船员%03d" % (randi() % 1000))
 	if DebugArgs.has("name"):
 		local_name = DebugArgs.get_arg("name")
+	if cfg.has_section_key("player", "look"):
+		local_look = CrewLook.sanitize(cfg.get_value("player", "look"))
+	else:
+		set_local_look(CrewLook.preset(randi() % CrewLook.PRESETS.size()))
+	if DebugArgs.has("look"):
+		# 调试：用第几个预设（截图、录像时固定长相）
+		local_look = CrewLook.preset(int(DebugArgs.get_arg("look")))
 	if DebugArgs.has("role"):
 		_want_role = clampi(int(DebugArgs.get_arg("role")), 0, 3)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
@@ -95,6 +104,27 @@ func set_local_name(n: String) -> void:
 	cfg.load(SETTINGS)
 	cfg.set_value("player", "name", local_name)
 	cfg.save(SETTINGS)
+
+
+## 改本机的样子（捏脸界面存的时候）：存档；在房间里的话告诉主机，主机改名单再广播
+func set_local_look(l: Dictionary) -> void:
+	local_look = CrewLook.sanitize(l)
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS)
+	cfg.set_value("player", "look", local_look)
+	cfg.save(SETTINGS)
+	if not players.has(my_id()):
+		return
+	if is_host():
+		players[my_id()].look = local_look
+		_broadcast_roster()
+	elif is_online():
+		_set_look.rpc_id(1, local_look)
+
+
+## 某个玩家的样子（名单里没有就是默认的男船员）
+func look_of(id: int) -> Dictionary:
+	return CrewLook.sanitize(players.get(id, {}).get("look", {}))
 
 
 ## 连着别人（建了房或加入了房间）；单人、没联网时是 false
@@ -134,7 +164,7 @@ func host_game(kind: String) -> bool:
 		status.emit(backend.last_error)
 		return false
 	multiplayer.multiplayer_peer = peer
-	players = {1: {"name": local_name, "role": _want_role if _want_role >= 0 else Role.PILOT}}
+	players = {1: {"name": local_name, "role": _want_role if _want_role >= 0 else Role.PILOT, "look": local_look}}
 	status.emit("房间开好了")
 	roster_changed.emit()
 	return true
@@ -161,7 +191,7 @@ func join_game(kind: String, address: String) -> bool:
 ## 单人下潜：不联网，自己当主机
 func start_solo() -> void:
 	leave()
-	players = {1: {"name": local_name, "role": Role.PILOT}}
+	players = {1: {"name": local_name, "role": Role.PILOT, "look": local_look}}
 	_begin()
 
 
@@ -255,7 +285,7 @@ func _check_autostart() -> void:
 func _on_connected() -> void:
 	connecting = false
 	status.emit("连上了，等主机开局")
-	_register.rpc_id(1, local_name, _want_role)
+	_register.rpc_id(1, local_name, _want_role, local_look)
 
 
 func _on_peer_disconnected(id: int) -> void:
@@ -301,7 +331,7 @@ func _on_loaded(id: int) -> void:
 
 # ---------------------------------------------------------------------------- RPC
 @rpc("any_peer", "reliable")
-func _register(p_name: String, want_role: int) -> void:
+func _register(p_name: String, want_role: int, look: Dictionary) -> void:
 	if not is_host():
 		return
 	var id := multiplayer.get_remote_sender_id()
@@ -317,7 +347,16 @@ func _register(p_name: String, want_role: int) -> void:
 			if multiplayer.multiplayer_peer is ENetMultiplayerPeer:
 				multiplayer.multiplayer_peer.disconnect_peer(id))
 		return
-	players[id] = {"name": p_name.strip_edges().left(16), "role": _free_role(want_role)}
+	players[id] = {"name": p_name.strip_edges().left(16), "role": _free_role(want_role), "look": CrewLook.sanitize(look)}
+	_broadcast_roster()
+
+
+@rpc("any_peer", "reliable")
+func _set_look(look: Dictionary) -> void:
+	var id := multiplayer.get_remote_sender_id()
+	if not is_host() or not players.has(id):
+		return
+	players[id].look = CrewLook.sanitize(look)
 	_broadcast_roster()
 
 

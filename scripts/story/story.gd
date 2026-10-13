@@ -18,6 +18,7 @@ const SCENES := {
 	"deep_sea": "res://scenes/deep_sea.tscn",
 	"shaft": "res://scenes/intro/shaft_blackout.tscn",
 	"lift": "res://scenes/lift_ride.tscn",
+	"creator": "res://scenes/character_creator.tscn",
 }
 ## 普通话大约一秒四五个字
 const SPEECH_RATE := 4.6

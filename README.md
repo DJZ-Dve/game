@@ -235,12 +235,28 @@ ambientCG 直连很慢（几十 KB/s），`tools/fetch_ambientcg.sh` 的 300 秒
   - 最后面右舷储物架、左舷洗手池和镜子；后隔壁上是封死的机舱检修门
 - 尺寸都写在 `blender/scripts/cockpit.py` 开头；能站的区域在 `scripts/cockpit_camera.gd` 开头的几个矩形里，改布局时两边要一起改
 
+## 捏脸（`scenes/character_creator.tscn`、`scripts/ui/character_creator.gd`、`scripts/crew_look.gd`）
+大厅里名字旁边、房间里都有「捏脸」：左边选性别、预设（几个国家的船员）、随机；右边分页调——脸型、眼睛、鼻子、嘴、头（耳朵、头型、喉结、年纪、不对称）、
+肤色（深浅、冷暖、红润、性别特征、胡茬）、发型眉眼（7 种发型、14 种眉毛、眉毛浓淡、睫毛、瞳色、发色）、妆容（眼线、眼影、腮红、口红和颜色）；
+中间是自己的船员，拖动转身、滚轮拉近，下面切正脸 / 侧脸 / 全身。保存进 `settings.cfg`，在房间里的话主机跟着更新，联机时随名单发给所有人（`Net.local_look`、`Net.look_of`）。
+- **样子的数据**（`crew_look.gd`）：一个 Dictionary——性别、各个捏脸形态的值、肤色和妆容参数、几个下标（眉毛、发型、瞳色、发色、口红色……）；
+  `sanitize()` 补默认、夹范围（联机收到的、存档读出来的都过一遍），`apply()` 套到身体模型上：设头、口腔、头发的形态键，换材质参数，手的肤色跟着脸走
+- **头**（`blender/scripts/gen_head_vitruvian.py`，先跑 `tools/fetch_vitruvian.sh`）：Vitruvian（CharMorph 的写实角色，CC0），男女同一套拓扑。
+  只留头、脖子、眼睛、口腔；84 个捏脸形态（`ID_`）、46 个表情（`EX_`：眨眼、视线、瞳孔、眉毛、笑、口型）；睫毛是粒子毛发转的细带子，
+  眼部遮蔽（眼皮底下压暗眼球）、泪线；头发是发型引导线插值出来的发片。都按最近的皮肤三角形绑定，每个形态跟着走
+- **材质**（`assets/shaders/crew_*.gdshader`）：皮肤两张反照率（浅、深）插值出肤色，扫描的法线上叠平铺的毛孔，胡茬、头皮发茬、眉毛（14 种按发丝画的贴图）、
+  眼影 / 眼线 / 腮红 / 口红一层层叠，次表面散射按厚度；眼球一个不透明材质画完眼白和虹膜（虹膜按视线错开，假的折射），
+  不用透明的角膜层、不用清漆、捏脸场景不开辉光——这三样都会让虹膜蒙一层灰白
+- **调试**：`--scene=creator` 直接进捏脸；`--cc-preset=N`、`--cc-view=face|side|body|back|eye`、`--cc-yaw=度`、`--cc-ui=off`、
+  `--cc-set=形态:值,...`；`--cc-shots=all` 把预设挨个拍正脸、侧脸（存到 `.tmp/faces`），`python3 tools/face_sheet.py .tmp/faces` 拼成对比图；
+  游戏里 `--look=N` 本机用第 N 个预设，升降机 `--ride-faces=a,b,c` 给假队友换脸
+
 ## 第一人称（`scripts/cockpit_camera.gd`、`scripts/crew_body.gd`）
 - **步伐**：按实际挪动的距离走步伐相位，步频随速度变（走 1.25 米/秒约每秒 1.7 步，跑 2.5 米/秒约 2.6 步，和动作捕捉的动画一致）；
   起步迈出半步就落脚，停下时一步迈到一半以上的会把后脚收过来落一下。跑起来镜头起伏更大更尖、视野略宽；门洞跟前跑不起来
-- **身体**：低头看得见自己的身子、腿脚和双手——Microsoft Rocketbox 的角色（MIT），工装改成深海军蓝、劳保鞋改成黑皮靴
-  （`blender/scripts/gen_crew.py`，先跑 `tools/fetch_rocketbox.sh` 下载原始素材）。头是 MPFB2 生成的周海生
-  （`blender/scripts/gen_head_mpfb.py`，先跑 `tools/fetch_mpfb.sh` 装扩展和素材包），只有镜子里看得见，调试用 `--blink=1` 看闭眼。站、走、跑、坐四段动画，
+- **身体**：低头看得见自己的身子、腿脚和双手——Microsoft Rocketbox 的工装角色（MIT），男女各一套（`crew_body_m.glb`、`crew_body_f.glb`），
+  工装改成深海军蓝、反光马甲压成深色、劳保鞋改成黑皮靴（`blender/scripts/gen_crew.py`，先跑 `tools/fetch_rocketbox.sh` 下载原始素材）。
+  头是捏脸用的 Vitruvian（见下面「捏脸」），第一人称时只有镜子里看得见，调试用 `--blink=1` 看闭眼。站、走、跑、坐四段动画，
   走和跑按步伐相位定位到动画里对应的时刻，左右脚落地和脚步声对得上；坐在驾驶椅上是坐姿、手搭在腿上。
   每帧让模型的头骨落在眼睛后下方，头不渲染；身体不投影（会让照得到它的舱内灯每帧重画阴影图）
 - **开关门**：走到手轮跟前、低头探身，双手握在手轮上一把一把拧（`TwoBoneIK3D` 拉手臂，手掌转到握轮缘的朝向、手指弯起来），
@@ -287,7 +303,7 @@ ambientCG 直连很慢（几十 KB/s），`tools/fetch_ambientcg.sh` 的 300 秒
 - **沈渡**：`npc.gd`。坐着待机，说话时不时插一段手势；头和眼睛跟着玩家转（眼睛先到、头慢慢跟）；按台词对口型
   （每个字挑一个声母、一个韵母的口型，一秒四五个字，标点处闭嘴）；一直挂着一点客气的笑；故意不眨眼
 - **镜子**：`mirror.gd`，反射相机放在主相机关于镜面的对称点、斜视锥贴着镜面，画到 SubViewport 里贴回镜面。
-  周海生的脸平时不画（相机在头里面），只放在第 20 层，只有反射相机画这一层——宿舍里照镜子才看得见自己
+  自己的脸平时不画（相机在头里面），只放在第 20 层，只有反射相机画这一层——宿舍里照镜子才看得见自己
 - **声音**：`room_audio.gd`，雨（窗外）、吊扇、日光灯电流声、收音机沙沙声、港湾的水声；脚步按地面挑（水泥 / 水磨石）；
   打雷跟着窗外的闪电晚一两秒到。音效都在 `tools/gen_sfx.py` 里合成。总线多了 `Room`（小房间混响）、`Outdoor`（窗外，闷一点）
 - **窗外的雨**：`assets/shaders/rain_glass.gdshader`，雨点按世界坐标排，一颗颗折射背后的画面，攒大了往下淌、拖一串小水珠
@@ -299,7 +315,7 @@ ambientCG 直连很慢（几十 KB/s），`tools/fetch_ambientcg.sh` 的 300 秒
 ## 目录
 - `blender/scripts/` 生成潜艇（`gen_submarine.py` 外壳，`cockpit.py` 控制舱，`quarters.py` 生活舱）和海床（`gen_seabed.py`）的脚本；
   岸上的房间（`room_kit.py` 墙地顶、门窗、明线、日光灯、吊扇这些公共零件，`gen_dorm.py` 宿舍，`gen_office.py` 办事处）；
-  人物（`rocketbox.py` 公共处理，`gen_crew.py` 第一人称的身体和脸，`gen_npc.py` 沈渡）；`blender/source/` 是生成的 .blend
+  人物（`rocketbox.py` 公共处理，`gen_crew.py` 船员的身体（男女），`gen_head_vitruvian.py` 捏脸的头、头发、眉毛，`gen_npc.py` 沈渡；`gen_head_mpfb.py` 以前周海生的头，已不用）；`blender/source/` 是生成的 .blend
 - `assets/story/` 对白（`*.dlg`）和纸面文字（`docs/*.txt`）；`docs/archive/story_1998.md` 旧剧情设计
 - 铺位上的床单、被子、枕头、布帘、毛巾是用 Blender 布料模拟摆出来的（`blender/scripts/bedding.py`），床垫是带绗缝凹坑的软垫；
   模拟结果缓存在 `blender/cache/`（不进仓库），参数不变就不重算，第一次生成会多花十几秒。布料材质见 `assets/shaders/fabric.gdshader`
@@ -331,7 +347,7 @@ tools/capture.sh shot.png --scene=office --at=0.3,-0.26 --yaw=0          # 岸�
 tools/record.sh .tmp/story 420 --scene=dorm --autoplay --no-hud           # 自动把序章、第一章走一遍录下来
 tools/glb_info.sh assets/models/submarine_cockpit.glb [网格名]            # 查看 glb 里的网格、顶点数
 tools/fetch_polyhaven.sh --models a,b --textures c,d                      # 下载 Poly Haven 素材（ambientCG 用 fetch_ambientcg.sh --ids）
-tools/fetch_rocketbox.sh && tools/fetch_mpfb.sh && blender -b --factory-startup --python blender/scripts/gen_crew.py   # 重新生成第一人称的身体和周海生的头（npc 同理：gen_npc.py）
+tools/fetch_rocketbox.sh && tools/fetch_vitruvian.sh && blender -b --factory-startup --python blender/scripts/gen_crew.py   # 重新生成船员的身体（男女两套）和捏脸的头（头的脚本改过会先重跑 gen_head_vitruvian.py；npc 同理：gen_npc.py）
 python3 tools/gen_sfx.py [名字前缀...]                                   # 重新合成音效（之后让 Godot 导入一次：godot --headless --path . --import）
 tools/record.sh .tmp/door 12 --at=0,2.0 --yaw=180 --actions=30:interact   # 离线录一段画面+声音（.mp4/.wav/.log），不出声
 RES=1280x720 CRF=18 tools/record.sh .tmp/shaft 34 --scene=shaft         # 录开场冰井灯灭的镜头（录的时候临时用 override.cfg 把视口降到 RES，免得 AVI 过 1 GB 被截断）

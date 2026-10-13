@@ -215,6 +215,7 @@ func _spawn(id: int) -> void:
 	var cb: Node3D = CREW_BODY.new()
 	cb.name = "Crew_%d" % id
 	cb.first_person = false
+	cb.look = Net.look_of(id)
 	cb.camera_path = NodePath("../" + String(p.name))
 	cb.visible = false
 	body.add_child(cb)

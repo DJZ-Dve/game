@@ -13,7 +13,7 @@ extends Node3D
 ## 坐标：井轴是 Y 轴（和 ShaftKit 一样），轿厢挂在方位角 0 的导轨上，地板面在 y = 0。
 ##
 ## 调试：--scene=lift 直接从这里开始（单人）；--ride-hold 一直坐着不到站（截图、看效果）；--depth=米 从这个深度开始；
-##       --ride-crew=N 单人时往空座位上放 N 个假队友（看满员的样子；到站不等他们）；--ride-still 轿厢停着不动（截图用，配 --depth 定在某个位置）；--seat=0~3 坐哪个座位；--ride-look=度,度 坐下以后视线往左右、上下偏多少；--ride-next=场景 到站以后进哪个场景
+##       --ride-crew=N 单人时往空座位上放 N 个假队友（看满员的样子；到站不等他们；--ride-faces=a,b,c 他们用第几个捏脸预设）；--ride-still 轿厢停着不动（截图用，配 --depth 定在某个位置）；--seat=0~3 坐哪个座位；--ride-look=度,度 坐下以后视线往左右、上下偏多少；--ride-next=场景 到站以后进哪个场景
 
 const SPEED := 5.0             # 往下走的速度（米/秒）：20 公里单程一个多小时
 const START_DEPTH := 96.0      # 进来的时候轿厢已经下到多深了（刚过第 8 圈）
@@ -68,10 +68,13 @@ func _ready() -> void:
 	ResourceLoader.load_threaded_request(_next)
 	if Net.players.is_empty():
 		# 直接打开这个场景（--scene=lift）：没走大厅，当单人；--ride-crew=N 再放几个假队友（只在本机的名单上）
-		Net.players = {Net.my_id(): {"name": Net.local_name, "role": Net.Role.PILOT}}
+		Net.players = {Net.my_id(): {"name": Net.local_name, "role": Net.Role.PILOT, "look": Net.local_look}}
 		Net.in_game = true
+		# 假队友按预设轮着换脸（--ride-faces=a,b,c 指定用第几个预设）
+		var faces := DebugArgs.get_arg("ride-faces", "0,1,2").split(",")
 		for i in clampi(int(DebugArgs.get_arg("ride-crew", "0")), 0, 3):
-			Net.players[1000 + i] = {"name": ["老周", "阿兰", "米沙"][i], "role": i + 1}
+			Net.players[1000 + i] = {"name": ["老周", "阿兰", "米沙"][i], "role": i + 1,
+				"look": CrewLook.preset(int(faces[i % faces.size()]))}
 	if DebugArgs.has("depth"):
 		depth = float(DebugArgs.get_arg("depth"))
 	_shake.seed = 5
@@ -538,6 +541,7 @@ func _sync_riders() -> void:
 		add_child(r)
 		var body := CREW_BODY.new()
 		body.first_person = false
+		body.look = Net.look_of(id)
 		body.camera_path = r.get_path()
 		add_child(body)
 		r.body = body

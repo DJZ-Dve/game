@@ -1,6 +1,7 @@
 extends Node3D
-## 第一人称的身体：低头看得见自己的身子、腿脚和手（assets/models/crew_body.glb，Rocketbox 的角色改成潜艇兵，
-## 见 blender/scripts/gen_crew.py）。和相机挂在同一个父节点下面（艇里是 Body，岸上是房间根节点），
+## 船员的身体：低头看得见自己的身子、腿脚和手（assets/models/crew_body_m.glb / crew_body_f.glb，Rocketbox 的工装角色，
+## 头是捏脸用的 Vitruvian，见 blender/scripts/gen_crew.py）。样子（性别、脸、肤色……）见 crew_look.gd，
+## 本机的身体用 Net.local_look，别人的替身由创建它的地方设 look。和相机挂在同一个父节点下面（艇里是 Body，岸上是房间根节点），
 ## 相机是 cockpit_camera.gd 或 room_walker.gd，坐标都是父节点的局部坐标。
 ## - 动画：站着（idle）、走（walk）、跑（run）、坐（sit）四段，走和跑不按时间播，而是按相机的步伐相位（gait_steps）
 ##   直接定位到动画里对应的时刻，左右脚落地和脚步声对得上
@@ -10,9 +11,8 @@ extends Node3D
 ##   跟着手轮一把一把转，换手时沿轮缘滑回去；手轮够不着时手伸过去够，够得着才握上（见 watertight_door.gd 的 grip_point）
 ## - 不投影：身体一直有呼吸、走路的动作，要投影的话照得到它的每盏舱内灯都得每帧重画整舱的阴影图
 
-const BODY := preload("res://assets/models/crew_body.glb")
 const DECK_Y := -0.9   # 艇里的地板；岸上的相机自己带 deck_y
-## 走、跑动画里左脚跟落地在循环里的位置（gen_crew.py 算的，见 assets/models/crew_body_gait.json）
+## 走、跑动画里左脚跟落地在循环里的位置（gen_crew.py 算的，见 assets/models/crew_body_m_gait.json，男女一样）
 const WALK_L := 0.694
 const RUN_L := 0.348
 ## 头骨（Bip01 Head 关节，在耳朵附近）相对眼睛：往后、往下
@@ -26,11 +26,14 @@ const HEAD_LAYER := 20
 @export var camera_path: NodePath
 ## false：别的玩家的身体（联机时，camera_path 指向 scripts/net/crew_puppet.gd 的替身）——脸和头发照常画出来
 @export var first_person := true
+## 样子（crew_look.gd 的 Dictionary）；空着的话第一人称用 Net.local_look，替身用默认的男船员
+var look := {}
 
 var _cam: Node3D
 var _skel: Skeleton3D
 var _head := -1
 var _face: MeshInstance3D
+var _model: Node3D
 var _blink_wait := 3.0
 var _blink := 0.0
 var _tree: AnimationTree
@@ -55,7 +58,11 @@ func _ready() -> void:
 	_cam = get_node(camera_path)
 	if "deck_y" in _cam:
 		_deck_y = _cam.deck_y
-	var model := BODY.instantiate() as Node3D
+	if look.is_empty():
+		look = Net.local_look if first_person else CrewLook.default_look()
+	look = CrewLook.sanitize(look)
+	var model := CrewLook.body_scene(look).instantiate() as Node3D
+	_model = model
 	add_child(model)
 	_skel = model.find_children("*", "Skeleton3D", true, false)[0]
 	_head = _skel.find_bone("Bip01 Head")
@@ -65,17 +72,14 @@ func _ready() -> void:
 	for g in model.find_children("*", "GeometryInstance3D", true, false):
 		(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows \
 			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# 头和头发（周海生的脸）：相机在头里面，平时不画；只放在镜子那一层（PlanarMirror.HEAD_LAYER），
+	# 头（脸、口腔、头发）：第一人称时相机在头里面，平时不画；只放在镜子那一层（PlanarMirror.HEAD_LAYER），
 	# 两种相机都不画这一层，只有镜子的反射相机画得出来
 	_face = model.find_child("Crew_Head", true, false) as MeshInstance3D
 	if first_person:
 		(_cam as Camera3D).cull_mask &= ~(1 << (HEAD_LAYER - 1))
-	for nm in ["Crew_Head", "Crew_Hair"]:
-		var mi := model.find_child(nm, true, false) as MeshInstance3D
-		if mi:
-			if first_person:
-				mi.layers = 1 << (HEAD_LAYER - 1)
-			_setup_head_materials(mi)
+		for mi in CrewLook.head_meshes(model):
+			mi.layers = 1 << (HEAD_LAYER - 1)
+	CrewLook.apply(model, look)
 	var player := model.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
 	for n in ["idle", "walk", "run", "sit"]:
 		player.get_animation(n).loop_mode = Animation.LOOP_LINEAR
@@ -116,33 +120,11 @@ func _setup_hands() -> void:
 	_skel.add_child(_grip)   # 排在 IK 后面：IK 先把手腕拉到位，再转手掌、弯手指
 
 
-## 镜子里的脸：皮肤透一点光（次表面散射），眼球湿的一层清漆，睫毛、眉毛半透明，头发片裁切透明度、双面
-## （材质槽见 gen_head_mpfb.py：Crew_Head、Crew_Eyes、Crew_Lashes、Crew_Brows，头发 Crew_Hair）
-func _setup_head_materials(mi: MeshInstance3D) -> void:
-	for i in mi.get_surface_override_material_count():
-		var mat := mi.get_active_material(i) as StandardMaterial3D
-		if mat == null:
-			continue
-		mat = mat.duplicate()
-		var n := mat.resource_name
-		if n.ends_with("Hair"):
-			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-			mat.alpha_scissor_threshold = 0.5
-			mat.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE
-			mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-		elif n.ends_with("Eyes"):
-			mat.clearcoat_enabled = true
-			mat.clearcoat = 1.0
-			mat.clearcoat_roughness = 0.05
-		elif n.ends_with("Lashes") or n.ends_with("Brows"):
-			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-			mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-			mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-		else:
-			mat.subsurf_scatter_enabled = true
-			mat.subsurf_scatter_skin_mode = true
-			mat.subsurf_scatter_strength = 0.3
-		mi.set_surface_override_material(i, mat)
+## 换个样子（同一个性别：只改形态键和材质参数；性别变了要换模型，由调用的地方重建这个身体）
+func set_look(l: Dictionary) -> void:
+	look = CrewLook.sanitize(l)
+	if _model:
+		CrewLook.apply(_model, look)
 
 
 ## 动画混合：idle ←move→ (walk ←gait→ run)，再 ←seat→ sit；walk、run 前面各接一个定位节点
@@ -192,9 +174,9 @@ func _process(delta: float) -> void:
 
 	# 位置：头骨落在眼睛后下方
 	var eye := _cam.position
-	var look := Vector3(-sin(_cam.yaw), 0.0, -cos(_cam.yaw))
+	var fwd := Vector3(-sin(_cam.yaw), 0.0, -cos(_cam.yaw))
 	var back := HEAD_BACK + LOOK_DOWN_BACK * smoothstep(-0.2, -1.1, _cam.pitch)
-	var want_head := eye - look * back - Vector3.UP * HEAD_DOWN
+	var want_head := eye - fwd * back - Vector3.UP * HEAD_DOWN
 	var head_world := _skel.global_transform * _skel.get_bone_global_pose(_head).origin
 	var head_rel := get_parent_node_3d().global_transform.affine_inverse() * head_world - position
 	var p := want_head - head_rel
@@ -203,12 +185,12 @@ func _process(delta: float) -> void:
 	_update_hands(delta)
 	if first_person and DebugArgs.has("body-preview"):
 		# 调试：把身体摆到视线前方 1.3 米、转过来面朝相机，从外面看姿势和朝向
-		position += look * 1.3
+		position += fwd * 1.3
 		rotation.y += PI
 
 
 
-## 眨眼（只有镜子里看得见）：三五秒一次，偶尔连眨两下
+## 眨眼：三五秒一次，偶尔连眨两下（第一人称时只有镜子里看得见）
 func _update_blink(delta: float) -> void:
 	if _face == null or _face.mesh == null:
 		return
@@ -220,7 +202,7 @@ func _update_blink(delta: float) -> void:
 	var k := sin(PI * _blink / 0.16) if _blink > 0.0 else 0.0
 	if DebugArgs.has("blink"):
 		k = float(DebugArgs.get_arg("blink"))   # 调试：眼睛停在这个开合（截图看眨眼时睫毛、眼皮对不对）
-	for nm in ["AK_09_EyeBlinkLeft", "AK_10_EyeBlinkRight"]:
+	for nm in ["EX_Eyes_Closed_Left", "EX_Eyes_Closed_Right"]:
 		var i := _face.find_blend_shape_by_name(nm)
 		if i >= 0:
 			_face.set_blend_shape_value(i, k)

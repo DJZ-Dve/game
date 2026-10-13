@@ -1,5 +1,5 @@
 extends Control
-## 大厅（主场景）：起名字 → 建房 / 加入 / 单人下潜 → 房间里挑岗位、主机开局。
+## 大厅（主场景）：起名字、捏脸 → 建房 / 加入 / 单人下潜 → 房间里挑岗位、主机开局。
 ## 以后大厅会搬进办事处（docs/design.md 第三节），现在先用一个界面顶着。
 ## 联机方式：局域网 / 直连 IP 能用；Steam、归墟服务器是占位（按钮灰着，见 net_backend.gd）。
 
@@ -103,7 +103,11 @@ func _build_main() -> VBoxContainer:
 	_name_edit.max_length = 16
 	_name_edit.custom_minimum_size = Vector2(360, 44)
 	_name_edit.text_changed.connect(func(t: String) -> void: Net.set_local_name(t))
-	box.add_child(_name_edit)
+	var name_row := HBoxContainer.new()
+	name_row.add_theme_constant_override("separation", 10)
+	name_row.add_child(_name_edit)
+	name_row.add_child(_button("捏脸", _open_creator))
+	box.add_child(name_row)
 	box.add_child(_spacer(10))
 
 	box.add_child(_label("局域网 / 直连 IP", 16, DIM))
@@ -147,6 +151,11 @@ func _join() -> void:
 	Net.join_game("enet", _addr_edit.text)
 
 
+## 捏脸（scenes/character_creator.tscn）：存了以后回到大厅；在房间里的话主机那边跟着变
+func _open_creator() -> void:
+	get_tree().change_scene_to_file("res://scenes/character_creator.tscn")
+
+
 # ---------------------------------------------------------------------------- 房间
 func _build_room() -> VBoxContainer:
 	var box := VBoxContainer.new()
@@ -176,6 +185,7 @@ func _build_room() -> VBoxContainer:
 	row.add_theme_constant_override("separation", 10)
 	_start = _button("开始下潜", func() -> void: Net.start_game())
 	row.add_child(_start)
+	row.add_child(_button("捏脸", _open_creator))
 	row.add_child(_button("离开房间", func() -> void: Net.leave()))
 	box.add_child(row)
 	return box
