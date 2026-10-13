@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """潜艇的音效全部在这里程序化合成，写到 assets/audio/（48 kHz、16 bit WAV）。只用 numpy。
-用法: python3 tools/gen_sfx.py [名字前缀...]      （不给参数就全部重新生成）
+用法: python tools/gen_sfx.py [名字前缀...]      （不给参数就全部重新生成）
 
 - 循环音（环境声）在频域里造：噪声按频谱形状给幅度、随机相位，再反变换，天然首尾相接；
   音调成分都取整数个周期，调制、脉冲串也按循环长度绕回去摆，所以循环点没有接缝。
@@ -1648,16 +1648,16 @@ def write_wav(path, x, loop):
 
 def import_pcm(path):
     """循环音在 Godot 里不能用默认的 QOA 压缩：QOA 绕回循环起点时解码器的预测状态接不上，每圈接缝处一个毛刺
-    （tools/record.sh 录出来、audio_report.py 查得到）。把导入设置改成不压缩的 PCM；还没导入过就写一个只有参数的
+    （tools/record.py 录出来、audio_report.py 查得到）。把导入设置改成不压缩的 PCM；还没导入过就写一个只有参数的
     .import，Godot 导入时会补全其余字段。"""
     imp = path.with_name(path.name + ".import")
     if imp.exists():
-        text = imp.read_text()
+        text = imp.read_text(encoding="utf-8")
         new = re.sub(r"compress/mode=\d+", "compress/mode=0", text)
         if new != text:
-            imp.write_text(new)
+            imp.write_text(new, encoding="utf-8", newline="\n")
     else:
-        imp.write_text('[remap]\n\nimporter="wav"\ntype="AudioStreamWAV"\n\n[params]\n\ncompress/mode=0\n')
+        imp.write_text('[remap]\n\nimporter="wav"\ntype="AudioStreamWAV"\n\n[params]\n\ncompress/mode=0\n', encoding="utf-8", newline="\n")
 
 
 KEEP_LEVEL = ("_wet", "relay_ring")

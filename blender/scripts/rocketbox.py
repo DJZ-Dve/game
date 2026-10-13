@@ -2,7 +2,7 @@
 眼睛（眼球单独一个材质、眼球贴图上画眼睑的影子、沿上眼睑缘长一排睫毛）。
 
 gen_crew.py（第一人称的身体）和 gen_npc.py（沈渡这些剧情角色）都用它。
-原始文件由 tools/fetch_rocketbox.sh 下到 blender/cache/rocketbox/（不进 git）。
+原始文件由 tools/fetch_rocketbox.py 下到 blender/cache/rocketbox/（不进 git）。
 """
 import os
 

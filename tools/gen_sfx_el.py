@@ -2,8 +2,8 @@
 """用 ElevenLabs 的“文字生成音效”接口生成原始音效，存到 assets/third_party/elevenlabs/（Godot 不导入这个目录）。
 再由 tools/gen_sfx.py 读进来裁剪、归一化、接循环，写到 assets/audio/。
 
-用法: python3 tools/gen_sfx_el.py [名字前缀...]      （不给参数就把下面 SPECS 里还没生成的都生成）
-      python3 tools/gen_sfx_el.py --list              （只列出要生成的条目和预计花多少积分，不花钱）
+用法: python tools/gen_sfx_el.py [名字前缀...]      （不给参数就把下面 SPECS 里还没生成的都生成）
+      python tools/gen_sfx_el.py --list              （只列出要生成的条目和预计花多少积分，不花钱）
 
 - 密钥：环境变量 ELEVENLABS_API_KEY，没有就读 ~/.config/guixu/elevenlabs_key（不进 git）
 - 每条生成 variants 个版本：<名字>_v<k>.mp3；文件已经在了就跳过（不重复花积分）。要重新生成就先删掉那个文件
@@ -86,7 +86,7 @@ def api_key():
     if not k:
         p = Path.home() / ".config" / "guixu" / "elevenlabs_key"
         if p.exists():
-            k = p.read_text().strip()
+            k = p.read_text(encoding="utf-8").strip()
     if not k:
         sys.exit("没有密钥：设 ELEVENLABS_API_KEY，或者写到 ~/.config/guixu/elevenlabs_key")
     return k
@@ -133,7 +133,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / ".gdignore").touch()
     log_path = OUT / "prompts.json"
-    log = json.loads(log_path.read_text()) if log_path.exists() else {}
+    log = json.loads(log_path.read_text(encoding="utf-8")) if log_path.exists() else {}
     for name, k, f, text, dur, loop, infl in todo:
         body = {"text": text, "duration_seconds": dur, "prompt_influence": infl,
                 "model_id": "eleven_text_to_sound_v2"}
@@ -157,7 +157,7 @@ def main():
         f.write_bytes(data)
         log[f.name] = {"text": text, "duration_seconds": dur, "loop": loop, "prompt_influence": infl,
                        "model_id": body["model_id"], "tier": tier, "generated": time.strftime("%Y-%m-%d %H:%M:%S")}
-        log_path.write_text(json.dumps(log, ensure_ascii=False, indent=1))
+        log_path.write_text(json.dumps(log, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
         print(f"  {f.name}  {len(data) / 1024:.0f} KB  {time.time() - t0:.1f} 秒")
     tier, used, limit = credits(key)
     if limit is not None:

@@ -132,7 +132,7 @@ func _build_materials() -> void:
 	mat_lamp.set_shader_parameter("paint_color", Color(0.2, 0.24, 0.21))
 	mat_lamp.set_shader_parameter("chip_amount", 0.3)
 	mat_lamp.set_shader_parameter("dust_amount", 0.2)
-	# 冰壁（ice_wall.gdshader）：冰里的东西用实拍的湖冰（ambientCG，CC0；tools/fetch_ambientcg.sh --ids Ice002,Ice004）
+	# 冰壁（ice_wall.gdshader）：冰里的东西用实拍的湖冰（ambientCG，CC0；python tools/fetch_ambientcg.py --ids Ice002,Ice004）
 	ice_mat = ShaderMaterial.new()
 	ice_mat.shader = preload("res://assets/shaders/ice_wall.gdshader")
 	ice_mat.set_shader_parameter("radius", R)

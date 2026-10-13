@@ -34,7 +34,7 @@ extends Node3D
 ##          turn_left / turn_right 巡航速度、按 9°/秒 转弯（身子弯、胸鳍打舵）；rise / dive 巡航速度、抬头 / 低头 14°（胸鳍调攻角）；
 ##          gasp 原地喘得最急（呼吸快、鳃开得大）
 ##      --giant-breath=倍数 呼吸快慢（2 = 快一倍）；--giant-gill=度 鳃皮瓣一直翻开这么多（看鳃）
-##      --giant-shots=帧,帧,...:路径前缀  到这几帧各存一张截图（<前缀>_<帧>.png，连拍看摆动；配合 capture.sh 的 --wait 设成最后一帧之后）
+##      --giant-shots=帧,帧,...:路径前缀  到这几帧各存一张截图（<前缀>_<帧>.png，连拍看摆动；配合 capture.py 的 --wait 设成最后一帧之后）
 ##      --giant-bones 把骨骼画成线（不挡，脊椎白、尾鳍蓝、下颌青、鳍黄、鳃红、卵带绿），灰模上没刷权重的骨头也看得见在动
 ##      --giant-turn=度每秒 动作按这个转弯角速度弯身子（正的往左转）
 ##      --giant-anim-log 每秒打印一行动作（GIANT_ANIM 帧号 jaw= lift= amp= freq= head= tail= gill= exert= pec= para=）

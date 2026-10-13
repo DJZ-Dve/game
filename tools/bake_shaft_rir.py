@@ -11,9 +11,9 @@
 - 镜头：两个全向话筒，左右相距 0.3 米（立体声）
 - 镜像声源法（低阶，算清楚头几次反射）+ 声线追踪（后面的混响），两者拼起来
 结果存到 .tmp/shaft_rir.npz（不进 git；120 MB 左右）。要重算：
-    python3 tools/bake_shaft_rir.py            （全部 51 圈，十几分钟）
-    python3 tools/bake_shaft_rir.py --rings 0,1,10,40 --rays 2000   （试参数）
-    python3 tools/bake_shaft_rir.py --at land:10.2,4.49,0.2         （另算一个点：冰块落在镜头对面的走台上）
+    python tools/bake_shaft_rir.py            （全部 51 圈，十几分钟）
+    python tools/bake_shaft_rir.py --rings 0,1,10,40 --rays 2000   （试参数）
+    python tools/bake_shaft_rir.py --at land:10.2,4.49,0.2         （另算一个点：冰块落在镜头对面的走台上）
 """
 import argparse
 import time

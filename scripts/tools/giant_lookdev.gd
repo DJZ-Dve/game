@@ -4,7 +4,7 @@ extends Node3D
 ## 这里按材质名把 assets/materials/ 下的同名 .tres 直接套上去（所以改完 .tres / 着色器直接截图就是最新的）。
 ##
 ## 后台截图（不抢焦点、不出声）：
-##   tools/capture.sh out.png --scene=res://scenes/dev/giant_lookdev.tscn --shot=maw --jaw=65 --light=side
+##   python tools/capture.py out.png --scene=res://scenes/dev/giant_lookdev.tscn --shot=maw --jaw=65 --light=side
 ## 参数（`--` 之后）：
 ##   --shot=名字      机位：side 全身侧面、q34 前上方 3/4、head 头、maw 正面看嘴（配 --jaw）、
 ##                    closeup_skin 体侧皮肤特写、closeup_teeth 牙特写（自动张嘴）、closeup_socket 上颚的獠牙牙槽（张嘴、从下往上看）、

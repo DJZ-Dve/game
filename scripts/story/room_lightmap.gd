@@ -1,7 +1,7 @@
 class_name RoomLightmap
 extends RefCounted
 ## 岸上房间的光照贴图（LightmapGI）：运行时挂上烘好的数据、换变体、和 VoxelGI 来回切（截图对比），
-## 以及 --lm-export 把房间导出成烘焙用的场景（tools/bake_lightmap.sh 第一步）。从 story_room.gd 拆出来的，
+## 以及 --lm-export 把房间导出成烘焙用的场景（tools/bake_lightmap.py 第一步）。从 story_room.gd 拆出来的，
 ## 房间这边只留子类覆盖的 lightmap_*() 钩子。
 ## 只烘间接光——灯的 bake_mode 是 Dynamic，直接光和阴影照旧实时算；会动的东西（门扇、吊扇、钟、人）不进贴图，
 ## 由烘出来的探针照亮。
@@ -64,7 +64,7 @@ func _bakeable(mi: MeshInstance3D) -> bool:
 func load_data() -> bool:
 	var why := _stale_reason("")
 	if not why.is_empty():
-		push_warning("光照贴图 %s 和模型对不上（%s），这次用 VoxelGI；跑 tools/bake_lightmap.sh %s 重烘" % [
+		push_warning("光照贴图 %s 和模型对不上（%s），这次用 VoxelGI；跑 python tools/bake_lightmap.py %s 重烘" % [
 			room.lightmap_path(), why, room.room_name])
 		return false
 	# 会动的东西（还有第一人称的身体）改成 Dynamic：不用贴图（也没烘它们），由 LightmapGI 的探针给间接光
@@ -272,7 +272,7 @@ func _stale_reason(variant: String) -> String:
 
 
 # ----------------------------------------------------------------------------- 导出烘焙场景
-## --lm-export：把房间原样导出成烘焙用的场景（tools/bake_lightmap.sh 第一步），存到 .tmp/lightmap/<房间>_src.scn 后退出。
+## --lm-export：把房间原样导出成烘焙用的场景（tools/bake_lightmap.py 第一步），存到 .tmp/lightmap/<房间>_src.scn 后退出。
 ## 只要烘焙用得到的：不动的网格（Static，进贴图）、屋里的灯、环境和天光；会动的、窗外的、贴花、粒子、声音都不要。
 ## 节点同名、同层级、同变换（中间的挂点用空的 Node3D 占位），根节点挂 lightmap_baker.gd，带一个配好参数的 RoomLM
 func export() -> void:

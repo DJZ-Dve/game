@@ -1,7 +1,7 @@
 """船员的头（捏脸用）：Vitruvian——CharMorph 的写实角色（CC0，Sean Buckley 在 Antonia Polygon 上改出来的，
 https://github.com/seenbuklee/CharMorph-Vitruvian），男女同一套拓扑、可以连续渐变。
 
-先跑 tools/fetch_vitruvian.sh（下到 blender/cache/charmorph/vitruvian/，不进 git），再：
+先跑 python tools/fetch_vitruvian.py（下到 blender/cache/charmorph/vitruvian/，不进 git），再：
     Blender -b -Y --factory-startup --python blender/scripts/gen_head_vitruvian.py [-- --preview 目录]
 gen_crew.py 发现头没生成、或者这个脚本改过，会自己调一遍。
 产出 blender/cache/charmorph/crew_head.blend（gen_crew 追加到身体上）和 assets/textures/crew/ 下的贴图：

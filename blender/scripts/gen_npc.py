@@ -1,6 +1,6 @@
 """剧情角色沈渡（东溟海洋工程的代表）：Microsoft Rocketbox 的 Business_Male_02（MIT 许可）带表情的 _facial 版。
 
-先跑 tools/fetch_rocketbox.sh，再：
+先跑 python tools/fetch_rocketbox.py，再：
     Blender -b --factory-startup --python blender/scripts/gen_npc.py [-- --preview DIR]
 导出 assets/models/npc_shen.glb（骨骼 + 身体、头、头发三块网格 + 原地动画 + 口型、眨眼、微笑的形态键）
 和 assets/models/npc_shen.json（坐姿下手、臀、眼睛的位置，office 场景按它摆桌椅）。
@@ -412,7 +412,7 @@ def main():
         export_frame_range=False, export_anim_single_armature=True, export_def_bones=False,
         export_morph=True, export_morph_normal=False, export_image_format='AUTO', export_materials='EXPORT',
         export_cameras=False, export_lights=False)
-    with open(META, "w") as f:
+    with open(META, "w", encoding="utf-8", newline="\n") as f:
         json.dump(meta, f, indent=2, ensure_ascii=False)
     print("exported", OUT, f"{os.path.getsize(OUT) / 1e6:.1f} MB")
 

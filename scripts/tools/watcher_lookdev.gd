@@ -4,7 +4,7 @@ extends Node3D
 ## （改完 .tres / 着色器直接截图就是最新的，不用重新导入 glb）。结构照 giant_lookdev.gd，精简版。
 ##
 ## 后台截图（不抢焦点、不出声）：
-##   tools/capture.sh out.png --scene=res://scenes/dev/watcher_lookdev.tscn --shot=q34 --light=front
+##   python tools/capture.py out.png --scene=res://scenes/dev/watcher_lookdev.tscn --shot=q34 --light=front
 ## 参数（`--` 之后）：
 ##   --shot=名字      机位：front 正面、q34 前上方 3/4、side 侧面、below 前下方、back 后上方、
 ##                    eye 眼睛近景、lid 眼睑和眼窝（斜上方）、shell 背甲近景、spikes 背刺、

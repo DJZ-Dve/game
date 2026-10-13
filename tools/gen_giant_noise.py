@@ -11,8 +11,8 @@
      assets/textures/giant_tissue_n.png：软组织的细沟和小孔（各向同性的脊状噪声），嘴里、眼球、寄生虫用
 
 做法：都是在环面上（周期边界）生成，天然可平铺。固定种子，每次生成一样。
-用法：python3 tools/gen_giant_noise.py            生成两张图（并同步下面的米数）
-      python3 tools/gen_giant_noise.py --sync     只同步：把 assets/textures/giant/<组>.json 的 meters 写进
+用法：python tools/gen_giant_noise.py            生成两张图（并同步下面的米数）
+      python tools/gen_giant_noise.py --sync     只同步：把 assets/textures/giant/<组>.json 的 meters 写进
                                                   assets/materials/M_Giant*.tres 的 atlas_meters（重新排图集 / 烘焙以后跑一次）
 """
 import json
@@ -139,11 +139,11 @@ def sync_meters():
         tres = os.path.join(ROOT, "assets", "materials", mat + ".tres")
         if not (os.path.exists(js) and os.path.exists(tres)):
             continue
-        meters = json.load(open(js))["meters"]
-        s = open(tres).read()
+        meters = json.load(open(js, encoding="utf-8"))["meters"]
+        s = open(tres, encoding="utf-8").read()
         s2 = re.sub(r"shader_parameter/atlas_meters = [0-9.]+", "shader_parameter/atlas_meters = %s" % meters, s)
         if s2 != s:
-            open(tres, "w").write(s2)
+            open(tres, "w", encoding="utf-8", newline="\n").write(s2)
             print("%s: atlas_meters = %s" % (mat, meters))
 
 

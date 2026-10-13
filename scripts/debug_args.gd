@@ -11,7 +11,7 @@ extends Node
 ##   --cruise=油门     一直推着油门（-1~1），看艇开动起来时颗粒的拖影
 ##   --water=off      关掉水体吸收后处理（对比用，见 water_fx.gd）
 ##   --sub-yaw=度     开场把潜艇转一个角度（检查舱内 GI、贴花是不是跟着艇走）
-##   --actions=帧:动作,...  按帧号自动按键（录音测试用，见 tools/record.sh）。
+##   --actions=帧:动作,...  按帧号自动按键（录音测试用，见 tools/record.py）。
 ##                    `60:interact` 在第 60 帧按一下 E；`90:+move_forward` 按住、`150:-move_forward` 松开
 ##   --only-sfx=a,b / --mute-sfx=a,b  只开 / 关掉这几种声音（名字见 sub_audio.gd 的 VOL）
 ##   --no-hud         不显示操作提示（录给别人看的视频用）
@@ -35,7 +35,7 @@ extends Node
 ## 岸上的场景（--scene=dorm|office，scripts/story/）截图：
 ##   --at=x,z / --yaw / --pitch  站在房间局部坐标（x 东、-z 北）这一点，yaw 0 朝北、90 朝西、-90 朝东、180 朝南
 ##   --sit=座位名      坐到 Seat_<名字> 上（Desk、Bed、Visitor……），用坐着时的眼睛位置；--yaw/--pitch 变成相对椅子朝向的偏移
-##   --shots=json      基准截图：一次启动挨个摆机位、等画面稳定、存 PNG，拍完退出（tools/bench.sh、tools/bench_views.json）。
+##   --shots=json      基准截图：一次启动挨个摆机位、等画面稳定、存 PNG，拍完退出（tools/bench.py、tools/bench_views.json）。
 ##                    json 是机位数组，或者 {组名: 机位数组}（--shot-set 挑哪组，默认 --scene 的名字）。一个机位：
 ##                    {"name", "desc", "at": [x, z], "yaw", "pitch", "sit": 座位名（yaw/pitch 是相对偏移）,
 ##                     "tube": 宿舍日光灯开不开（默认跟 --tube）, "door": 门开多少 0~1, "fov": 视野（默认 64，坐着 54）,
@@ -45,14 +45,14 @@ extends Node
 ##   --shot-dir=目录   --shots 存到哪（<组名>_<name>.png，另写一份 <组名>_shots.json：每张的帧率、GPU 时间）
 ##   --shot-only=a,b   只拍这几个机位（按 name）
 ##   --give=秒         办事处：进门这么多秒以后直接演一遍沈渡推平安符（office.gd 的 _give_talisman；配合 --sit / --at
-##                    和 tools/record.sh 录手推的 IK，不用从头走剧情签合同）
+##                    和 tools/record.py 录手推的 IK，不用从头走剧情签合同）
 ##   --gi=voxel|both   岸上房间的间接光：默认有烘好的光照贴图（assets/gi/<房间>.lmbake）就用 LightmapGI，
 ##                    voxel 强制用原来的 VoxelGI，both 两个都开（见 story_room.gd）
-##   --lm-export       把房间导出成烘焙光照贴图用的场景后退出（tools/bake_lightmap.sh 第一步）；--lm-<属性>=值 改 LightmapGI 参数
+##   --lm-export       把房间导出成烘焙光照贴图用的场景后退出（tools/bake_lightmap.py 第一步）；--lm-<属性>=值 改 LightmapGI 参数
 ##   截图（--capture、--shots）时为了每次拍出来一样：不打闪电（--lightning=on 照常随机打）、
 ##   闪的灯停在基础亮度（--flicker=on 照常闪）、窗外按墙上时间闪的障碍灯灭着、坐着不晃、镜子里不眨眼（见 story_room.gd）。
 ##   --shots 也算截图：凡是看 --capture 的地方（不放开场演出、不显示提示、不抓鼠标）一样生效。
-##   bench.sh 还加了 --fixed-fps 60：游戏时间按帧走（吊扇、钟、人的动作停在同一个位置），和机器快慢无关
+##   bench.py 还加了 --fixed-fps 60：游戏时间按帧走（吊扇、钟、人的动作停在同一个位置），和机器快慢无关
 
 ## --shots 第一张多等这些帧（加载、编译着色器）
 const SHOT_WARMUP := 60

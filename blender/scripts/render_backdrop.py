@@ -16,7 +16,7 @@
 - dorm_flash.exr   闪电那一下（云里一大片冷白光）3072 × 1024：只亮一瞬，分辨率减半
 - dorm_glow.png    发光的份额（8 位灰度）：每个像素里亮窗、灯和它们的光晕占夜景亮度的比例，Godot 里拿它让窗户偶尔灭、远处一盏灯闪
 
-用法（慢，单独跑；不在 tools/rebuild_models.sh 里）：
+用法（慢，单独跑；不在 tools/rebuild_models.py 里）：
     Blender -b --factory-startup --python blender/scripts/render_backdrop.py [-- 参数]
       --scale 0.25        试渲：分辨率乘这个数（默认 1）
       --samples 64        采样数（默认 64，自适应 + OIDN 降噪）

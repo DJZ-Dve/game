@@ -1,10 +1,10 @@
 @tool
 extends Node3D
 ## 无人值守烘焙 LightmapGI。LightmapGI 的烘焙只有编辑器里那个「烘焙光照贴图」按钮能触发（4.7 没有给脚本的接口），
-## 所以分两步（tools/bake_lightmap.sh）：
+## 所以分两步（tools/bake_lightmap.py）：
 ##   1. 游戏跑起来，房间按挂点摆好道具、灯、纸以后，把要烘的东西原样（同名、同层级、同变换）导出成一个烘焙用的场景
 ##      （story_room.gd 的 --lm-export），根节点挂这个脚本，带一个配好参数、light_data 指向 assets/gi/<房间>.lmbake 的 LightmapGI；
-##   2. 后台开编辑器（godot_bg.sh：不抢焦点、Dummy 音频）打开这个场景，带 `-- --bake-lightmap=<这个场景的路径>`：这里找到
+##   2. 后台开编辑器（godot_bg.py：不抢焦点、Dummy 音频）打开这个场景，带 `-- --bake-lightmap=<这个场景的路径>`：这里找到
 ##      LightmapGI 编辑器插件的烘焙按钮按下去，烘完（贴图存到 .lmbake 旁边的 .exr）退出。
 ## 运行时 story_room.gd 新建同名的 LightmapGI、把烘好的数据挂上；节点路径和导出时一样，光照贴图能对上每个网格。
 ## 手动在编辑器里打开这个场景不会自动烘（没有 --bake-lightmap），可以自己按按钮重烘、看探针。

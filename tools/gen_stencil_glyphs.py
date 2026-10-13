@@ -10,7 +10,7 @@
 排成 4×4 格，每格 CELL 像素见方：笔的起点在格子左边 PEN_X、基线在 BASE_Y（从上往下数）；
 1 em = EM 像素。字距（advance）、大写高按 em 打印出来，抄进 assets/shaders/ice_wall.gdshader 的 STENCIL_ADV、STENCIL_CAP_EM。
 
-  python3 tools/gen_stencil_glyphs.py      # 输出 assets/textures/stencil_glyphs.png
+  python tools/gen_stencil_glyphs.py      # 输出 assets/textures/stencil_glyphs.png
 之后让 Godot 导入一次：godot --headless --path . --import
 """
 import os

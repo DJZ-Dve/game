@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """岸上房间的调色 LUT（Environment.adjustment_color_correction 用的 3D 查找表），生成横条 PNG。
 
-用法: python3 tools/gen_lut.py [名字 ...] [--size N] [--out 目录]
-  例: python3 tools/gen_lut.py                      全部（identity、office、dorm）写到 assets/textures/lut/
-      python3 tools/gen_lut.py identity --size 64   只出单位 LUT，64³（对比 LUT 管线有没有偏差用）
+用法: python tools/gen_lut.py [名字 ...] [--size N] [--out 目录]
+  例: python tools/gen_lut.py                      全部（identity、office、dorm）写到 assets/textures/lut/
+      python tools/gen_lut.py identity --size 64   只出单位 LUT，64³（对比 LUT 管线有没有偏差用）
   名字: identity（单位 LUT：理论上和不挂 LUT 一模一样）、office、dorm，调色见下面的 GRADES
 产出: <目录>/<名字>_lut.png：N 张 N×N 的切片从左往右排成一条（宽 N*N、高 N），第 k 张是蓝 = 第 k 格，
       切片里 x 是红、y 是绿。要配一份 .import（Texture3D，横切 N 片、无损、不要 mipmap），
@@ -136,14 +136,14 @@ def main():
         save(build(GRADES[nm], a.size), path)
         imp = path + ".import"
         if not os.path.exists(imp):
-            with open(imp, "w") as f:
+            with open(imp, "w", encoding="utf-8", newline="\n") as f:
                 f.write(IMPORT.format(n=a.size))
         else:
-            with open(imp) as f:
+            with open(imp, encoding="utf-8") as f:
                 s = f.read()
             s2 = re.sub(r"(?m)^slices/horizontal=\d+$", f"slices/horizontal={a.size}", s)
             if s2 != s:
-                with open(imp, "w") as f:
+                with open(imp, "w", encoding="utf-8", newline="\n") as f:
                     f.write(s2)
         print(f"{path}  {a.size}³")
 

@@ -29,7 +29,7 @@ godot --headless --audio-driver Dummy --path . --max-fps 60 -- --join=127.0.0.1 
 ```
 `--host` / `--join=地址` 开局就建房 / 加入，`--autostart=N` 凑够 N 人自动开局，`--role=0~3` 想要的岗位，`--net-log` 打出 `NET <帧号> <id> ...` 的联机日志。
 截别人视角的图：主机照上面那样无头跑（加 `--at=0,-0.4 --yaw=180` 站着面朝后），
-另一个用 `tools/capture.sh out.png --scene=res://scenes/lobby.tscn --join=127.0.0.1 --at=0,1.4 --wait=1100`。
+另一个用 `python tools/capture.py out.png --scene=res://scenes/lobby.tscn --join=127.0.0.1 --at=0,1.4 --wait=1100`。
 
 ## 玩法设计（`docs/design.md`）
 2026-10-12 起背景换到木卫二（欧罗巴）冰下海洋：冰震和被人类噪音引来的东西毁了线缆和站点，能延寿的生物质“时间”断供；
@@ -81,12 +81,12 @@ Mac M4 上 1600×900：平时 63.6 → 47 毫秒一帧，断管喷汽那几秒 1
 灯灭时每圈的电闸“咔嚓”是实录（Freesound 131599，CC0，见 `assets/third_party/ASSET_LICENSES.md`），
 卷上 `tools/bake_shaft_rir.py` 用 pyroomacoustics 按冰井真实尺寸算的、这一圈接线箱到镜头的冲激响应，51 圈各一条（`relay_ring_*`）：
 从近到远的响度、闷的程度、回声多少都是算出来的、连续变化，不分档；按距离晚到（声速 343 m/s）。
-RIR 缓存在 `.tmp/shaft_rir.npz`（不进 git），重算：`python3 tools/bake_shaft_rir.py` 再 `python3 tools/gen_sfx.py relay_ring`
+RIR 缓存在 `.tmp/shaft_rir.npz`（不进 git），重算：`python tools/bake_shaft_rir.py` 再 `python tools/gen_sfx.py relay_ring`
 （要 pyroomacoustics：`pip install --user pyroomacoustics`）。冰块落到走台上不出声（冰砸铁格栅的声音合成、实录都不像，先不要）；加热管的“嗒”、冰裂的“啾——”也去掉了。
 调试：`--shot-t=秒` 定在某一刻截图（`--shot-run` 从那一刻接着走）；`--lookdev[=弧度]` 站在走台上近看井壁（调冰的材质用）；
 `--cam=r,方位,高,看的点r,方位,高` 换机位，配 `--dof=off`（近景不虚）、`--fov=度`（焦距定死）看灯具、走台底面；
 `--near-lit=k` 前几圈挂真的照走台的灯、`--shadows=off` 关投影、`--bench` 量平均帧间隔（比性能用）。
-ambientCG 直连很慢（几十 KB/s），`tools/fetch_ambientcg.sh` 的 300 秒超时下不完一个包，下素材前先开代理（`--proxy`）。
+ambientCG 直连很慢（几十 KB/s），下素材前先开代理（`python tools/fetch_ambientcg.py --proxy …`）；下不完就再跑一遍，会接着下。
 
 ## 下井：冰井升降机（加载画面，`scenes/lift_ride.tscn`、`scripts/shaft/lift_ride.gd`）
 设计文档「八、开场 · 下井」。电脑上匹配好、主机点开始，所有人直接出现在冰井升降机的轿厢里往下走——这一段就是加载画面：
@@ -171,10 +171,10 @@ ambientCG 直连很慢（几十 KB/s），`tools/fetch_ambientcg.sh` 的 300 秒
   出舱视角、舱外视角（Tab）才看得见它本身：在深海的水和雾里，十几米内被探照灯照到才看得清
 - **模型**（`blender/scripts/gen_giant.py`，部件在 `blender/scripts/giant/`，规格 `giant/spec.py`）：颅、下颌、牙、嘴里、躯干和鳍、长须六个部件
   各自程序化生成，总装烘曲率顶点色、合成一个蒙皮网格（约 21 万三角面）、建骨架（脊椎 16 节、尾鳍 2 节、下颌、两根长须各 6 节），
-  导出 `assets/models/giant.glb`。`tools/rebuild_models.sh giant` 重新生成；`--preview=目录 --jaw=度` 出 Workbench 预览图
+  导出 `assets/models/giant.glb`。`python tools/rebuild_models.py giant` 重新生成；`--preview=目录 --jaw=度` 出 Workbench 预览图
 - **材质**（`assets/shaders/giant_*.gdshader`、`assets/materials/M_Giant*.tres`）：苍白透血管、能透光的皮，湿红的嘴里，发黄带裂的牙，
   结壳的骨板，透光的破鳍膜；骨骼会动，所以只用 UV（按米）、全身坐标 UV2 和曲率顶点色，不用三平面投影。
-  看样场景：`tools/capture.sh out.png --scene=res://scenes/dev/giant_lookdev.tscn --shot=maw --jaw=65 --light=front`（机位、灯、参数见 `scripts/tools/giant_lookdev.gd`）
+  看样场景：`python tools/capture.py out.png --scene=res://scenes/dev/giant_lookdev.tscn --shot=maw --jaw=65 --light=front`（机位、灯、参数见 `scripts/tools/giant_lookdev.gd`）
 - **动作**（`scripts/giant_motion.gd`）：骨骼程序化驱动——大头稳、行波从身体中段传到尾鳍；转弯整条顺着弯；冲刺时离艇越近嘴张得越大、头往上仰，
   撞上的瞬间猛地合上再甩头；吼叫时张嘴；长须有惯性拖拽。碰撞是沿脊椎跟着骨骼走的胶囊
 - 艇壳掉到 75% 以下漏水灯闪，40% 以下常亮；破了全员回大厅
@@ -184,12 +184,12 @@ ambientCG 直连很慢（几十 KB/s），`tools/fetch_ambientcg.sh` 的 300 秒
 ### 第二个巨物「大眼」（进行中：模型、材质已做，行为未做）
 直径十六七米、略扁的球形节肢动物（照潜渊症 Watcher 的思路原创）：漆黑的叠瓦甲壳和背刺，正面一只近 9 米的红色竖瞳大眼，两侧三对苍白的桨（它的弱点），腹面一个滤食的虹吸口。
 - **模型**（`blender/scripts/gen_watcher.py`，部件在 `blender/scripts/watcher/`，规格 `watcher/spec.py`）：甲壳、肉（关节膜、眼窝、可闭合的眼睑、虹吸口）、桨、眼四个部件，
-  高模烘低模（约 7 万三角、22 根骨：Body、Eye、LidUp/LidLo、每支桨三节）。`tools/rebuild_models.sh watcher` 只导出模型；
+  高模烘低模（约 7 万三角、22 根骨：Body、Eye、LidUp/LidLo、每支桨三节）。`python tools/rebuild_models.py watcher` 只导出模型；
   贴图按部件分进程烘（一次一个，峰值 5～7GB）：`blender -b --factory-startup --python blender/scripts/gen_watcher.py -- --parts=paddles --bake --no-export`。
   `--preview=目录 --lid=0~1 --look=左右,上下` 出 Workbench 预览图
 - **材质**（`assets/shaders/watcher_*.gdshader`、`assets/materials/M_Watcher*.tres`）：透琥珀的黑几丁质（甲缘、刺尖磨白，缝里积泥，蜡质弱清漆），
   暗红湿肉，苍白的桨（软膜偏粉、背光透血色），橙红虹膜的眼球（竖瞳大小、虹膜发光是 instance uniform `pupil`、`glow`），透明角膜。
-  看样场景：`tools/capture.sh out.png --scene=res://scenes/dev/watcher_lookdev.tscn --shot=eye --lid=0.3 --gaze=15,0 --pupil=0.6`（机位、参数见 `scripts/tools/watcher_lookdev.gd`）
+  看样场景：`python tools/capture.py out.png --scene=res://scenes/dev/watcher_lookdev.tscn --shot=eye --lid=0.3 --gaze=15,0 --pupil=0.6`（机位、参数见 `scripts/tools/watcher_lookdev.gd`）
 
 ## 破舱（原型，`scripts/breach.gd`）
 设计文档「七 · 破舱」的第一版：外面一只带骨刺的东西撞了两下、爪子刮过艇壳，然后一根骨刺扎穿控制舱舱顶（两组管子中间、两盏顶灯之间），
@@ -220,8 +220,8 @@ ambientCG 直连很慢（几十 KB/s），`tools/fetch_ambientcg.sh` 的 300 秒
 - **调试**：`--breach=秒` 开场这么多秒以后开始，游戏里 Ctrl+B 现在开始；`--breach-open` 跳过前面直接到骨刺抽出去以后；
   `--breach-freeze=秒` 停在过程的这一刻（看骨刺）；`--no-jet` 不画水幕（看口子本身）；`--flood=米` 开场水位（舱内局部 y：舱底 -1.35、地板 -0.9、
   站着的眼睛 0.72、舱顶 1.35）；`--flood-rate=立方米每秒`（0 = 水位定住，按阶段截图用）。例：
-  `tools/capture.sh out.png --giant=off --breach=0.2 --breach-open --no-jet --flood=-1.0 --flood-rate=0 --at=-0.1,0.45 --yaw=-175 --pitch=62 --fov=40`（抬头近看口子）；
-  `tools/record.sh .tmp/breach 40 --giant=off --breach=1.0 --at=-0.15,-0.05 --yaw=-172 --pitch=38 --look=480:720:0:-14`（整个过程：先看着舱顶，再低头看水涨）
+  `python tools/capture.py out.png --giant=off --breach=0.2 --breach-open --no-jet --flood=-1.0 --flood-rate=0 --at=-0.1,0.45 --yaw=-175 --pitch=62 --fov=40`（抬头近看口子）；
+  `python tools/record.py .tmp/breach 40 --giant=off --breach=1.0 --at=-0.15,-0.05 --yaw=-172 --pitch=38 --look=480:720:0:-14`（整个过程：先看着舱顶，再低头看水涨）
 - 性能：Mac M4 上 1600×900 同一个机位 19 → 14 帧（水柱、水面、粒子、全屏后处理一起多十几毫秒；以 Windows 独显为准，还没优化）
 
 ## 外观
@@ -274,21 +274,21 @@ ambientCG 直连很慢（几十 KB/s），`tools/fetch_ambientcg.sh` 的 300 秒
 中间是自己的船员，拖动转身、滚轮拉近，下面切正脸 / 侧脸 / 全身。保存进 `settings.cfg`，在房间里的话主机跟着更新，联机时随名单发给所有人（`Net.local_look`、`Net.look_of`）。
 - **样子的数据**（`crew_look.gd`）：一个 Dictionary——性别、各个捏脸形态的值、肤色和妆容参数、几个下标（眉毛、发型、瞳色、发色、口红色……）；
   `sanitize()` 补默认、夹范围（联机收到的、存档读出来的都过一遍），`apply()` 套到身体模型上：设头、口腔、头发的形态键，换材质参数，手的肤色跟着脸走
-- **头**（`blender/scripts/gen_head_vitruvian.py`，先跑 `tools/fetch_vitruvian.sh`）：Vitruvian（CharMorph 的写实角色，CC0），男女同一套拓扑。
+- **头**（`blender/scripts/gen_head_vitruvian.py`，先跑 `python tools/fetch_vitruvian.py`）：Vitruvian（CharMorph 的写实角色，CC0），男女同一套拓扑。
   只留头、脖子、眼睛、口腔；84 个捏脸形态（`ID_`）、46 个表情（`EX_`：眨眼、视线、瞳孔、眉毛、笑、口型）；睫毛是粒子毛发转的细带子，
   眼部遮蔽（眼皮底下压暗眼球）、泪线；头发是发型引导线插值出来的发片。都按最近的皮肤三角形绑定，每个形态跟着走
 - **材质**（`assets/shaders/crew_*.gdshader`）：皮肤两张反照率（浅、深）插值出肤色，扫描的法线上叠平铺的毛孔，胡茬、头皮发茬、眉毛（14 种按发丝画的贴图）、
   眼影 / 眼线 / 腮红 / 口红一层层叠，次表面散射按厚度；眼球一个不透明材质画完眼白和虹膜（虹膜按视线错开，假的折射），
   不用透明的角膜层、不用清漆、捏脸场景不开辉光——这三样都会让虹膜蒙一层灰白
 - **调试**：`--scene=creator` 直接进捏脸；`--cc-preset=N`、`--cc-view=face|side|body|back|eye`、`--cc-yaw=度`、`--cc-ui=off`、
-  `--cc-set=形态:值,...`；`--cc-shots=all` 把预设挨个拍正脸、侧脸（存到 `.tmp/faces`），`python3 tools/face_sheet.py .tmp/faces` 拼成对比图；
+  `--cc-set=形态:值,...`；`--cc-shots=all` 把预设挨个拍正脸、侧脸（存到 `.tmp/faces`），`python tools/face_sheet.py .tmp/faces` 拼成对比图；
   游戏里 `--look=N` 本机用第 N 个预设，升降机 `--ride-faces=a,b,c` 给假队友换脸
 
 ## 第一人称（`scripts/cockpit_camera.gd`、`scripts/crew_body.gd`）
 - **步伐**：按实际挪动的距离走步伐相位，步频随速度变（走 1.25 米/秒约每秒 1.7 步，跑 2.5 米/秒约 2.6 步，和动作捕捉的动画一致）；
   起步迈出半步就落脚，停下时一步迈到一半以上的会把后脚收过来落一下。跑起来镜头起伏更大更尖、视野略宽；门洞跟前跑不起来
 - **身体**：低头看得见自己的身子、腿脚和双手——Microsoft Rocketbox 的工装角色（MIT），男女各一套（`crew_body_m.glb`、`crew_body_f.glb`），
-  工装改成深海军蓝、反光马甲压成深色、劳保鞋改成黑皮靴（`blender/scripts/gen_crew.py`，先跑 `tools/fetch_rocketbox.sh` 下载原始素材）。
+  工装改成深海军蓝、反光马甲压成深色、劳保鞋改成黑皮靴（`blender/scripts/gen_crew.py`，先跑 `python tools/fetch_rocketbox.py` 下载原始素材）。
   头是捏脸用的 Vitruvian（见下面「捏脸」），第一人称时只有镜子里看得见，调试用 `--blink=1` 看闭眼。站、走、跑、坐四段动画，
   走和跑按步伐相位定位到动画里对应的时刻，左右脚落地和脚步声对得上；坐在驾驶椅上是坐姿、手搭在腿上。
   每帧让模型的头骨落在眼睛后下方，头不渲染；身体不投影（会让照得到它的舱内灯每帧重画阴影图）
@@ -316,11 +316,11 @@ ambientCG 直连很慢（几十 KB/s），`tools/fetch_ambientcg.sh` 的 300 秒
   以及变调时插值读到终点之后，都会让每圈接缝处出一个毛刺（`gen_sfx.py` 里有说明）
 
 ### 不用耳朵检查声音
-`tools/record.sh` 用 Godot 的 Movie Maker 离线录一段（固定 60 帧/秒逐帧渲染，音频直接混进文件，**不经过声卡，绝不出声**），
+`python tools/record.py` 用 Godot 的 Movie Maker 离线录一段（固定 60 帧/秒逐帧渲染，音频直接混进文件，**不经过声卡，绝不出声**），
 `--actions` 按帧号自动按键；`tools/audio_report.py` 分析录音：响度（LUFS、真峰值、削波）、每 0.5 秒的响度、
 孤立的咔哒声（接缝、硬起停、断音）、每个音效事件在录音里的起音延迟和显著度（< 6 dB 基本就是被别的声音盖住了），
 可以输出频谱图。`--only-sfx=` / `--mute-sfx=` 只开 / 关掉某几种声音，用来单独查某一路。
-后台跑的 Godot（`godot_bg.sh`）一律用 Dummy 音频驱动，截图、烘焙时也不会出声。
+后台跑的 Godot（`godot_bg.py`）一律用 Dummy 音频驱动，截图、烘焙时也不会出声。
 
 ## 岸上的场景（`scripts/story/`）
 - **剧情框架**：`story.gd`（自动加载为 Story：剧情标记、转场黑场和章节字幕、播放对白文件）、`dialogue_script.gd`（对白文件解析）、
@@ -355,34 +355,43 @@ ambientCG 直连很慢（几十 KB/s），`tools/fetch_ambientcg.sh` 的 300 秒
 - `assets/models/` 导出的 glb；`assets/materials/` 材质（由 `scripts/tools/setup_project.gd` 生成）；`assets/shaders/` 着色器
 - `assets/textures/decals/` 舱内贴花（水渍圈、脚印、锈水、喷漆字……），由 `scripts/tools/gen_decals.gd` 生成；
   贴在哪、多大写在 `cockpit.py` 的 `decals()` 里（导出成 `Decal_*` 挂点）
-- `assets/gi/cabin_gi.res`、`cabin_gi_aft.res` 控制舱、生活舱 VoxelGI 的烘焙数据（改了舱内模型要重新烘焙，`rebuild_models.sh` 会自动做；舱外视角时舱内 GI 会关掉，免得渗到艇身外表面上）
+- `assets/gi/cabin_gi.res`、`cabin_gi_aft.res` 控制舱、生活舱 VoxelGI 的烘焙数据（改了舱内模型要重新烘焙，`rebuild_models.py` 会自动做；舱外视角时舱内 GI 会关掉，免得渗到艇身外表面上）
 - `assets/third_party/` 外部素材，授权见 `ASSET_LICENSES.md`；Sketchfab 下载的压缩包放 `sketchfab/_inbox/`
 - `scripts/` 游戏脚本；`scripts/import/post_import.gd` 是所有 glTF 导入后的处理（换材质、去 LOD）；
   `scripts/shaft/` 冰井（`shaft_kit.gd` 模型和材质、`mesh_kit.gd` 网格小工具）、升降机轿厢（`lift_cab.gd`）、下井（`lift_ride.gd`）
 
-## 开发环境（macOS）
-- Godot **4.7.2**（版本要一致，否则导入设置、场景文件会被改写）、Blender 5.2、Git LFS：
-  `brew install --cask godot blender`、`brew install git-lfs && git lfs install`
-- tools/ 下都是 zsh 脚本，只用到系统自带的 curl、jq、unzip。Godot / Blender 默认在 `/Applications`，
-  装在别处时用环境变量 `GODOT`、`BLENDER` 指定可执行文件（`.app/Contents/MacOS/` 里那个）
+## 开发环境（Windows）
+2026-10 起在 Windows 上开发（之前在 macOS 上，tools/ 原来是 zsh 脚本，见 git 历史）。
+- Godot **4.7.2**（版本要一致，否则导入设置、场景文件会被改写）、Blender 5.2、Git LFS（Git for Windows 自带，`git lfs install`）
+- tools/ 下都是 Python 脚本（3.10 以上），在 PowerShell、cmd、Git Bash 里都是 `python tools/xxx.py ...`。
+  做包装的那几个（截图、录像、烘焙、下载）只用标准库；生成音效、贴图、对比图的要
+  `pip install numpy scipy pillow fonttools pyroomacoustics`；录像（`record.py`）、分析录音（`audio_report.py`）还要 ffmpeg（放进 PATH）。
+  `winget install Python.Python.3.13 Gyan.FFmpeg.Essentials` 就能装上。设一个用户环境变量 `PYTHONUTF8=1`：中文 Windows 上
+  Python 默认按 GBK 读写文件、往管道输出，不设的话中文输出是乱码
+- 不用 PowerShell 脚本：PowerShell 调 .ps1 时会把 `--at=0.3,1.0` 里的逗号当成数组分隔符（`1.0` 还会变成 `1`），`--` 也会被吃掉；
+  调 python 这类外部程序时参数原样传过去
+- Godot、Blender 默认在 `D:\Godot`、`D:\Blender`（也会在 `C:\Program Files` 下和 PATH 里找），装在别处时用环境变量
+  `GODOT`、`BLENDER` 指定可执行文件。下面命令里的 `godot` 指 Godot 的可执行文件，命令行里用带 `_console` 的那个能看到输出
+- 截图、录像、烘焙的 Godot 开在一个单独的 Windows 桌面上（`tools/godot_bg.py`）：不弹窗、不抢焦点、不出声，
+  编辑器烘焙光照贴图时也一样；想看着窗口跑加 `--fg`
 - 生成模型、贴花文字用的字体都在 `blender/fonts/`（SIL OFL），不依赖系统字体
 
 ## 常用命令
 ```
-tools/rebuild_models.sh                       # 重新生成全部自建模型并导入（潜艇、宿舍、办事处会顺带重新烘焙 VoxelGI）
-tools/rebuild_models.sh submarine             # 只生成某几个：submarine seabed dorm office npc
+python tools/rebuild_models.py                       # 重新生成全部自建模型并导入（潜艇、宿舍、办事处会顺带重新烘焙 VoxelGI）
+python tools/rebuild_models.py submarine             # 只生成某几个：submarine seabed dorm office npc
 godot --path . --script res://scripts/tools/gen_decal_text.gd             # 重新画贴花的文字底图（会闪一下窗口）
 godot --headless --path . --script res://scripts/tools/gen_decals.gd      # 重新生成贴花贴图
 godot --path . -- --bake-gi                   # 只重新烘焙舱内 VoxelGI
 godot --headless --path . --script res://scripts/tools/setup_project.gd   # 重写输入映射、重新生成材质
-tools/capture.sh shot.png --view=external --orbit=40                      # 截图（后台运行、不弹窗；FOREGROUND=1 前台；其余参数见 scripts/debug_args.gd）
-tools/capture.sh shot.png --scene=office --at=0.3,-0.26 --yaw=0          # 岸上的场景截图（不给 --scene 就是潜艇）
-tools/record.sh .tmp/story 420 --scene=dorm --autoplay --no-hud           # 自动把序章、第一章走一遍录下来
-tools/glb_info.sh assets/models/submarine_cockpit.glb [网格名]            # 查看 glb 里的网格、顶点数
-tools/fetch_polyhaven.sh --models a,b --textures c,d                      # 下载 Poly Haven 素材（ambientCG 用 fetch_ambientcg.sh --ids）
-tools/fetch_rocketbox.sh && tools/fetch_vitruvian.sh && blender -b --factory-startup --python blender/scripts/gen_crew.py   # 重新生成船员的身体（男女两套）和捏脸的头（头的脚本改过会先重跑 gen_head_vitruvian.py；npc 同理：gen_npc.py）
-python3 tools/gen_sfx.py [名字前缀...]                                   # 重新合成音效（之后让 Godot 导入一次：godot --headless --path . --import）
-tools/record.sh .tmp/door 12 --at=0,2.0 --yaw=180 --actions=30:interact   # 离线录一段画面+声音（.mp4/.wav/.log），不出声
-RES=1280x720 CRF=18 tools/record.sh .tmp/shaft 34 --scene=shaft         # 录开场冰井灯灭的镜头（录的时候临时用 override.cfg 把视口降到 RES，免得 AVI 过 1 GB 被截断）
-python3 tools/audio_report.py .tmp/door.wav --log .tmp/door.log --png .tmp/door.png   # 分析录音
+python tools/capture.py shot.png --view=external --orbit=40                      # 截图（后台运行、不弹窗；--fg 前台；其余参数见 scripts/debug_args.gd）
+python tools/capture.py shot.png --scene=office --at=0.3,-0.26 --yaw=0          # 岸上的场景截图（不给 --scene 就是潜艇）
+python tools/record.py .tmp/story 420 --scene=dorm --autoplay --no-hud           # 自动把序章、第一章走一遍录下来
+python tools/glb_info.py assets/models/submarine_cockpit.glb [网格名]            # 查看 glb 里的网格、顶点数
+python tools/fetch_polyhaven.py --models a,b --textures c,d                      # 下载 Poly Haven 素材（ambientCG 用 fetch_ambientcg.py --ids）
+python tools/fetch_rocketbox.py && python tools/fetch_vitruvian.py && blender -b --factory-startup --python blender/scripts/gen_crew.py   # 重新生成船员的身体（男女两套）和捏脸的头（头的脚本改过会先重跑 gen_head_vitruvian.py；npc 同理：gen_npc.py）
+python tools/gen_sfx.py [名字前缀...]                                   # 重新合成音效（之后让 Godot 导入一次：godot --headless --path . --import）
+python tools/record.py .tmp/door 12 --at=0,2.0 --yaw=180 --actions=30:interact   # 离线录一段画面+声音（.mp4/.wav/.log），不出声
+python tools/record.py .tmp/shaft 34 --res=1280x720 --crf=18 --scene=shaft   # 录开场冰井灯灭的镜头（录的时候临时用 override.cfg 把视口降到 --res，免得 AVI 过 1 GB 被截断）
+python tools/audio_report.py .tmp/door.wav --log .tmp/door.log --png .tmp/door.png   # 分析录音
 ```

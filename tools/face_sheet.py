@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """把捏脸预设的批量截图（捏脸界面 --cc-shots 拍的 <预设号>_face.png、<预设号>_side.png）拼成一张对比图。
 
-用法: python3 tools/face_sheet.py 目录 [--out 路径] [--crop 0.3,0.12,0.7,0.8]
+用法: python tools/face_sheet.py 目录 [--out 路径] [--crop 0.3,0.12,0.7,0.8]
   每个预设一列：上面正脸、下面侧脸，底下写预设号和名字（从 scripts/crew_look.gd 的 PRESETS 里读）。
   --crop 按画面比例裁中间那块（左、上、右、下），默认裁出脸
 """
@@ -13,8 +13,7 @@ import re
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-FONTS = ["/System/Library/Fonts/STHeiti Medium.ttc", "/System/Library/Fonts/PingFang.ttc",
-         os.path.join(ROOT, "assets/fonts/NotoSerifSC-VF.ttf"), "C:/Windows/Fonts/msyh.ttc"]
+FONTS = ["C:/Windows/Fonts/msyh.ttc", os.path.join(ROOT, "assets/fonts/NotoSerifSC-VF.ttf")]
 
 
 def font(size):

@@ -909,7 +909,7 @@ func shot_flash(strength: float, frames := 6) -> void:
 
 # ----------------------------------------------------------------------------- GI
 ## 间接光两套：
-##   LightmapGI（光照贴图）：有 assets/gi/<房间>.lmbake 就用它（tools/bake_lightmap.sh 烘）。只烘间接光——灯的 bake_mode
+##   LightmapGI（光照贴图）：有 assets/gi/<房间>.lmbake 就用它（tools/bake_lightmap.py 烘）。只烘间接光——灯的 bake_mode
 ##     是 Dynamic，直接光和阴影照旧实时算；会动的东西（门扇、吊扇、钟、人）不进贴图，由烘出来的探针照亮
 ##   VoxelGI（场景里的 RoomGI）：没有光照贴图时用；--gi=voxel 强制用它（对比），--gi=both 两个都开
 ## --shots 截图时两套都准备好，机位里写 "gi": "voxel" / "lightmap" 就地切换（同一个进程里轮流量帧率，比两次启动公平）
@@ -994,7 +994,7 @@ func lightmap_static_lights() -> Dictionary:
 	return {}
 
 
-## LightmapGI 的烘焙参数（属性名 → 值，子类可以改）。--lm-<属性名>=值 临时覆盖（tools/bake_lightmap.sh 里试参数用）。
+## LightmapGI 的烘焙参数（属性名 → 值，子类可以改）。--lm-<属性名>=值 临时覆盖（tools/bake_lightmap.py 里试参数用）。
 ## 另外 "sky_energy"：烘焙时窗外的天（环境背景）亮几倍（运行时看得见的背景不变），--lm-sky-energy=倍数 再乘上去。
 ## texel_scale 乘在导入时的 lightmap_texel_size（.import 里 0.03 米）上：1.0 就是 3 厘米一个像素
 func lightmap_config() -> Dictionary:
@@ -1005,7 +1005,7 @@ func lightmap_config() -> Dictionary:
 		"directional": true,          # 方向性光照贴图：间接光也带方向，法线贴图在背光处不会糊成一片
 		"texel_scale": 1.0,
 		# 超采样（2 倍）：分辨率不变（显存不变），烘焙时间约 3 倍；不开的话窗框、窗帘投在墙上的软影子被糊成一团
-		# （tools/bake_lightmap.sh 试过：ULTRA 质量和 HIGH 看不出差别，贴图密度翻倍和超采样效果差不多但显存 4 倍）
+		# （tools/bake_lightmap.py 试过：ULTRA 质量和 HIGH 看不出差别，贴图密度翻倍和超采样效果差不多但显存 4 倍）
 		"supersampling": true,
 		"supersampling_factor": 2.0,
 		"use_denoiser": true,

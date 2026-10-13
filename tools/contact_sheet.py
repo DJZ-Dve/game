@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""把一个场景的基准截图拼成一张带标注的总览图（tools/bench.sh 拍完自动调用）。
+"""把一个场景的基准截图拼成一张带标注的总览图（tools/bench.py 拍完自动调用）。
 
-用法: python3 tools/contact_sheet.py 目录 场景 [--cols 3] [--tile 640] [--out 路径]
+用法: python tools/contact_sheet.py 目录 场景 [--cols 3] [--tile 640] [--out 路径]
   读 目录/<场景>_shots.json（DebugArgs --shots 写的清单：顺序、说明、帧率、GPU 时间），没有清单就按文件名排 <场景>_*.png
   产出 目录/<场景>_sheet.jpg：每格一张缩略图，下面一行机位名和说明、一行帧率 / 帧时间 / GPU 时间；
   最上面一行场景名、分辨率、拍摄时间、git 版本（工作区有改动的标 +改动）
@@ -17,9 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 # 标注要写中文：系统黑体优先，没有就用项目里的思源宋体
-FONTS = ["/System/Library/Fonts/STHeiti Medium.ttc", "/System/Library/Fonts/PingFang.ttc",
-         "/System/Library/Fonts/Hiragino Sans GB.ttc", os.path.join(ROOT, "assets/fonts/NotoSerifSC-VF.ttf"),
-         "C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simhei.ttf"]
+FONTS = ["C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simhei.ttf", os.path.join(ROOT, "assets/fonts/NotoSerifSC-VF.ttf")]
 BG = (24, 24, 26)
 INK = (226, 222, 212)
 DIM = (150, 148, 142)

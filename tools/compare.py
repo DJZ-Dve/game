@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""改画面前后对比：两个 tools/bench.sh 输出目录里同名的截图左右并排（左 before、右 after），再出总拼图。
+"""改画面前后对比：两个 tools/bench.py 输出目录里同名的截图左右并排（左 before、右 after），再出总拼图。
 
-用法: python3 tools/compare.py 前目录 后目录 输出目录 [--only 名字,名字] [--crop x,y,w,h] [--diff] [--labels before,after]
-  例: python3 tools/compare.py .tmp/bench/baseline .tmp/bench/try1 .tmp/bench/cmp1
-      python3 tools/compare.py .tmp/bench/baseline .tmp/bench/try1 .tmp/bench/cmp1 --only office_visitor --crop 600,250,500,350
+用法: python tools/compare.py 前目录 后目录 输出目录 [--only 名字,名字] [--crop x,y,w,h] [--diff] [--labels before,after]
+  例: python tools/compare.py .tmp/bench/baseline .tmp/bench/try1 .tmp/bench/cmp1
+      python tools/compare.py .tmp/bench/baseline .tmp/bench/try1 .tmp/bench/cmp1 --only office_visitor --crop 600,250,500,350
   --only   只比这几张（文件名去掉 .png，或者只给场景名 office 比这个场景的全部）
   --crop   只比原图上这一块（像素，按 1600x900 的原图算），放大看细节：墙皮、漆面、布料
   --diff   右边再加一格差异图（前后差多少，放大 4 倍，越亮差得越多）

@@ -22,14 +22,21 @@
   依赖 CUDA 专用库（flash-attn、xformers、bitsandbytes）的项目要绕开。
 - **烘焙内存**：巨物 4096 贴图的 Cycles 烘焙单次峰值 9 GB 多，以前两个烘焙并发把 16 GB 的 Mac 撑到重启过。
   同时只跑一个烘焙；总装重烘时每个部件单独开一个 Blender 进程（`--parts=X --bake --no-export`），最后再导出；烘焙期间不跑 Godot 截图。
-- **`tools/` 里的脚本是 zsh 写的、按 macOS 写的**（Godot 路径 `/Applications/Godot.app/...`，`godot_bg.sh` 注入 `nofocus.m` 编的 dylib 防抢焦点），
-  Windows 上要么在 Git Bash / WSL 里跑、改 `GODOT` 环境变量，要么改写一版；不抢焦点的办法在 Windows 上要另找。
+- **Windows 上的软件**：Godot 4.7.2 在 `D:\Godot`、Blender 5.2.0 在 `D:\Blender`（`tools/godot_bg.py` 会自己找，或用环境变量
+  `GODOT`、`BLENDER`）。Mac 上的 Blender 是更新的补丁版（glTF 导出器 5.2.40，这边 5.2.39），这边重新生成的模型浮点数有细微差别，
+  不是改坏了；屏幕 2560×1440、系统缩放 150%。
+- **`tools/` 是 Python 脚本**（2026-10-13 从 zsh 改写）：`python tools/xxx.py ...`。不写 PowerShell 脚本：PowerShell 调 .ps1 时
+  `--at=0.3,1.0` 的逗号会变成数组（`1.0` 还变成 `1`）、`--` 被吃掉；调 python 这类外部程序时参数原样传。
+  Python 3.13（用户目录，带 numpy、scipy、Pillow、fonttools、pyroomacoustics）、ffmpeg 都是 winget 装的，设了 `PYTHONUTF8=1`；
+  新写的脚本读写文本照样写明 `encoding="utf-8"`、`newline="\n"`（别的机器、Blender 里的 Python 不一定是 UTF-8 模式）。
 
 ## 跑 Godot 的规矩
 - **绝不出声**：用户的工作环境不能有声音外放（蓝牙耳机一断会回落到扬声器）。自己运行 Godot（截图、烘焙、检查声音）一律
-  `--audio-driver Dummy`，或者用 `tools/record.sh`（Movie Maker 离线录制，不经过声卡）；不用任何会播放声音的命令。
+  `--audio-driver Dummy`，或者用 `python tools/record.py`（Movie Maker 离线录制，不经过声卡）；不用任何会播放声音的命令。
   要听的东西做成文件交给用户戴耳机听；检查声音用 `tools/audio_report.py`（响度、事件对齐、频谱图）。跑 UE 命令行加 `-nosound`。
-- **不弹窗、不抢焦点**：渲染类验证在后台跑、窗口放屏幕外；实在避免不了先告诉用户。
+- **不弹窗、不抢焦点**：要渲染的 Godot 一律经 `tools/` 的脚本或 `godot_bg.godot_window()` 跑，它开在单独的 Windows 桌面上
+  （CreateDesktop，看不见、抢不走焦点，编辑器也一样）。别直接起带窗口的 Godot：项目设置 no_focus 编辑器不认，
+  `--position` 屏幕外的坐标会被夹回屏幕里；无头能做的（导入、跑脚本、联机测试）用 `--headless`。实在避免不了先告诉用户。
 - 截图、录像产物放 `.tmp/`（不进 git）。
 
 ## 额度
@@ -37,8 +44,9 @@
   **默认自己一个代理做，不派子代理**；确实需要并行先问用户。干活过程中查额度，过 60% 主动提醒。
 
 ## 素材与网络
-- **网络慢**：PyPI 直连约 30 KB/s，ambientCG 约 40 KB/s（`tools/fetch_ambientcg.sh` 的 300 秒超时会下不完）。
-  做法：先开代理（以前用 `127.0.0.1:7900`），或者 `curl -L -C - --retry 20` 续传到临时目录再离线装 / 解压。**下载素材前先问用户。**
+- **网络慢**（Mac 上量的，Windows 这边还没量过）：PyPI 直连约 30 KB/s，ambientCG 约 40 KB/s。
+  做法：先开代理（以前用 `127.0.0.1:7900`，`fetch_polyhaven.py`、`fetch_ambientcg.py` 有 `--proxy`，其余的认环境变量 `HTTPS_PROXY`）；`fetch_*.py` 断了再跑一遍会接着下（`.part` 续传）。
+  **下载素材前先问用户。**
 - 每引入一个外部素材都登记到 `assets/third_party/ASSET_LICENSES.md`。
 
 ## 音效

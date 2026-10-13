@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""检查一段音频（tools/record.sh 录的游戏声音，或 assets/audio/ 里的单个音效），不用耳朵也能发现的问题：
+"""检查一段音频（tools/record.py 录的游戏声音，或 assets/audio/ 里的单个音效），不用耳朵也能发现的问题：
   - 响度：峰值、削波采样数、整体 RMS；ffmpeg ebur128 的综合响度（LUFS）和真峰值
   - 响度时间线：每 0.5 秒一格的 RMS（dBFS），看有没有突然炸响或者突然没声
   - 咔哒声：单个采样上的突变（循环接缝没接好、播放器突然开停、缓冲断了都会这样），列出时间
@@ -125,7 +125,7 @@ def presence(mono, sr, t, dur=0.4, others=()):
 
 def read_log(path, fps):
     ev = []
-    for line in open(path, errors="replace"):
+    for line in open(path, encoding="utf-8", errors="replace"):
         m = re.match(r"(SFX|LOOP) (\d+) (\S+)", line.strip())
         if m:
             ev.append((int(m[2]) / fps, m[3], m[1] == "LOOP"))

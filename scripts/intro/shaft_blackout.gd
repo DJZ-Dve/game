@@ -19,7 +19,7 @@ extends Node3D
 ##       --dof=off  近景不虚；--fov=度  焦距定死（配 --cam 换机位看灯具、走台底面）
 ##       --near-lit=k  前几圈挂真的照走台的灯（默认 NEAR_LIT）；--shadows=off  关掉投影（比性能用）
 ##       --bench  量第 60~180 帧的平均帧间隔，打一行 BENCH 就退出
-## 录像：tools/record.sh .tmp/shaft 36 --scene=shaft
+## 录像：python tools/record.py .tmp/shaft 36 --scene=shaft
 
 # 冰井的尺寸、灯具、爬梯这些在 ShaftKit（scripts/shaft/shaft_kit.gd），这里只取用得着的
 const R := ShaftKit.R

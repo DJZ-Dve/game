@@ -1,7 +1,7 @@
 """主角周海生的头：MPFB2（MakeHuman 的 Blender 扩展，生成的人和素材 CC0）生成，换掉 Rocketbox 的 Male_Adult_10
 （m024 看着二十出头、偏清秀，不像剧本里 32 岁的退伍潜艇兵、修船工，见 docs/story.md）。
 
-先跑 tools/fetch_mpfb.sh（扩展和素材包装到 blender/cache/mpfb/，不动自己的 Blender 配置），再：
+先跑 python tools/fetch_mpfb.py（扩展和素材包装到 blender/cache/mpfb/，不动自己的 Blender 配置），再：
     BLENDER_USER_RESOURCES=blender/cache/mpfb/blender Blender -b --factory-startup --python blender/scripts/gen_head_mpfb.py [-- --preview 目录]
 gen_crew.py 发现头没生成、或者这个脚本改过，会自己这样调一遍。
 产出 blender/cache/mpfb/zhou_head.blend（Zhou_Head、Zhou_Hair 两块网格，gen_crew.swap_head 接到工装身体上）和几张贴图：
@@ -472,7 +472,7 @@ def preview(head, out_dir):
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     if not addon_utils.enable(EXT, default_set=True):
-        raise SystemExit("gen_head_mpfb: 没装 MPFB，先跑 tools/fetch_mpfb.sh，并带上 BLENDER_USER_RESOURCES=blender/cache/mpfb/blender")
+        raise SystemExit("gen_head_mpfb: 没装 MPFB，先跑 python tools/fetch_mpfb.py，并带上 BLENDER_USER_RESOURCES=blender/cache/mpfb/blender")
     mpfb = sys.modules[EXT]
     from importlib import import_module
     HumanService = import_module(EXT + ".services.humanservice").HumanService

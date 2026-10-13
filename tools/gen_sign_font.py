@@ -2,7 +2,7 @@
 """标牌用的黑体：从 blender/fonts/NotoSansSC-VF.ttf（SIL OFL）取 700 字重的静态实例，只留要用到的字，
 存成 assets/fonts/NotoSansSC-Signs.ttf（几十 KB；整个字体 17 MB）。
 要用到的字从 SOURCES 这几个脚本的字符串里找（加了新的标牌文字以后重跑一次）：
-    python3 tools/gen_sign_font.py
+    python tools/gen_sign_font.py
 """
 import re
 import string

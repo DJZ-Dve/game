@@ -1,6 +1,6 @@
 """船员的身体（男女各一套）：Microsoft Rocketbox 的工装角色（MIT 许可），头换成 Vitruvian 的捏脸头。
 
-先跑 tools/fetch_rocketbox.sh、tools/fetch_vitruvian.sh 把素材下到 blender/cache/，再：
+先跑 python tools/fetch_rocketbox.py、python tools/fetch_vitruvian.py 把素材下到 blender/cache/，再：
     Blender -b --factory-startup --python blender/scripts/gen_crew.py [-- m|f]
 导出 assets/models/crew_body_m.glb、crew_body_f.glb（骨骼 + 身体、头、口腔几块网格 + walk / run / idle / sit 四段原地动画）
 和 crew_body_m_gait.json、crew_body_f_gait.json（走、跑动画里左右脚落地在循环里的位置，Godot 拿它把动画和步伐对齐）。
@@ -473,7 +473,7 @@ def build(sex):
         export_anim_single_armature=True, export_def_bones=False, export_vertex_color='ACTIVE',
         export_image_format='AUTO', export_materials='EXPORT', export_cameras=False, export_lights=False)
     sparsify_targets(out)
-    with open(gait_path, "w") as f:
+    with open(gait_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(gait, f, indent=2, ensure_ascii=False)
     print("exported", out, json.dumps(gait, ensure_ascii=False))
 

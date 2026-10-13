@@ -23,6 +23,6 @@ __pycache__/
 # 布料模拟缓存（blender/scripts/bedding.py，参数不变就不重算）
 /blender/cache/
 
-# 光照贴图试参数时烘到这里（tools/bake_lightmap.sh 的 --lm-dir=res://lmexp/…）
+# 光照贴图试参数时烘到这里（tools/bake_lightmap.py 的 --lm-dir=res://lmexp/…）
 /lmexp/
 /override.cfg
