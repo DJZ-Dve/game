@@ -1,0 +1,96 @@
+// 布料（Godot 版 assets/shaders/fabric.gdshader 的移植）：模型带 UV（单位是米），面料纹理顺着布走。
+// 叠加：褶子里积的灰（顶点色 G）、每件东西深浅不一（顶点色 B）、汗渍、锁边缝线（UV2）、格子布。
+// Godot 的绒面边缘光（rim）和背光透射先没搬，等看了效果再说。
+//
+// @tex albedo_tex color white
+// @tex normal_tex normal flat
+// @tex rough_tex linear white
+// @color tint 0.3 0.32 0.22
+// @float tex_scale 2.0
+// @float albedo_mix 0.0
+// @float tex_mean 0.35
+// @float tex_contrast 1.5
+// @float normal_strength 1.0
+// @float roughness 0.95
+// @float sheen 0.4
+// @float sheen_tint 0.6
+// @float cavity_dirt 0.5
+// @float variation 0.12
+// @float stain_amount 0.0
+// @float stain_scale 3.0
+// @color stain_color 0.62 0.48 0.26
+// @float binding_width 0.0
+// @color binding_color 0.7 0.7 0.7
+// @color thread_color 0.45 0.4 0.28
+// @color backlight 0 0 0
+// @float check_size 0.0
+// @color check_color 0.25 0.4 0.65
+#pragma once
+
+#include "/Guixu/GuixuCommon.ush"
+
+struct FGXFabricParams
+{
+	float3 tint; float tex_scale; float albedo_mix; float tex_mean; float tex_contrast; float normal_strength;
+	float roughness; float sheen; float sheen_tint; float cavity_dirt; float variation;
+	float stain_amount; float stain_scale; float3 stain_color;
+	float binding_width; float3 binding_color; float3 thread_color; float3 backlight;
+	float check_size; float3 check_color;
+};
+
+// S.Normal 是切线空间法线（DirectX 约定）
+FGXSurface GX_Fabric(FGXFabricParams P, float2 UV, float2 UV2, float3 Wear,
+	Texture2D albedo_tex, SamplerState albedo_texSampler,
+	Texture2D normal_tex, SamplerState normal_texSampler,
+	Texture2D rough_tex, SamplerState rough_texSampler)
+{
+	FGXSurface S = GX_DefaultSurface();
+	float2 uv = UV * P.tex_scale;
+	float3 tex = Texture2DSample(albedo_tex, albedo_texSampler, uv).rgb;
+	float lum = dot(tex, float3(0.2126, 0.7152, 0.0722));
+	float3 dyed = P.tint * pow(max(lum / P.tex_mean, 0.0), P.tex_contrast);
+	float3 col = lerp(dyed, tex * P.tint, P.albedo_mix);
+	if (P.check_size > 0.0)
+	{
+		float2 c = frac(UV / P.check_size);
+		float aa = fwidth(UV.x / P.check_size) * 1.5 + 0.01;
+		float bu = smoothstep(0.5 - aa, 0.5 + aa, c.x) * (1.0 - smoothstep(1.0 - aa, 1.0, c.x));
+		float bv = smoothstep(0.5 - aa, 0.5 + aa, c.y) * (1.0 - smoothstep(1.0 - aa, 1.0, c.y));
+		float k = (bu + bv) * 0.5;
+		col = lerp(col, col * P.check_color * 1.6, k);
+	}
+	float rnd = Wear.b;
+	col *= 1.0 + P.variation * (rnd * 2.0 - 1.0);
+	float rough_add = 0.0;
+	if (P.stain_amount > 0.0)
+	{
+		float2 sp = UV * P.stain_scale + float2(rnd * 37.0, rnd * 11.0);
+		float nz = GX_Fbm2(sp);
+		float body = smoothstep(0.62 - 0.2 * P.stain_amount, 0.7 - 0.2 * P.stain_amount, nz);
+		float ring = smoothstep(0.02, 0.0, abs(nz - (0.64 - 0.2 * P.stain_amount))) * 0.6;
+		float m = clamp(body * 0.55 + ring, 0.0, 1.0) * P.stain_amount;
+		col = lerp(col, col * P.stain_color, m);
+		rough_add -= 0.08 * m;
+	}
+	float bind = 0.0;
+	if (P.binding_width > 0.0)
+	{
+		bind = 1.0 - smoothstep(P.binding_width - 0.0015, P.binding_width, UV2.x);
+		col = lerp(col, col * P.binding_color, bind);
+		float line_ = 1.0 - smoothstep(0.0004, 0.0011, abs(UV2.x - P.binding_width - 0.003));
+		float dash = smoothstep(0.1, 0.2, frac(UV2.y / 0.007)) * (1.0 - smoothstep(0.65, 0.75, frac(UV2.y / 0.007)));
+		col = lerp(col, P.thread_color, line_ * dash * 0.85);
+		rough_add -= 0.15 * bind;
+	}
+	float cav = Wear.g;
+	col *= 1.0 - P.cavity_dirt * 0.45 * cav;
+	S.BaseColor = col;
+	S.Roughness = clamp(P.roughness * Texture2DSample(rough_tex, rough_texSampler, uv).r + rough_add, 0.0, 1.0);
+	S.Specular = 0.35;
+	float3 tn = GX_UnpackNormal(Texture2DSample(normal_tex, normal_texSampler, uv));
+	tn.xy *= P.normal_strength * (1.0 - 0.6 * bind);
+	tn.y = -tn.y;  // OpenGL 约定 → DirectX 约定
+	S.Normal = normalize(tn);
+	S.AO = 1.0 - 0.5 * cav;
+	return S;
+}

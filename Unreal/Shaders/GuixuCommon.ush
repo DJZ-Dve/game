@@ -1,0 +1,126 @@
+// 归墟材质共用的函数（Custom 节点里 #include "/Guixu/GuixuCommon.ush"）。
+// 从 Godot 版的 .gdshader 搬过来：为了让阈值、缩放这些参数和 Godot 版一模一样，材质在 Godot 的坐标系里算——
+// glb 导进 UE 时 Interchange 把 glTF 的 (x, y, z)（米，Y 朝上，右手）换成 UE 的 100·(x, z, y)（厘米，Z 朝上，左手），
+// 这里反过来换回去：x 不变，y、z 对调（是个镜像，方向向量、法线照样适用），位置再除以 100。
+#pragma once
+
+float3 GX_PosToGodot(float3 LocalCm) { return float3(LocalCm.x, LocalCm.z, LocalCm.y) * 0.01; }
+float3 GX_DirToGodot(float3 V) { return float3(V.x, V.z, V.y); }
+float3 GX_DirFromGodot(float3 V) { return float3(V.x, V.z, V.y); }
+
+// sRGB 颜色已经由材质参数转成线性，这里不再处理
+
+float2 GX_Hash22(float2 p)
+{
+	float3 q = frac(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
+	q += dot(q, q.yzx + 33.33);
+	return frac((q.xx + q.yz) * q.zy);
+}
+
+float GX_Hash31(float3 p)
+{
+	p = frac(p * 0.1031);
+	p += dot(p, p.zyx + 31.32);
+	return frac((p.x + p.y) * p.z);
+}
+
+float GX_Hash12(float2 p)
+{
+	float3 q = frac(float3(p.xyx) * 0.1031);
+	q += dot(q, q.yzx + 33.33);
+	return frac((q.x + q.y) * q.z);
+}
+
+// 三维值噪声（0~1）
+float GX_ValueNoise(float3 p)
+{
+	float3 i = floor(p);
+	float3 f = frac(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return lerp(lerp(lerp(GX_Hash31(i), GX_Hash31(i + float3(1, 0, 0)), f.x),
+					 lerp(GX_Hash31(i + float3(0, 1, 0)), GX_Hash31(i + float3(1, 1, 0)), f.x), f.y),
+				lerp(lerp(GX_Hash31(i + float3(0, 0, 1)), GX_Hash31(i + float3(1, 0, 1)), f.x),
+					 lerp(GX_Hash31(i + float3(0, 1, 1)), GX_Hash31(i + float3(1, 1, 1)), f.x), f.y), f.z);
+}
+
+float GX_VNoise2(float2 p)
+{
+	float2 i = floor(p);
+	float2 f = frac(p);
+	float2 u = f * f * (3.0 - 2.0 * f);
+	return lerp(lerp(GX_Hash12(i), GX_Hash12(i + float2(1, 0)), u.x), lerp(GX_Hash12(i + float2(0, 1)), GX_Hash12(i + float2(1, 1)), u.x), u.y);
+}
+
+float GX_Fbm2(float2 p)
+{
+	float v = 0.0;
+	float a = 0.5;
+	for (int k = 0; k < 4; k++)
+	{
+		v += a * GX_VNoise2(p);
+		p = p * 2.03 + float2(17.1, 9.4);
+		a *= 0.5;
+	}
+	return v;
+}
+
+float3 GX_TriWeights(float3 n, float Power)
+{
+	float3 w = pow(abs(n), Power);
+	return w / (w.x + w.y + w.z + 1e-5);
+}
+
+float4 GX_Tri(Texture2D T, SamplerState S, float3 p, float3 w)
+{
+	return Texture2DSample(T, S, p.zy) * w.x + Texture2DSample(T, S, p.xz) * w.y + Texture2DSample(T, S, p.xy) * w.z;
+}
+
+// 法线贴图按 OpenGL 约定存（ambientCG 的 NormalGL，Godot 也是这个约定），UE 导入时不翻绿通道；
+// BC5 只存 xy，z 自己算
+float3 GX_UnpackNormal(float4 s)
+{
+	float2 xy = s.rg * 2.0 - 1.0;
+	return float3(xy, sqrt(saturate(1.0 - dot(xy, xy))));
+}
+
+// 三平面法线（Whiteout 混合），跟 Godot 版的 tri_normal 一样
+float3 GX_TriNormal(Texture2D T, SamplerState S, float3 p, float3 n, float3 w, float Strength)
+{
+	float3 tx = GX_UnpackNormal(Texture2DSample(T, S, p.zy));
+	float3 ty = GX_UnpackNormal(Texture2DSample(T, S, p.xz));
+	float3 tz = GX_UnpackNormal(Texture2DSample(T, S, p.xy));
+	tx.xy *= Strength;
+	ty.xy *= Strength;
+	tz.xy *= Strength;
+	tx = float3(tx.xy + n.zy, abs(tx.z) * n.x);
+	ty = float3(ty.xy + n.xz, abs(ty.z) * n.y);
+	tz = float3(tz.xy + n.xy, abs(tz.z) * n.z);
+	return normalize(tx.zyx * w.x + ty.xzy * w.y + tz.xyz * w.z);
+}
+
+// 材质函数统一的输出
+struct FGXSurface
+{
+	float3 BaseColor;
+	float Roughness;
+	float Metallic;
+	float Specular;
+	float3 Normal;     // Godot 坐标系里的法线，Custom 节点出口前换回 UE 局部坐标
+	float3 Emissive;
+	float AO;
+	float Opacity;
+};
+
+FGXSurface GX_DefaultSurface()
+{
+	FGXSurface S;
+	S.BaseColor = 0.5;
+	S.Roughness = 0.5;
+	S.Metallic = 0.0;
+	S.Specular = 0.5;
+	S.Normal = float3(0, 1, 0);
+	S.Emissive = 0.0;
+	S.AO = 1.0;
+	S.Opacity = 1.0;
+	return S;
+}

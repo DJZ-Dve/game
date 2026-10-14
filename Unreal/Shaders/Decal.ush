@@ -1,0 +1,30 @@
+// 贴花（Godot 版 cockpit_props.gd 的 _add_decals：Decal 节点，albedo 贴图带透明度，可选 ORM 图改粗糙度/金属度）。
+// UE 贴花的 UV（TexCoord0）和 Godot 一样：U 沿挂点的 x，V 沿挂点的 z（Godot 坐标），见 Submarine.cpp 的 BuildDecals。
+//
+// @tex albedo color white
+// @tex orm linear white
+// @float modulate 1.0
+// @bool use_orm 0
+#pragma once
+
+#include "/Guixu/GuixuCommon.ush"
+
+struct FGXDecalParams
+{
+	float modulate; float use_orm;
+};
+
+FGXSurface GX_Decal(FGXDecalParams P, float2 UV0,
+	Texture2D albedo, SamplerState albedoSampler,
+	Texture2D orm, SamplerState ormSampler)
+{
+	FGXSurface S = GX_DefaultSurface();
+	float4 a = Texture2DSample(albedo, albedoSampler, UV0);
+	float4 o = Texture2DSample(orm, ormSampler, UV0);
+	S.BaseColor = a.rgb;
+	S.Opacity = a.a * P.modulate;
+	S.Roughness = P.use_orm > 0.5 ? o.g : 0.6;
+	S.Metallic = P.use_orm > 0.5 ? o.b : 0.0;
+	S.AO = P.use_orm > 0.5 ? o.r : 1.0;
+	return S;
+}

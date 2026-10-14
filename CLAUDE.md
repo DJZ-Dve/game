@@ -4,6 +4,19 @@
 项目怎么跑、每个系统怎么做的见 `README.md`；玩法和设定见 `docs/design.md`（标 ❓ 的是还没定的）。
 和用户交流用中文；代码注释、提交说明照仓库现有的写法（中文、说清楚为什么）。提交说明第一行是标题，**标题后空一行**再写正文。
 
+## 迁移到 UE5（2026-10-14 起，进行中）
+- 用户看了 MetaHuman 的渲染后决定整个项目迁到 **UE 5.8**（装在 `D:\Epic Games\UE_5.8`），工程在 `Unreal/`（`Guixu.uproject`）；
+  Godot 版原样留着当参照，搬完再清理。下面几节讲 Godot 的规矩，UE 这边照样适用（不出声、不弹窗、素材先问）。
+- 逻辑写 C++（`Unreal/Source/Guixu/`）；关卡、材质、导入用编辑器 Python 脚本搭（`Unreal/Scripts/`，每个脚本开头写了用法）；
+  着色器逻辑写在 `Unreal/Shaders/*.ush`（从 .gdshader 移植，参数名、默认值不变，母材质是一个 Custom 节点 #include 它）。UE 的二进制资产走 Git LFS
+- 编译：`D:\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat GuixuEditor Win64 Development -Project=D:\Project\Guixu\Unreal\Guixu.uproject -WaitMutex -NoHotReload`
+  （VS 生成工具在 `D:\VS\BuildTools2022`，cl 实际是 14.44.35229，UE 5.8 认）
+- 看效果：`py -3.13 Unreal/Scripts/ue_shot.py 任务.json`——后台桌面跑 `-game` 截图、截完退出，机位写法同 `tools/capture.py`，
+  一律和 Godot 版同机位对比。编辑器里的场景捕获（render_views.py）没有 Lumen 全局光，只适合看材质
+- 跑 UE 的规矩同 Godot：要渲染的走后台桌面（`ue_bg.py` / `ue_shot.py`），一律 `-nosound`；无头的用 `UnrealEditor-Cmd.exe -nullrhi`
+- 已搬：潜艇驾驶舱（材质、灯、贴花、道具、仪表、数码管、声呐）、舱外和海床、开船、坐驾驶椅 / 走动 / 舱外视角。
+  还没搬：海雪粒子、声呐屏上的字、水密门、破舱进水、巨物、联机、音效、船员（MetaHuman）、大厅、冰井开场、岸上场景
+
 ## 方向与画面
 - **游戏方向**（2026-10-12 定）：木卫二（欧罗巴）20 公里冰壳下的 4 人合作潜艇，局域网联机，杀戮尖塔式竖向节点地图，不做 PvP。
   2026-10-13 加了战斗（小、中型生物能击杀，潜艇可武装升级），不是纯恐怖。旧的 1998 年浙东沿海、沉棺剧情已归档在 `docs/archive/`，不要再按它设计。
@@ -63,10 +76,10 @@
 
 ## 船员的脸
 - Vitruvian 开源头 + 脚本生成发片“怎么调都不好看，特别是头发”（对标逆水寒、燕云十六声）。2026-10-13 定了改用 **MetaHuman**
-  （可用于 Godot，年收入 100 万美元以下免费；只能在 UE 5.6+ 编辑器里捏，网页版 2026-11-05 关闭），UE 只当捏人工具，游戏还是 Godot。
-- 暂缓中：等用户在 Windows 上自己装 UE（启动器里勾 MetaHuman Creator Core Data）、登录 Epic、捏一个人看效果，满意了再写导出管线
-  （UE 导出网格 / 贴图 / 发片，OpenRigLogic 读 DNA 烘表情）。游戏内捏脸改成在预设真人脸之间按部位混合再微调，Godot 端的界面、联网、着色器尽量沿用。
-  Vitruvian 那套（a18eeeb）先留着能跑。
+  （年收入 100 万美元以下免费；只能在 UE 5.6+ 编辑器里捏）。迁到 UE5 以后直接用，不再写导出到 Godot 的管线。
+- UE 5.8 的 MetaHuman Creator 有 Python 接口，能无头建角色、改脸型系数（1397 个）、改皮肤 / 妆 / 发型；
+  自动绑定和高清贴图在 Epic 云端算，要用户在 UE 里登录 Epic。游戏内捏脸打算在预设真人脸之间混合再微调。
+  之前的捏人试验工程在 `D:\Project\GuixuMetaHuman`（可删）。Vitruvian 那套（a18eeeb）先留着能跑。
 
 ## 待办（2026-10-13 破舱原型之后，用户说下次再挑先做哪个）
 - 外面那只带骨刺的生物本身（`scripts/breach.gd` 现在只有一截占位骨刺）

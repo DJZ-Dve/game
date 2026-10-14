@@ -28,3 +28,7 @@
 # 光照贴图（tools/bake_lightmap.py 烘的数据）和导入时展 UV2 的缓存（不提交的话别的机器导入会重新展，UV2 对不上贴图）
 *.lmbake filter=lfs diff=lfs merge=lfs -text
 *.unwrap_cache filter=lfs diff=lfs merge=lfs -text
+
+# Unreal 的二进制资产走 Git LFS（每改一次整份进历史，不走 LFS 仓库会很快胀大）
+/Unreal/Content/**/*.uasset filter=lfs diff=lfs merge=lfs -text
+/Unreal/Content/**/*.umap filter=lfs diff=lfs merge=lfs -text

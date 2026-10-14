@@ -1,0 +1,101 @@
+// 数码管（Godot 版 instruments.gd 用 DSEG7 七段字体的 Label3D，后面垫一层暗暗的“8888”当没点亮的段）。
+// 这里直接画七段：一块平面（Submarine 的 UInstrumentsComponent 摆在 Display_* 挂点上），按平面局部坐标算字格，
+// 每格的值由 C++ 每帧写进参数：-1 空、0~9 数字、10 是“-”。加色混合、不受光照。
+//
+// @float cells 5
+// @float dot_after -1
+// @float colon_mask 0
+// @vec digits_a -1 -1 -1
+// @vec digits_b -1 -1 -1
+// @vec digits_c -1 -1 -1
+// @color lit_color 1 0.25 0.12
+// @float lit_energy 3.2
+// @color ghost_color 0.35 0.02 0.01
+// @float ghost_energy 0.45
+// @float slant 0.12
+#pragma once
+
+#include "/Guixu/GuixuCommon.ush"
+
+struct FGXSevenSegParams
+{
+	float cells; float dot_after; float colon_mask;
+	float3 digits_a; float3 digits_b; float3 digits_c;
+	float3 lit_color; float lit_energy; float3 ghost_color; float ghost_energy; float slant;
+};
+
+// 七段的点亮掩码（a b c d e f g = 位 0~6）
+int GX_SegMask(int v)
+{
+	if (v < 0) return 0;
+	const int M[11] = { 0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x40 };
+	return M[min(v, 10)];
+}
+
+// 一段（横的或竖的）：p 是字格里的坐标（x 0~1 向右，y 0~1 向下），返回覆盖（带一点软边）
+float GX_Seg(float2 p, float2 a, float2 b, float th)
+{
+	float2 pa = p - a;
+	float2 ba = b - a;
+	float h = saturate(dot(pa, ba) / dot(ba, ba));
+	float d = length(pa - ba * h);
+	float aa = max(fwidth(d), 1e-4);
+	return 1.0 - smoothstep(th - aa, th + aa, d);
+}
+
+float GX_Digit(float2 p, int mask)
+{
+	const float th = 0.07;
+	const float x0 = 0.18, x1 = 0.82, y0 = 0.1, y1 = 0.5, y2 = 0.9, e = 0.06;
+	float c = 0.0;
+	if (mask & 1)  c = max(c, GX_Seg(p, float2(x0 + e, y0), float2(x1 - e, y0), th));   // a
+	if (mask & 2)  c = max(c, GX_Seg(p, float2(x1, y0 + e), float2(x1, y1 - e), th));   // b
+	if (mask & 4)  c = max(c, GX_Seg(p, float2(x1, y1 + e), float2(x1, y2 - e), th));   // c
+	if (mask & 8)  c = max(c, GX_Seg(p, float2(x0 + e, y2), float2(x1 - e, y2), th));   // d
+	if (mask & 16) c = max(c, GX_Seg(p, float2(x0, y1 + e), float2(x0, y2 - e), th));   // e
+	if (mask & 32) c = max(c, GX_Seg(p, float2(x0, y0 + e), float2(x0, y1 - e), th));   // f
+	if (mask & 64) c = max(c, GX_Seg(p, float2(x0 + e, y1), float2(x1 - e, y1), th));   // g
+	return c;
+}
+
+// LocalPosCm：平面的局部坐标（平面 100×100 厘米，x 向右、y 向下）
+FGXSurface GX_SevenSeg(FGXSevenSegParams P, float3 LocalPosCm)
+{
+	FGXSurface S = GX_DefaultSurface();
+	S.BaseColor = 0.0;
+	float2 uv = LocalPosCm.xy / 100.0 + 0.5;
+	float n = max(P.cells, 1.0);
+	float fx = uv.x * n;
+	int cell = (int)floor(fx);
+	float2 p = float2(frac(fx), uv.y);
+	p.x += (0.5 - p.y) * P.slant;  // 斜体
+	float digits[9] = { P.digits_a.x, P.digits_a.y, P.digits_a.z, P.digits_b.x, P.digits_b.y, P.digits_b.z, P.digits_c.x, P.digits_c.y, P.digits_c.z };
+	float lit = 0.0;
+	float ghost = 0.0;
+	if (cell >= 0 && cell < (int)n && uv.y >= 0.0 && uv.y <= 1.0)
+	{
+		lit = GX_Digit(p, GX_SegMask((int)round(digits[min(cell, 8)])));
+		ghost = GX_Digit(p, 0x7F);
+		// 小数点：在 dot_after 那一格的右下角
+		float2 dp = p - float2(0.97, 0.9);
+		float dot_ = 1.0 - smoothstep(0.06, 0.06 + fwidth(dp.x) * 2.0, length(dp));
+		ghost = max(ghost, dot_);
+		if (abs(cell - P.dot_after) < 0.5)
+		{
+			lit = max(lit, dot_);
+		}
+		// 冒号：colon_mask 第 i 位表示第 i 格后面有冒号。冒号骑在两格的分界上，左右两格各画一半
+		int cm = (int)round(P.colon_mask);
+		float colx = -10.0;
+		if ((cm >> cell) & 1) colx = 1.0;
+		if (cell > 0 && ((cm >> (cell - 1)) & 1)) colx = 0.0;
+		if (colx > -1.0)
+		{
+			float col = max(1.0 - smoothstep(0.07, 0.09, length(p - float2(colx, 0.33))), 1.0 - smoothstep(0.07, 0.09, length(p - float2(colx, 0.67))));
+			lit = max(lit, col);
+		}
+	}
+	S.Emissive = P.lit_color * P.lit_energy * lit + P.ghost_color * P.ghost_energy * ghost * (1.0 - lit);
+	S.Opacity = 1.0;
+	return S;
+}

@@ -1,0 +1,92 @@
+// Godot 的 StandardMaterial3D 在 UE 里的对应（Scripts/build_materials.py 把 .tres 里的值原样搬进材质实例）。
+// 用到的只有：反照率颜色/贴图、粗糙度（乘粗糙度贴图的某个通道）、金属度、非金属高光（metallic_specular）、
+// 法线贴图、自发光、三平面映射（物体空间，跟 Godot 生成的着色器一样的投影方向）、透明（只在半透明母材质里用）。
+//
+// @tex albedo_texture color white
+// @tex roughness_texture linear white
+// @tex normal_texture normal flat
+// @color albedo_color 1 1 1
+// @float albedo_alpha 1.0
+// @float roughness 1.0
+// @float roughness_texture_channel 0
+// @float metallic 0.0
+// @float metallic_specular 0.5
+// @bool normal_enabled 0
+// @float normal_scale 1.0
+// @bool emission_enabled 0
+// @color emission 0 0 0
+// @float emission_energy_multiplier 1.0
+// @vec uv1_scale 1 1 1
+// @bool uv1_triplanar 0
+// @float uv1_triplanar_sharpness 1.0
+#pragma once
+
+#include "/Guixu/GuixuCommon.ush"
+
+struct FGXStandardParams
+{
+	float3 albedo_color; float albedo_alpha; float roughness; float roughness_texture_channel;
+	float metallic; float metallic_specular; float normal_enabled; float normal_scale;
+	float emission_enabled; float3 emission; float emission_energy_multiplier;
+	float3 uv1_scale; float uv1_triplanar; float uv1_triplanar_sharpness;
+};
+
+// Godot 生成的三平面采样（uv1_triplanar_pos 的 y 取反，x 方向的投影 zy·(-1, 1)）
+float4 GX_GodotTri(Texture2D T, SamplerState S, float3 tp, float3 pw)
+{
+	float4 s = Texture2DSample(T, S, tp.xy) * pw.z;
+	s += Texture2DSample(T, S, tp.xz) * pw.y;
+	s += Texture2DSample(T, S, tp.zy * float2(-1.0, 1.0)) * pw.x;
+	return s;
+}
+
+float GX_Channel(float4 s, float ch)
+{
+	if (ch < 0.5) return s.r;
+	if (ch < 1.5) return s.g;
+	if (ch < 2.5) return s.b;
+	if (ch < 3.5) return s.a;
+	return dot(s.rgb, float3(0.299, 0.587, 0.114));
+}
+
+// 三平面时 S.Normal 是 Godot 坐标系的物体空间法线；不是三平面时是切线空间法线（已换成 UE 的 DirectX 约定）
+FGXSurface GX_StandardSurface(FGXStandardParams P, float3 LocalPosCm, float3 LocalNormal, float2 UV0,
+	Texture2D albedo_texture, SamplerState albedo_textureSampler,
+	Texture2D roughness_texture, SamplerState roughness_textureSampler,
+	Texture2D normal_texture, SamplerState normal_textureSampler)
+{
+	FGXSurface S = GX_DefaultSurface();
+	const float3 n = normalize(GX_DirToGodot(LocalNormal));
+	float4 alb;
+	float4 rgh;
+	float3 nrm;
+	if (P.uv1_triplanar > 0.5)
+	{
+		float3 pw = pow(abs(n), P.uv1_triplanar_sharpness);
+		pw /= dot(pw, 1.0);
+		float3 tp = GX_PosToGodot(LocalPosCm) * P.uv1_scale * float3(1.0, -1.0, 1.0);
+		alb = GX_GodotTri(albedo_texture, albedo_textureSampler, tp, pw);
+		rgh = GX_GodotTri(roughness_texture, roughness_textureSampler, tp, pw);
+		// 法线用正规的三平面混合（Godot 是把三张法线图混成一张当切线空间用，没 UV 的模型切线是乱的）
+		float3 w = GX_TriWeights(n, max(P.uv1_triplanar_sharpness, 1.0) * 4.0);
+		nrm = P.normal_enabled > 0.5 ? GX_TriNormal(normal_texture, normal_textureSampler, GX_PosToGodot(LocalPosCm) * P.uv1_scale, n, w, P.normal_scale) : n;
+	}
+	else
+	{
+		float2 uv = UV0 * P.uv1_scale.xy;
+		alb = Texture2DSample(albedo_texture, albedo_textureSampler, uv);
+		rgh = Texture2DSample(roughness_texture, roughness_textureSampler, uv);
+		float3 tn = GX_UnpackNormal(Texture2DSample(normal_texture, normal_textureSampler, uv));
+		tn.xy *= P.normal_scale;
+		tn.y = -tn.y;  // OpenGL 约定 → DirectX 约定
+		nrm = P.normal_enabled > 0.5 ? normalize(tn) : float3(0, 0, 1);
+	}
+	S.BaseColor = P.albedo_color * alb.rgb;
+	S.Opacity = P.albedo_alpha * alb.a;
+	S.Roughness = saturate(P.roughness * GX_Channel(rgh, P.roughness_texture_channel));
+	S.Metallic = P.metallic;
+	S.Specular = P.metallic_specular;
+	S.Normal = nrm;
+	S.Emissive = P.emission_enabled > 0.5 ? P.emission * P.emission_energy_multiplier : 0.0;
+	return S;
+}

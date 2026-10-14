@@ -26,3 +26,13 @@ __pycache__/
 # 光照贴图试参数时烘到这里（tools/bake_lightmap.py 的 --lm-dir=res://lmexp/…）
 /lmexp/
 /override.cfg
+
+# Unreal（UE 5.8 工程在 Unreal/）：编译产物、缓存、本机生成的工程文件
+/Unreal/Binaries/
+/Unreal/Intermediate/
+/Unreal/Saved/
+/Unreal/DerivedDataCache/
+/Unreal/.vs/
+/Unreal/*.sln
+/Unreal/*.code-workspace
+/Unreal/.vscode/

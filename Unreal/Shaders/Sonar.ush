@@ -1,0 +1,108 @@
+// 声呐屏（Godot 版 sonar_ppi.gdshader + crt_sonar.gdshader 合成一个）：
+// returns 是极坐标回波图（横向 = 方位 0..1 顺时针，纵向 = 距离 0..1），由 C++ 的 USonarComponent 按波束扫过刷新；
+// 屏幕上按“离上次扫过多久”算余辉。再加显像管的质感：光晕、荧光粉颗粒、没打亮的荧光粉底色、暗角、亮度抖动。
+// 艏向朝上，方位顺时针增加。屏上的字（量程、航向）以后搬。
+//
+// @tex returns linear black
+// @float sweep 0.0
+// @float gain 1.15
+// @float afterglow 0.28
+// @float rings 4.0
+// @float cursor_brg 0.117
+// @float cursor_rng 0.375
+// @float px 0.0041
+// @float brightness 2.4
+// @float bloom 0.55
+// @float bloom_radius 0.006
+// @color phosphor_base 0.035 0.05 0.04
+// @float grain 0.12
+#pragma once
+
+#include "/Guixu/GuixuCommon.ush"
+
+struct FGXSonarParams
+{
+	float sweep; float gain; float afterglow; float rings; float cursor_brg; float cursor_rng; float px;
+	float brightness; float bloom; float bloom_radius; float3 phosphor_base; float grain;
+};
+
+float GX_SonarLine(float d, float w, float px)
+{
+	return smoothstep(w + px, w * 0.3, abs(d));
+}
+
+float3 GX_SonarPPI(FGXSonarParams P, float2 UV, Texture2D returns, SamplerState returnsSampler)
+{
+	const float TAU = 6.2831853;
+	float2 p = (UV - 0.5) * 2.0 * float2(1.0, -1.0) / 0.96;
+	float r = length(p);
+	float brg = frac(atan2(p.x, p.y) / TAU);
+	float age = frac(P.sweep - brg);   // 0 = 波束刚扫过
+	// 回波：刚扫过时是一层蓝白的闪光，衰减成黄绿色的长余辉；沿方位和相邻两列混一点
+	const float db = 1.0 / 256.0;
+	float e = (Texture2DSample(returns, returnsSampler, float2(brg, r)).r * 0.5
+		+ Texture2DSample(returns, returnsSampler, float2(brg - db, r)).r * 0.25
+		+ Texture2DSample(returns, returnsSampler, float2(brg + db, r)).r * 0.25) * P.gain;
+	e *= step(r, 1.0);
+	float flash = exp(-age * 28.0);
+	float glow = lerp(P.afterglow, 1.0, exp(-age * 2.2));
+	float3 col = float3(0.55, 1.0, 0.3) * e * glow + float3(0.6, 0.9, 1.0) * e * flash * 0.9;
+	// 波束：一条亮线，后面拖一小片扇形余晖
+	float beam = exp(-age * 260.0) * 0.9 + exp(-age * 18.0) * 0.07;
+	col += float3(0.5, 1.0, 0.55) * beam * smoothstep(1.0, 0.9, r);
+	// 刻度：距离环、外圈方位刻度、艏向线、电子方位线和活动距离圈
+	float g = 0.0;
+	for (float k = 1.0; k < P.rings + 0.5; k += 1.0)
+	{
+		g += GX_SonarLine(r - k / P.rings, P.px * 0.6, P.px) * (k == P.rings ? 0.9 : 0.45);
+	}
+	float deg = brg * 360.0;
+	float n5 = floor(deg / 5.0 + 0.5);
+	float arc = (deg - n5 * 5.0) / 57.29578 * r;
+	float tl = fmod(n5, 6.0) < 0.5 ? 0.08 : (fmod(n5, 2.0) < 0.5 ? 0.045 : 0.022);
+	g += GX_SonarLine(arc, P.px * 0.6, P.px) * step(1.0 - tl, r) * step(r, 1.0) * 0.8;
+	float head = GX_SonarLine(p.x, P.px * 0.7, P.px) * step(0.0, p.y) * step(r, 1.0) * step(0.5, frac(r * 20.0));
+	g += head * 0.6;
+	float2 cd = float2(sin(P.cursor_brg * TAU), cos(P.cursor_brg * TAU));
+	float along = dot(p, cd);
+	float ebl = GX_SonarLine(dot(p, float2(cd.y, -cd.x)), P.px * 0.6, P.px) * step(0.0, along) * step(r, 1.0) * step(0.45, frac(along * 26.0));
+	float vrm = GX_SonarLine(r - P.cursor_rng, P.px * 0.6, P.px) * step(0.5, frac(brg * 90.0));
+	g += (ebl + vrm) * 0.55;
+	// 本艇：中心一个小十字
+	g += (GX_SonarLine(p.x, P.px * 0.6, P.px) + GX_SonarLine(p.y, P.px * 0.6, P.px)) * step(max(abs(p.x), abs(p.y)), 0.035) * 0.8;
+	col += float3(0.45, 0.95, 0.5) * g * 0.55;
+	return col * step(r, 1.02);
+}
+
+float GX_SonarHash(float2 p)
+{
+	return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
+}
+
+FGXSurface GX_Sonar(FGXSonarParams P, float2 UV0, float Time, Texture2D returns, SamplerState returnsSampler)
+{
+	FGXSurface S = GX_DefaultSurface();
+	float3 c = GX_SonarPPI(P, UV0, returns, returnsSampler);
+	// 光晕：两圈 8 个采样点（Godot 版是在离屏画面上采样，这里直接再算几次 PPI）
+	float3 b = 0.0;
+	for (int i = 0; i < 8; i++)
+	{
+		float a = i * 0.785398;
+		float2 o = float2(cos(a), sin(a));
+		b += GX_SonarPPI(P, UV0 + o * P.bloom_radius, returns, returnsSampler);
+		b += GX_SonarPPI(P, UV0 + o * P.bloom_radius * 2.6, returns, returnsSampler) * 0.5;
+	}
+	c += b / 12.0 * P.bloom;
+	// 荧光粉颗粒（固定不动）+ 一点点随时间跳的噪声
+	float g = GX_SonarHash(floor(UV0 * 900.0)) - 0.5;
+	float n = GX_SonarHash(UV0 * 517.0 + frac(Time * 7.3)) - 0.5;
+	c *= 1.0 + g * P.grain;
+	c += P.phosphor_base * (1.0 + g * 0.6) + float3(0.2, 0.5, 0.25) * n * 0.012;
+	// 边缘暗角，整体亮度随电源轻微抖动
+	float r = length(UV0 - 0.5) * 2.0;
+	c *= lerp(1.0, 0.55, smoothstep(0.55, 1.0, r));
+	c *= 1.0 + sin(Time * 47.0) * 0.008;
+	S.BaseColor = 0.0;
+	S.Emissive = c * P.brightness;
+	return S;
+}

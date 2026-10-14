@@ -2,6 +2,9 @@
 
 深海 · 潜艇 · 中式恐怖。Godot 4.7（Forward+）+ Blender 5.2。
 
+2026-10-14 起迁到 **UE 5.8**（进行中）：UE 工程在 `Unreal/`（用 UE 5.8 打开 `Unreal/Guixu.uproject`，按 Play），说明见 `CLAUDE.md`。
+下面写的都是 Godot 版，搬完之前它还是参照。
+
 ## 运行
 用 Godot 4.7 打开本文件夹，按 F5。主场景是大厅 `scenes/lobby.tscn`：建房 / 加入（局域网直连）、单人下潜，旧版单人剧情（宿舍 → 办事处）也从这里进。
 只想开船的话直接打开 `scenes/deep_sea.tscn` 按 F6（当单人）。
